@@ -16,6 +16,11 @@
     "test:watch": "vitest"
   },
   "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.0",
     "@deepseek-ai/dsh-credentials": ">=0.1.0",

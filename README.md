@@ -14,10 +14,23 @@ When the DSH web server is exposed on `0.0.0.0` or a public network, `dsh-login`
 ## Quick start
 
 ```bash
-dsh plugin --profile <name> add @deepseek-ai/dsh-login
+dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
-Add to your profile's `cordis.patch.yml`:
+That's it. The package declares its `cordis.patch.yml` as a bundle patch, so `add` automatically:
+
+- mounts the `dsh-login` plugin row (config defaults are sensible; `distIndex` resolves the frontend dist automatically),
+- disables `frontend-static`, which would otherwise conflict over the fallback seat.
+
+> Why `--profile web`? DSH has no global plugin install: plugins are installed per profile directory (`$DSH_HOME/profiles/<name>`). `web` is the profile that boots the Web GUI; use another profile name if you run a custom one.
+
+Start DSH (`dsh web`), open the GUI in your browser, and you'll see the setup page. Enter a password (twice to confirm) -- it's stored automatically in the DSH credentials system. On subsequent visits, the normal login page appears.
+
+No environment variables to set, no config files to edit. The password is set through the browser on first use.
+
+### Manual installation (alternative)
+
+If you prefer managing `cordis.patch.yml` yourself, add these rows to your profile's patch file instead:
 
 ```yaml
 - id: dsh-login
@@ -33,10 +46,6 @@ Add to your profile's `cordis.patch.yml`:
 - id: frontend-static
   disable: true
 ```
-
-Start DSH, open the web GUI in your browser, and you'll see the setup page. Enter a password (twice to confirm) -- it's stored automatically in the DSH credentials system. On subsequent visits, the normal login page appears.
-
-No environment variables to set, no config files to edit. The password is set through the browser on first use.
 
 ## First-time setup flow
 

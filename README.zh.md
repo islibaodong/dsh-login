@@ -14,10 +14,23 @@
 ## 快速开始
 
 ```bash
-dsh plugin --profile <name> add @deepseek-ai/dsh-login
+dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
-在 profile 的 `cordis.patch.yml` 中添加：
+就这一步。该包的 `cordis.patch.yml` 声明为 bundle patch，`add` 之后会自动：
+
+- 挂载 `dsh-login` 插件行（配置默认值即可用；`distIndex` 自动解析前端 dist 目录），
+- 禁用 `frontend-static`（否则会与 dsh-login 争抢 fallback 席位）。
+
+> 为什么需要 `--profile web`？DSH 没有"全局安装插件"的概念：插件按 profile 目录（`$DSH_HOME/profiles/<name>`）安装。`web` 就是启动 Web GUI 的 profile；如果你用的是自定义 profile，换成对应名字即可。
+
+启动 DSH（`dsh web`），在浏览器中打开 Web GUI，你会看到设置密码页面。输入密码（两次确认）-- 密码自动存储到 DSH 凭据系统中。后续访问将显示正常的登录页。
+
+无需设置环境变量，无需编辑配置文件。密码在首次使用时通过浏览器设置。
+
+### 手动安装（可选）
+
+如果你希望自己管理 `cordis.patch.yml`，可以把以下内容手动加进 profile 的 patch 文件：
 
 ```yaml
 - id: dsh-login
@@ -32,10 +45,6 @@ dsh plugin --profile <name> add @deepseek-ai/dsh-login
 - id: frontend-static
   disable: true
 ```
-
-启动 DSH，在浏览器中打开 Web GUI，你会看到设置密码页面。输入密码（两次确认）-- 密码自动存储到 DSH 凭据系统中。后续访问将显示正常的登录页。
-
-无需设置环境变量，无需编辑配置文件。密码在首次使用时通过浏览器设置。
 
 ## 首次设置流程
 
