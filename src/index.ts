@@ -1,11 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { Config } from './config.ts'
 import { Config as ConfigSchema } from './config.ts'
 import { SessionStore } from './session.ts'
 import { createGatewayHandler } from './gateway.ts'
-import { createLoginHandler, createLogoutHandler } from './login-api.ts'
-import { renderLoginPage } from './login-page.ts'
+import { createLoginHandler, createLogoutHandler, createSetupHandler } from './login-api.ts'
+import { renderLoginPage, renderSetupPage } from './login-page.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-login'
@@ -16,21 +17,36 @@ export const inject = ['webServer', 'credentials']
 export { ConfigSchema as Config }
 
 /**
- * Register the authentication gateway, login page, and login/logout API
- * routes on the web server. All route disposers are owned by the plugin
+ * Register the authentication gateway, login page, and login/logout/setup
+ * API routes on the web server. All route disposers are owned by the plugin
  * fiber via ctx.effect for clean teardown on stop/update/undefine.
+ *
+ * First-time setup: when no password is configured, the /login page shows a
+ * "set password" form instead of the login form. The /api/auth/setup
+ * endpoint stores the password via the DSH credentials system. Once set,
+ * the normal login flow takes over.
  */
 export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
   const store = new SessionStore(config.sessionTtl)
+  const ref = credentialRef(config.password)
 
   const loginPageRoute: WebRoute = {
     kind: 'exact',
     path: '/login',
-    handler: (_req, res) => {
+    handler: async (_req, res) => {
+      // Check if password is configured; show setup page on first use.
+      const info = await ctx.credentials.describe(ref)
+      const html = info.configured ? renderLoginPage() : renderSetupPage()
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(renderLoginPage())
+      res.end(html)
     },
+  }
+
+  const setupApiRoute: WebRoute = {
+    kind: 'exact',
+    path: '/api/auth/setup',
+    handler: createSetupHandler(ctx, config),
   }
 
   const loginApiRoute: WebRoute = {
@@ -48,6 +64,7 @@ export function apply(ctx: Context, config: Config): void {
   const gatewayHandler = createGatewayHandler(ctx, config, store)
 
   ctx.effect(() => ctx.webServer.register(loginPageRoute), 'dsh-login: /login')
+  ctx.effect(() => ctx.webServer.register(setupApiRoute), 'dsh-login: /api/auth/setup')
   ctx.effect(() => ctx.webServer.register(loginApiRoute), 'dsh-login: /api/auth/login')
   ctx.effect(() => ctx.webServer.register(logoutApiRoute), 'dsh-login: /api/auth/logout')
   // The gateway claims the fallback seat (not prefix /) because the

@@ -308,6 +308,70 @@ console.log('\n--- Login API Tests ---')
   await rm(root, { recursive: true, force: true })
 }
 
+// === Setup API tests (first-time password) ===
+console.log('\n--- Setup API Tests (First-Time Password) ---')
+
+// Test: setup succeeds when no password configured
+{
+  const { ctx, port, root } = await bootWithCreds({})  // no password seeded
+  const { createSetupHandler } = await import('./../src/login-api.ts')
+  const handler = createSetupHandler(ctx, config)
+  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/setup', handler }), 'setup')
+  const res = await postJson(port, '/api/auth/setup', { password: 'newpass' })
+  assert(res.status === 200, 'setup: 200 on first set')
+  assert(JSON.stringify(res.json) === JSON.stringify({ ok: true }), 'setup: ok response')
+  // Verify the password was actually stored
+  const { credentialRef } = await import('@deepseek-ai/dsh-credentials')
+  const resolved = await ctx.credentials.resolve(credentialRef('DSH_LOGIN_PASSWORD'))
+  assert(resolved !== undefined, 'setup: password stored in credentials')
+  assert(resolved.value === 'newpass', 'setup: stored value matches')
+  await ctx.fiber.dispose()
+  await rm(root, { recursive: true, force: true })
+}
+
+// Test: setup returns 403 when password already set
+{
+  const { ctx, port, root } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 'existing' })
+  const { createSetupHandler } = await import('./../src/login-api.ts')
+  const handler = createSetupHandler(ctx, config)
+  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/setup', handler }), 'setup')
+  const res = await postJson(port, '/api/auth/setup', { password: 'hijack' })
+  assert(res.status === 403, 'setup: 403 when password already set')
+  assert(JSON.stringify(res.json) === JSON.stringify({ error: 'password already set' }), 'setup: error message')
+  // Verify original password unchanged
+  const { credentialRef } = await import('@deepseek-ai/dsh-credentials')
+  const resolved = await ctx.credentials.resolve(credentialRef('DSH_LOGIN_PASSWORD'))
+  assert(resolved.value === 'existing', 'setup: original password unchanged')
+  await ctx.fiber.dispose()
+  await rm(root, { recursive: true, force: true })
+}
+
+// Test: setup returns 400 on empty password
+{
+  const { ctx, port, root } = await bootWithCreds({})
+  const { createSetupHandler } = await import('./../src/login-api.ts')
+  const handler = createSetupHandler(ctx, config)
+  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/setup', handler }), 'setup')
+  const res = await postJson(port, '/api/auth/setup', { password: '' })
+  assert(res.status === 400, 'setup: 400 on empty password')
+  await ctx.fiber.dispose()
+  await rm(root, { recursive: true, force: true })
+}
+
+// Test: setup returns 400 on malformed body
+{
+  const { ctx, port, root } = await bootWithCreds({})
+  const { createSetupHandler } = await import('./../src/login-api.ts')
+  const handler = createSetupHandler(ctx, config)
+  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/setup', handler }), 'setup')
+  const res = await fetch(`http://127.0.0.1:${port}/api/auth/setup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json',
+  })
+  assert(res.status === 400, 'setup: 400 on malformed JSON')
+  await ctx.fiber.dispose()
+  await rm(root, { recursive: true, force: true })
+}
+
 // === Plugin Entry (full composition) tests ===
 console.log('\n--- Plugin Entry (Full Composition) Tests ---')
 
@@ -423,6 +487,45 @@ async function doLogin(port, password) {
   const res = await request(port, '/index.html', { headers: { Cookie: cookie } })
   assert(res.status === 200, 'plugin: static asset access')
   assert(res.body.includes('shell'), 'plugin: static asset body')
+  await ctx.fiber.dispose()
+  await rm(root, { recursive: true, force: true })
+}
+
+// Test: first-time setup flow (no password -> setup page -> set -> login)
+{
+  const { ctx, port, root } = await loadComposition({})  // no password seeded
+
+  // /login should show the setup page (not the login form)
+  const loginPage = await request(port, '/login')
+  assert(loginPage.status === 200, 'plugin: setup - /login status')
+  assert(loginPage.body.includes('/api/auth/setup'), 'plugin: setup - has setup endpoint')
+  assert(loginPage.body.includes('Set Password'), 'plugin: setup - has Set Password button')
+  assert(!loginPage.body.includes('/api/auth/login'), 'plugin: setup - no login endpoint in setup mode')
+
+  // Setup: set the password
+  const setupRes = await postJson(port, '/api/auth/setup', { password: 'mynewpass' })
+  assert(setupRes.status === 200, 'plugin: setup - 200 on set password')
+  assert(JSON.stringify(setupRes.json) === JSON.stringify({ ok: true }), 'plugin: setup - ok response')
+
+  // Now /login should show the normal login form (not setup)
+  const afterSetup = await request(port, '/login')
+  assert(afterSetup.body.includes('/api/auth/login'), 'plugin: setup - /login shows login form after setup')
+  assert(afterSetup.body.includes('Login'), 'plugin: setup - has Login button')
+  assert(!afterSetup.body.includes('Set Password'), 'plugin: setup - no Set Password after configured')
+
+  // Login with the newly set password
+  const cookie = await doLogin(port, 'mynewpass')
+  assert(cookie.includes('dsh_session='), 'plugin: setup - can login after setup')
+
+  // Access protected content
+  const protectedRes = await request(port, '/', { headers: { Cookie: cookie } })
+  assert(protectedRes.status === 200, 'plugin: setup - access after setup login')
+  assert(protectedRes.body.includes('shell'), 'plugin: setup - body after setup login')
+
+  // Setup endpoint should now return 403 (password already set)
+  const hijackRes = await postJson(port, '/api/auth/setup', { password: 'hijack' })
+  assert(hijackRes.status === 403, 'plugin: setup - 403 after password already set')
+
   await ctx.fiber.dispose()
   await rm(root, { recursive: true, force: true })
 }

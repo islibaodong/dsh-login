@@ -93,3 +93,53 @@ export function createLogoutHandler(
     res.end()
   }
 }
+
+/**
+ * Create the POST /api/auth/setup handler. Only callable when no password
+ * is configured yet (first-time setup). Stores the password via the DSH
+ * credentials system. Returns 403 if a password is already set.
+ */
+export function createSetupHandler(
+  ctx: Context,
+  config: Config,
+): WebRoute['handler'] {
+  return async (req: IncomingMessage, res: ServerResponse) => {
+    // Security gate: only allow setup when no password is configured.
+    const info = await ctx.credentials.describe(credentialRef(config.password))
+    if (info.configured) {
+      res.writeHead(403)
+      res.end(JSON.stringify({ error: 'password already set' }))
+      return
+    }
+    let body: string
+    try {
+      body = await readBody(req)
+    } catch {
+      res.writeHead(400)
+      res.end(JSON.stringify({ error: 'bad request' }))
+      return
+    }
+    let parsed: { password?: unknown }
+    try {
+      parsed = JSON.parse(body) as { password?: unknown }
+    } catch {
+      res.writeHead(400)
+      res.end(JSON.stringify({ error: 'bad request' }))
+      return
+    }
+    if (typeof parsed.password !== 'string' || parsed.password.length === 0) {
+      res.writeHead(400)
+      res.end(JSON.stringify({ error: 'bad request' }))
+      return
+    }
+    try {
+      await ctx.credentials.set(credentialRef(config.password), parsed.password)
+    } catch (err) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ error: 'failed to store password' }))
+      return
+    }
+    res.writeHead(200)
+    res.end(JSON.stringify({ ok: true }))
+  }
+}
