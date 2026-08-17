@@ -1,0 +1,33 @@
+# User patch layer for dsh-login. Apply after the dsh-web-app bundle:
+#
+#   dsh web --patch cordis.patch.yml
+#
+# Or copy these rows into your profile's cordis.patch.yml.
+#
+# Prerequisite: set the DSH_LOGIN_PASSWORD environment variable (or file
+# credential) to your desired login password.
+#
+#   export DSH_LOGIN_PASSWORD='your-password-here'
+#
+# IMPORTANT: dsh-login claims the webserver fallback seat to serve as the
+# authentication gateway. The dsh-web-app bundle includes frontend-static
+# which also claims the fallback. You MUST disable frontend-static when
+# using dsh-login, or the second registration will throw.
+
+- id: dsh-login
+  name: '@deepseek-ai/dsh-login'
+  config:
+    password: DSH_LOGIN_PASSWORD
+    distIndex: !!js |
+      require('path').join(
+        require('path').dirname(require.resolve('@deepseek-ai/dsh-web-frontend/package.json')),
+        'dist',
+        'index.html'
+      )
+    sessionTtl: 604800
+    enabled: true
+
+# Disable frontend-static: dsh-login takes over the fallback seat.
+# Leaving frontend-static enabled would cause "fallback already registered".
+- id: frontend-static
+  disable: true
