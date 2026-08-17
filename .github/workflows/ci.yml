@@ -18,17 +18,16 @@ jobs:
         uses: actions/checkout@v4
 
       # The unit tests (tests/runner.mjs) have no DSH dependency; they run
-      # without the harness checkout.
+      # without the harness checkout. tsx is fetched via npx into its own
+      # cache -- `npm install` here would try to resolve the @deepseek-ai/*
+      # peerDependencies, which are not on the public npm registry.
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install test toolchain
-        run: npm install --no-save tsx
-
       - name: Run unit tests
-        run: node --import tsx tests/runner.mjs
+        run: npx --yes tsx@4 tests/runner.mjs
 
   integration:
     runs-on: ubuntu-latest
@@ -48,10 +47,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install test toolchain
-        run: npm install --no-save tsx
-
       - name: Run integration tests
         env:
           DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness
-        run: node --import tsx tests/integration-runner.mjs
+        run: npx --yes tsx@4 tests/integration-runner.mjs
