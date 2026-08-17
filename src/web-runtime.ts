@@ -44,6 +44,28 @@ export function resolveDistIndex(): string {
 /** Environment variable naming the canonical local URL of this Web GUI. */
 const DSH_WEB_URL = 'DSH_WEB_URL'
 
+/** Display-only mirror of the webserver schema's loopback host. */
+const LOOPBACK_HOST = '127.0.0.1'
+
+/**
+ * Print the `dsh web:` URL line once the server is up — the readiness signal
+ * dsh-web-app's web-runtime row used to print before dsh-login took it over.
+ * Waits for the Loader tree to settle so a sibling failure cannot announce a
+ * dead app, exactly like the original row.
+ */
+function printWebUrl(ctx: Context, runtime: WebRuntimeValues): void {
+  const print = (): void => {
+    const webServer = ctx.get('webServer')
+    if (webServer === undefined) return
+    const lanCandidate = runtime.lanAddresses[0]
+    const suffix = lanCandidate === undefined ? '' : ` (LAN: http://${lanCandidate}:${String(webServer.port)})`
+    console.log(`dsh web: http://${LOOPBACK_HOST}:${String(webServer.port)}${suffix}`)
+  }
+  const settled = ctx.get('loader')?.await()
+  if (settled === undefined) print()
+  else void settled.then(() => print(), () => {})
+}
+
 /**
  * Provide the `webRuntime` service and the DSH_WEB_URL shell variable —
  * the parts of dsh-web-app's web-runtime row the rest of the composition
@@ -52,6 +74,7 @@ const DSH_WEB_URL = 'DSH_WEB_URL'
 export function provideWebRuntime(ctx: Context, trustedHosts: readonly string[]): WebRuntimeValues {
   const runtime = resolveLanTrust(ctx.webServer.host, trustedHosts)
   ctx.provide('webRuntime', runtime)
+  printWebUrl(ctx, runtime)
   // Keep the bash-visible web URL alive for agent sessions.
   const shellEnv = ctx.get('shellEnv')
   if (shellEnv !== undefined) {

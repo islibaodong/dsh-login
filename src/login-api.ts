@@ -1,6 +1,9 @@
 import type { ServerResponse, IncomingMessage } from 'node:http'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { SessionStore } from './session.ts'
 import {
@@ -13,6 +16,37 @@ import type { Config } from './config.ts'
 
 /** Maximum bytes to read from the login request body. */
 const MAX_BODY_BYTES = 8192
+
+/** Credentials filename used by the dsh-credentials-local provider. */
+const CREDENTIALS_FILENAME = '.credentials.yaml'
+
+/**
+ * Best-effort resolution of the local credentials file path. The local
+ * provider keeps it on its private spec; when unavailable (a different
+ * provider or an unknown shape), fall back to the default harness home.
+ */
+function credentialsStoragePath(ctx: Context): string {
+  const spec = (ctx.credentials as unknown as { spec?: { filename?: string } }).spec
+  if (spec !== undefined && typeof spec.filename === 'string' && spec.filename.length > 0) return spec.filename
+  const dshHome = process.env.DSH_HOME
+  return join(dshHome !== undefined && dshHome.length > 0 ? dshHome : join(homedir(), '.dsh'), CREDENTIALS_FILENAME)
+}
+
+/**
+ * Announce a freshly set password on the console: the value and where it is
+ * durably stored. Local single-user convenience — the console is the owner's.
+ */
+function announcePasswordSet(ctx: Context, ref: CredentialRef): void {
+  const path = credentialsStoragePath(ctx)
+  void ctx.credentials.resolve(ref).then((resolved) => {
+    const value = resolved === undefined ? '<unresolved>' : resolved.value
+    const source = resolved === undefined ? '' : ` (source: ${resolved.source})`
+    console.log(`dsh login: password set — value: ${value}`)
+    console.log(`dsh login: stored at ${path}${source}`)
+  }, () => {
+    console.log(`dsh login: password set — stored at ${path}`)
+  })
+}
 
 /** Read the request body as a string, capped at MAX_BODY_BYTES. */
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -139,6 +173,7 @@ export function createSetupHandler(
       res.end(JSON.stringify({ error: 'failed to store password' }))
       return
     }
+    announcePasswordSet(ctx, credentialRef(config.password))
     res.writeHead(200)
     res.end(JSON.stringify({ ok: true }))
   }
