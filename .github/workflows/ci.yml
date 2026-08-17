@@ -47,6 +47,15 @@ jobs:
         with:
           node-version: 22
 
+      # The project tsconfig.json maps @deepseek-ai/* packages to a local
+      # DSH checkout via Windows-absolute paths (for the dev machine).
+      # Rewrite them to the CI checkout location; tsx needs these paths to
+      # resolve the DSH workspace sources against each other.
+      - name: Point tsconfig paths at the CI DSH checkout
+        run: sed -i "s|E:/code/deepseek-harness|${DSH_ROOT}|g" tsconfig.json
+        env:
+          DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness
+
       - name: Run integration tests
         env:
           DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness

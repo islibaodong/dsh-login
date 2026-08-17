@@ -17,6 +17,7 @@
     "noUnusedParameters": true,
     "types": ["node"],
     "skipLibCheck": true,
+    "baseUrl": ".",
     "paths": {
       "@deepseek-ai/cordis": ["E:/code/deepseek-harness/vendor/cordis/src"],
       "@deepseek-ai/cosmokit": ["E:/code/deepseek-harness/vendor/cosmokit/src"],
