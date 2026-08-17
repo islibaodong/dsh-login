@@ -1,5 +1,7 @@
 # dsh-login
 
+English | [简体中文](./README.zh.md)
+
 Single-password authentication gateway plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI.
 
 ## What it does
