@@ -16,7 +16,18 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "types": ["node"],
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@deepseek-ai/cordis": ["E:/code/deepseek-harness/vendor/cordis/src"],
+      "@deepseek-ai/cosmokit": ["E:/code/deepseek-harness/vendor/cosmokit/src"],
+      "@deepseek-ai/schemastery": ["E:/code/deepseek-harness/vendor/schemastery/src"],
+      "@deepseek-ai/cordis-plugin-loader": ["E:/code/deepseek-harness/vendor/loader/src"],
+      "@deepseek-ai/cordis-plugin-include": ["E:/code/deepseek-harness/vendor/include/src"],
+      "@deepseek-ai/dsh-host-webserver": ["E:/code/deepseek-harness/packages/host/webserver/src"],
+      "@deepseek-ai/dsh-host-frontend-static": ["E:/code/deepseek-harness/packages/host/frontend-static/src"],
+      "@deepseek-ai/dsh-credentials": ["E:/code/deepseek-harness/packages/credentials/credentials/src"],
+      "@deepseek-ai/dsh-invariants": ["E:/code/deepseek-harness/packages/runtime-diagnostics/invariants/src"]
+    }
   },
   "include": ["src", "tests"]
 }
