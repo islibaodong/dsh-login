@@ -59,7 +59,7 @@ jobs:
       # The vendored DSH sources import these public npm packages; the CI
       # checkout has no installed node_modules, so provide them here.
       - name: Install vendored packages' public npm dependencies
-        run: npm install --no-save --no-package-lock --legacy-peer-deps js-yaml @standard-schema/spec
+        run: npm install --no-save --no-package-lock --legacy-peer-deps js-yaml@4 @standard-schema/spec
 
       - name: Run integration tests
         env:
