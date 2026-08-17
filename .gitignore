@@ -2,3 +2,10 @@ node_modules/
 lib/
 *.tsbuildinfo
 coverage/
+.npm-cache/
+*.tmp
+_syspath_backup*
+esbuild-*
+test-esbuild*
+test-execfile*
+test-ts.ts
