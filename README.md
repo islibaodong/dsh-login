@@ -20,7 +20,7 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 That's it. The package declares its `cordis.patch.yml` as a bundle patch, so `add` automatically:
 
 - mounts the `dsh-login` plugin row (config defaults are sensible; `distIndex` resolves the frontend dist automatically),
-- disables `frontend-static`, which would otherwise conflict over the fallback seat.
+- disables the `web-runtime` row (where dsh-web-app mounts the frontend-static fallback); dsh-login takes over the fallback seat and re-provides the `webRuntime` service (LAN trust for the `/api` fence + the `DSH_WEB_URL` variable).
 
 > Why `--profile web`? DSH has no global plugin install: plugins are installed per profile directory (`$DSH_HOME/profiles/<name>`). `web` is the profile that boots the Web GUI; use another profile name if you run a custom one.
 
@@ -33,19 +33,23 @@ No environment variables to set, no config files to edit. The password is set th
 If you prefer managing `cordis.patch.yml` yourself, add these rows to your profile's patch file instead:
 
 ```yaml
-- id: dsh-login
-  name: '@deepseek-ai/dsh-login'
-  config:
-    password: DSH_LOGIN_PASSWORD   # credential reference name
-    distIndex: /path/to/dist/index.html
-    sessionTtl: 604800             # 7 days (default)
-    enabled: true                 # set false to disable without uninstalling
+- insert:
+    - id: dsh-login
+      name: '@deepseek-ai/dsh-login'
+      config:
+        password: DSH_LOGIN_PASSWORD   # credential reference name
+        distIndex: ''                  # empty resolves the frontend dist automatically
+        sessionTtl: 604800             # 7 days (default)
+        enabled: true                 # set false to disable without uninstalling
 
-# IMPORTANT: disable frontend-static because dsh-login takes over the
-# fallback seat. Both cannot claim it simultaneously.
-- id: frontend-static
-  disable: true
+# IMPORTANT: dsh-login takes over the fallback seat, so the web-runtime row
+# (which mounts frontend-static) must be disabled. dsh-login re-provides the
+# webRuntime service, so the rest of the composition is unaffected.
+- id: web-runtime
+  disabled: true
 ```
+
+> Note: new rows must live under `- insert:` — a bare top-level row is treated as an override of an existing row and is a silent no-op for new ids; and the disable key is `disabled` (not `disable`).
 
 ## First-time setup flow
 
@@ -100,14 +104,14 @@ Request -> WebServer
 
 The gateway uses `registerFallback()` (not `register({ kind: 'prefix', path: '/' })`) because the DSH WebServer's prefix matching checks `pathname.startsWith(prefix + '/')`. For prefix `/`, this becomes `//`, which no normal path starts with -- a `prefix /` route only matches the exact path `/`. The fallback handler catches everything no named route claims, which is the correct catch-all behavior for the authentication gateway.
 
-This means `dsh-login` and `frontend-static` cannot coexist: both claim the single fallback seat. Disable `frontend-static` in your composition when using `dsh-login`.
+The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts frontend-static over it unconditionally, so the `web-runtime` row must be disabled when using `dsh-login`; dsh-login re-provides the `webRuntime` service that row owned (LAN trust, `DSH_WEB_URL`), leaving the rest of the composition intact.
 
 ## Running tests
 
 ```bash
 # Unit + integration tests (requires DSH checkout for package resolution)
 node --import tsx tests/runner.mjs              # unit tests (40 tests)
-node --import tsx tests/integration-runner.mjs  # integration tests (61 tests)
+node --import tsx tests/integration-runner.mjs  # integration tests (67 tests, incl. patch-format regression)
 
 # Or with vitest (in a non-sandboxed environment):
 npx vitest run

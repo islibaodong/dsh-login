@@ -1,32 +1,32 @@
-# User patch layer for dsh-login. Apply after the dsh-web-app bundle:
+# dsh-login bundle patch: insert the plugin and take over the web runtime.
 #
-#   dsh web --patch cordis.patch.yml
-#
-# Or copy these rows into your profile's cordis.patch.yml.
+# Applied as a bundle layer when installed via
+#   dsh plugin --profile web add github:islibaodong/dsh-login
+# (this file is declared in package.json's dsh.bundle.patch).
 #
 # Password: no pre-configuration needed. On first visit the /login page
 # shows a "Set Password" form; the password is stored automatically in
 # the DSH credentials system (credential ref DSH_LOGIN_PASSWORD).
 #
-# IMPORTANT: dsh-login claims the webserver fallback seat to serve as the
-# authentication gateway. The dsh-web-app bundle includes frontend-static
-# which also claims the fallback. You MUST disable frontend-static when
-# using dsh-login, or the second registration will throw.
+# IMPORTANT: dsh-login claims the webserver fallback seat (the single
+# seat for everything no named route claims). The dsh-web-app bundle's
+# `web-runtime` row mounts the frontend-static fallback owner, so that
+# row is disabled here; dsh-login re-provides the webRuntime service
+# (LAN trust for the /api fence + DSH_WEB_URL) and serves the dist
+# itself through the authenticated gateway.
 
-- id: dsh-login
-  name: '@deepseek-ai/dsh-login'
-  config:
-    password: DSH_LOGIN_PASSWORD
-    distIndex: !!js |
-      require('path').join(
-        require('path').dirname(require.resolve('@deepseek-ai/dsh-web-frontend/package.json')),
-        'dist',
-        'index.html'
-      )
-    sessionTtl: 604800
-    enabled: true
+- insert:
+    - id: dsh-login
+      name: '@deepseek-ai/dsh-login'
+      config:
+        password: DSH_LOGIN_PASSWORD
+        # distIndex: '' resolves @deepseek-ai/dsh-web-frontend/dist automatically.
+        trustedHosts: !!js ctx.webStartup?.trustedHosts ?? []
+        sessionTtl: 604800
+        takeOverWebRuntime: true
+        enabled: true
 
-# Disable frontend-static: dsh-login takes over the fallback seat.
-# Leaving frontend-static enabled would cause "fallback already registered".
-- id: frontend-static
-  disable: true
+# The web-runtime row's fallback claim conflicts with dsh-login's gateway;
+# dsh-login re-provides webRuntime, so disabling it is safe.
+- id: web-runtime
+  disabled: true

@@ -7,6 +7,7 @@ import { SessionStore } from './session.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createLoginHandler, createLogoutHandler, createSetupHandler } from './login-api.ts'
 import { renderLoginPage, renderSetupPage } from './login-page.ts'
+import { provideWebRuntime, resolveDistIndex } from './web-runtime.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-login'
@@ -21,6 +22,11 @@ export { ConfigSchema as Config }
  * API routes on the web server. All route disposers are owned by the plugin
  * fiber via ctx.effect for clean teardown on stop/update/undefine.
  *
+ * dsh-login takes over the webRuntime service and the fallback seat from
+ * dsh-web-app's web-runtime row (which the shipped cordis.patch.yml disables):
+ * it provides webRuntime (LAN trust for the /api trust fence, DSH_WEB_URL)
+ * and serves the frontend dist through the authenticated gateway.
+ *
  * First-time setup: when no password is configured, the /login page shows a
  * "set password" form instead of the login form. The /api/auth/setup
  * endpoint stores the password via the DSH credentials system. Once set,
@@ -30,6 +36,10 @@ export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
   const store = new SessionStore(config.sessionTtl)
   const ref = credentialRef(config.password)
+  const distIndex = config.distIndex === '' ? resolveDistIndex() : config.distIndex
+  const gatewayConfig = { ...config, distIndex }
+
+  if (config.takeOverWebRuntime) provideWebRuntime(ctx, config.trustedHosts)
 
   const loginPageRoute: WebRoute = {
     kind: 'exact',
@@ -61,7 +71,7 @@ export function apply(ctx: Context, config: Config): void {
     handler: createLogoutHandler(ctx, config, store),
   }
 
-  const gatewayHandler = createGatewayHandler(ctx, config, store)
+  const gatewayHandler = createGatewayHandler(ctx, gatewayConfig, store)
 
   ctx.effect(() => ctx.webServer.register(loginPageRoute), 'dsh-login: /login')
   ctx.effect(() => ctx.webServer.register(setupApiRoute), 'dsh-login: /api/auth/setup')

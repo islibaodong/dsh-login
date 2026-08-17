@@ -20,7 +20,7 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 就这一步。该包的 `cordis.patch.yml` 声明为 bundle patch，`add` 之后会自动：
 
 - 挂载 `dsh-login` 插件行（配置默认值即可用；`distIndex` 自动解析前端 dist 目录），
-- 禁用 `frontend-static`（否则会与 dsh-login 争抢 fallback 席位）。
+- 禁用 `web-runtime` 行（dsh-web-app 通过它挂载 frontend-static fallback），dsh-login 接管 fallback 席位并重新提供 `webRuntime` 服务（`/api` 信任围栏的 LAN 信任 + `DSH_WEB_URL` 环境变量）。
 
 > 为什么需要 `--profile web`？DSH 没有"全局安装插件"的概念：插件按 profile 目录（`$DSH_HOME/profiles/<name>`）安装。`web` 就是启动 Web GUI 的 profile；如果你用的是自定义 profile，换成对应名字即可。
 
@@ -33,18 +33,22 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 如果你希望自己管理 `cordis.patch.yml`，可以把以下内容手动加进 profile 的 patch 文件：
 
 ```yaml
-- id: dsh-login
-  name: '@deepseek-ai/dsh-login'
-  config:
-    password: DSH_LOGIN_PASSWORD   # 凭据引用名（不是密码本身）
-    distIndex: /path/to/dist/index.html
-    sessionTtl: 604800             # 会话有效期，7 天（默认）
-    enabled: true                 # 设为 false 可临时禁用
+- insert:
+    - id: dsh-login
+      name: '@deepseek-ai/dsh-login'
+      config:
+        password: DSH_LOGIN_PASSWORD   # 凭据引用名（不是密码本身）
+        distIndex: ''                  # 留空则自动解析前端 dist
+        sessionTtl: 604800             # 会话有效期，7 天（默认）
+        enabled: true                 # 设为 false 可临时禁用
 
-# 重要：必须禁用 frontend-static，因为 dsh-login 接管了 fallback 席位
-- id: frontend-static
-  disable: true
+# 重要：dsh-login 接管 fallback 席位，必须禁用 web-runtime 行
+# （dsh-web-app 通过该行挂载 frontend-static；dsh-login 会重新提供 webRuntime 服务）
+- id: web-runtime
+  disabled: true
 ```
+
+> 注意：新增行必须写在 `- insert:` 下——顶层直接写行会被当成对已存在行的覆盖，对不存在的行是静默空操作；禁用行的键是 `disabled`（不是 `disable`）。
 
 ## 首次设置流程
 
@@ -99,14 +103,14 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 
 网关使用 `registerFallback()` 而非 `register({ kind: 'prefix', path: '/' })`，因为 DSH WebServer 的前缀匹配逻辑检查 `pathname.startsWith(prefix + '/')`。当 prefix 为 `/` 时，拼接结果为 `//`，而正常路径不会以 `//` 开头——所以 `prefix /` 路由只能精确匹配 `/` 这一个路径。fallback 处理器能捕获所有未被命名路由匹配的请求，这才是认证网关所需的 catch-all 行为。
 
-这意味着 **`dsh-login` 与 `frontend-static` 不能共存**：两者都需要占用唯一的 fallback 席位。使用 `dsh-login` 时必须在 composition 中禁用 `frontend-static`。
+WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无条件挂载 frontend-static 占据它，因此使用 `dsh-login` 时必须禁用 `web-runtime` 行；dsh-login 会重新提供它负责的 `webRuntime` 服务（LAN 信任、`DSH_WEB_URL`），组合其余部分不受影响。
 
 ## 运行测试
 
 ```bash
 # 单元测试 + 集成测试（需要 DSH 源码用于包解析）
 node --import tsx tests/runner.mjs              # 单元测试（40 项）
-node --import tsx tests/integration-runner.mjs  # 集成测试（61 项）
+node --import tsx tests/integration-runner.mjs  # 集成测试（67 项，含 patch 格式回归）
 
 # 或使用 vitest（在非沙箱环境中）：
 npx vitest run

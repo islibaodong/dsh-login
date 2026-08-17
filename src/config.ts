@@ -4,18 +4,29 @@ import z from '@deepseek-ai/schemastery'
 export interface Config {
   /** Credential reference name for the password (e.g. 'DSH_LOGIN_PASSWORD'). */
   password: string
-  /** Absolute path to index.html in the frontend dist directory. */
+  /** Absolute path to index.html in the frontend dist directory. When empty,
+   * resolved automatically from @deepseek-ai/dsh-web-frontend's exports. */
   distIndex: string
   /** Session lifetime in seconds (default: 604800 = 7 days). */
   sessionTtl: number
   /** Whether the gateway is active (default: true). When false, the plugin
-   * registers no routes and frontend-static's fallback serves as usual. */
+   * registers no routes and the usual frontend fallback serves as usual. */
   enabled: boolean
+  /** Whether dsh-login takes over the `webRuntime` service and the fallback
+   * seat from the dsh-web-app `web-runtime` row (default: true). The shipped
+   * cordis.patch.yml disables that row; enabling this without disabling it
+   * makes the second fallback registration fail the boot. */
+  takeOverWebRuntime: boolean
+  /** Explicit trusted authorities (from --trusted-host), appended after the
+   * LAN literals, exactly like dsh-web-app's resolveLanTrust. */
+  trustedHosts: string[]
 }
 
 export const Config: z<Config> = z.object({
   password: z.string().required(),
-  distIndex: z.string().required(),
+  distIndex: z.string().default(''),
   sessionTtl: z.natural().default(604800),
   enabled: z.boolean().default(true),
+  takeOverWebRuntime: z.boolean().default(true),
+  trustedHosts: z.array(String).default([]),
 })

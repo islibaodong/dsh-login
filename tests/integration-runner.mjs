@@ -530,6 +530,34 @@ async function doLogin(port, password) {
   await rm(root, { recursive: true, force: true })
 }
 
+// Test: shipped cordis.patch.yml applies correctly to a web-app-like base
+// (regression: rows must be inserted via `- insert:`, and the disabled key
+// is `disabled`, not `disable`; the old top-level row form was a silent no-op)
+{
+  const { entryListSchema, applyEntryPatches } = await import('@deepseek-ai/cordis-plugin-include')
+  const { readFile } = await import('node:fs/promises')
+  const { createRequire } = await import('node:module')
+  const yaml = createRequire(join(DSH_ROOT, 'package.json'))('js-yaml')
+
+  const patchText = await readFile(join(process.cwd(), 'cordis.patch.yml'), 'utf8')
+  const patches = yaml.load(patchText, { schema: entryListSchema })
+  const warnings = []
+  const base = [
+    { id: 'webserver', name: '@deepseek-ai/dsh-host-webserver', config: {} },
+    { id: 'web-runtime', name: '@deepseek-ai/dsh-web-app', config: { printUrl: true } },
+  ]
+  const result = applyEntryPatches(base, patches, (msg) => warnings.push(msg))
+
+  const loginRow = result.find((e) => e.id === 'dsh-login')
+  assert(loginRow !== undefined, 'patch: dsh-login row inserted')
+  assert(loginRow.name === '@deepseek-ai/dsh-login', 'patch: inserted row name')
+  assert(loginRow.config.password === 'DSH_LOGIN_PASSWORD', 'patch: credential ref config')
+  assert(loginRow.config.takeOverWebRuntime === true, 'patch: takeOverWebRuntime config')
+  const runtimeRow = result.find((e) => e.id === 'web-runtime')
+  assert(runtimeRow.disabled === true, 'patch: web-runtime row disabled')
+  assert(warnings.length === 0, `patch: no patch warnings (got: ${warnings.join('; ')})`)
+}
+
 console.log(`\nIntegration Tests: ${passed} passed, ${failed} failed`)
 if (failed > 0) {
   console.error('\nFailures:')
