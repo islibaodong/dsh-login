@@ -21,7 +21,9 @@
       config:
         password: DSH_LOGIN_PASSWORD
         # distIndex: '' resolves @deepseek-ai/dsh-web-frontend/dist automatically.
-        trustedHosts: !!js ctx.webStartup?.trustedHosts ?? []
+        # trustedHosts defaults to []; if you launch with --trusted-host, add
+        # the same authorities here (a config row cannot read ctx.webStartup
+        # without declaring inject, so this patch pins no expression).
         sessionTtl: 604800
         takeOverWebRuntime: true
         enabled: true
