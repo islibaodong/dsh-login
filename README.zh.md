@@ -11,21 +11,13 @@
 - **未认证请求** -> 重定向到 `/login`
 - **已认证请求** -> 从前端 dist 目录提供静态文件
 
-## 安装
+## 快速开始
 
 ```bash
 dsh plugin --profile <name> add @deepseek-ai/dsh-login
 ```
 
-## 配置
-
-将密码设为环境变量：
-
-```bash
-export DSH_LOGIN_PASSWORD='你的密码'
-```
-
-在 profile 的 `cordis.patch.yml` 中添加插件配置：
+在 profile 的 `cordis.patch.yml` 中添加：
 
 ```yaml
 - id: dsh-login
@@ -37,16 +29,27 @@ export DSH_LOGIN_PASSWORD='你的密码'
     enabled: true                 # 设为 false 可临时禁用
 
 # 重要：必须禁用 frontend-static，因为 dsh-login 接管了 fallback 席位
-# 两者不能同时占用，否则会报 "fallback already registered" 错误
 - id: frontend-static
   disable: true
 ```
+
+启动 DSH，在浏览器中打开 Web GUI，你会看到设置密码页面。输入密码（两次确认）-- 密码自动存储到 DSH 凭据系统中。后续访问将显示正常的登录页。
+
+无需设置环境变量，无需编辑配置文件。密码在首次使用时通过浏览器设置。
+
+## 首次设置流程
+
+1. **首次访问**（无密码配置）-> `/login` 显示「设置密码」页面
+2. 用户输入密码两次（确认）-> `POST /api/auth/setup` 通过 `ctx.credentials.set()` 自动存储
+3. **后续访问** -> `/login` 显示正常登录页（密码已存储）
+4. **安全保护** -> 密码已设置后 `/api/auth/setup` 返回 403，防止劫持
 
 ## 工作原理
 
 ```
 请求 -> WebServer
-  ├─ /login (精确匹配)        -> 登录页 HTML
+  ├─ /login (精确匹配)        -> 设置页（无密码时）或 登录页（有密码时）
+  ├─ /api/auth/setup (精确)   -> POST: 首次设置密码（已设置则 403）
   ├─ /api/auth/login (精确)   -> POST: 验证密码，设置 Cookie
   ├─ /api/auth/logout (精确)  -> POST: 撤销会话，清除 Cookie
   ├─ /api/* (前缀匹配)        -> client-connection（主机信任检查）
@@ -58,7 +61,7 @@ export DSH_LOGIN_PASSWORD='你的密码'
 - **Cookie 名称**：`dsh_session`，HttpOnly、SameSite=Strict、Path=/
 - **会话令牌**：32 字节随机值（256 位），内存存储，带 TTL 自动过期
 - **密码比较**：使用 `crypto.timingSafeEqual` 常量时间比较，防止时序攻击
-- **密码存储**：通过 DSH 凭据系统的 `credentialRef` 引用，密码值不会出现在配置文件中
+- **密码存储**：通过 DSH 凭据系统的 `credentialRef` 引用，首次使用时通过浏览器写入本地凭据文件，不会出现在配置文件中
 
 ## 安全说明
 
@@ -94,7 +97,7 @@ export DSH_LOGIN_PASSWORD='你的密码'
 ```bash
 # 单元测试 + 集成测试（需要 DSH 源码用于包解析）
 node --import tsx tests/runner.mjs              # 单元测试（40 项）
-node --import tsx tests/integration-runner.mjs  # 集成测试（39 项）
+node --import tsx tests/integration-runner.mjs  # 集成测试（61 项）
 
 # 或使用 vitest（在非沙箱环境中）：
 npx vitest run
@@ -111,8 +114,8 @@ src/
 ├── session.ts        # SessionStore: 内存会话存储 + TTL 过期
 ├── auth.ts           # 密码验证 + Cookie 构建/解析
 ├── gateway.ts        # 认证网关 handler（fallback + serveStatic）
-├── login-api.ts      # POST /api/auth/login + /api/auth/logout
-└── login-page.ts     # 自包含深色主题登录页 HTML
+├── login-api.ts      # POST /api/auth/login + logout + setup
+└── login-page.ts     # 登录页 + 设置密码页 HTML
 tests/
 ├── *.spec.ts         # vitest 测试定义（可在标准环境运行）
 ├── runner.mjs        # 沙箱兼容单元测试运行器

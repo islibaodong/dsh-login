@@ -11,21 +11,13 @@ When the DSH web server is exposed on `0.0.0.0` or a public network, `dsh-login`
 - **Unauthenticated requests** -> redirects to `/login`
 - **Authenticated requests** -> serves static files from the frontend dist directory
 
-## Installation
+## Quick start
 
 ```bash
 dsh plugin --profile <name> add @deepseek-ai/dsh-login
 ```
 
-## Configuration
-
-Set your password as an environment variable:
-
-```bash
-export DSH_LOGIN_PASSWORD='your-password'
-```
-
-Add the plugin to your profile's `cordis.patch.yml`:
+Add to your profile's `cordis.patch.yml`:
 
 ```yaml
 - id: dsh-login
@@ -42,13 +34,25 @@ Add the plugin to your profile's `cordis.patch.yml`:
   disable: true
 ```
 
+Start DSH, open the web GUI in your browser, and you'll see the setup page. Enter a password (twice to confirm) -- it's stored automatically in the DSH credentials system. On subsequent visits, the normal login page appears.
+
+No environment variables to set, no config files to edit. The password is set through the browser on first use.
+
+## First-time setup flow
+
+1. **First visit** (no password configured) -> `/login` shows a "Set Password" page
+2. User enters a password twice (confirmation) -> `POST /api/auth/setup` stores it via `ctx.credentials.set()`
+3. **Subsequent visits** -> `/login` shows the normal login form (password already stored)
+4. **Security** -> `/api/auth/setup` returns 403 once a password is set, preventing hijacking
+
 ## How it works
 
 ```
 Request -> WebServer
-  ├─ /login (exact)            -> login page HTML
-  ├─ /api/auth/login (exact)   -> POST: verify password, set cookie
-  ├─ /api/auth/logout (exact)  -> POST: revoke session, clear cookie
+  ├─ /login (exact)            -> setup page (if no password) OR login page
+  ├─ /api/auth/setup (exact)  -> POST: set password on first use (403 if already set)
+  ├─ /api/auth/login (exact)  -> POST: verify password, set cookie
+  ├─ /api/auth/logout (exact) -> POST: revoke session, clear cookie
   ├─ /api/* (prefix)           -> client-connection (host trust check)
   └─ fallback                  -> dsh-login: auth gateway + static files
                                   ├─ no valid cookie -> 302 /login
@@ -56,9 +60,9 @@ Request -> WebServer
 ```
 
 - **Cookie:** `dsh_session`, HttpOnly, SameSite=Strict, Path=/
-- **Session:** 32-byte random token, in-memory with TTL expiry
-- **Password:** constant-time comparison via `crypto.timingSafeEqual`
-- **Password storage:** resolved through the DSH credentials system (`credentialRef`), never in config files
+- **Session:** 32-byte random token (256-bit), in-memory with TTL expiry
+- **Password comparison:** constant-time via `crypto.timingSafeEqual`
+- **Password storage:** resolved through the DSH credentials system (`credentialRef`), written to local credential file on first use, never in config files
 
 ## Security notes
 
@@ -93,14 +97,32 @@ This means `dsh-login` and `frontend-static` cannot coexist: both claim the sing
 
 ```bash
 # Unit + integration tests (requires DSH checkout for package resolution)
-node --import tsx tests/runner.mjs          # unit tests (40 tests)
-node --import tsx tests/integration-runner.mjs  # integration tests (39 tests)
+node --import tsx tests/runner.mjs              # unit tests (40 tests)
+node --import tsx tests/integration-runner.mjs  # integration tests (61 tests)
 
 # Or with vitest (in a non-sandboxed environment):
 npx vitest run
 ```
 
 The `tests/runner.mjs` and `tests/integration-runner.mjs` files are sandbox-compatible test harnesses that bypass esbuild's binary (which is blocked in some sandboxed environments). The `.spec.ts` files are the canonical vitest test definitions.
+
+## Project structure
+
+```
+src/
+├── index.ts          # Cordis plugin entry: registers routes and fallback
+├── config.ts         # schemastery config schema
+├── session.ts        # SessionStore: in-memory session + TTL expiry
+├── auth.ts           # Password verification + cookie management
+├── gateway.ts        # Auth gateway handler (fallback + serveStatic)
+├── login-api.ts     # POST /api/auth/login + logout + setup
+└── login-page.ts     # Login page + setup page HTML
+tests/
+├── *.spec.ts         # vitest test definitions
+├── runner.mjs        # Sandbox-compatible unit test runner
+├── integration-runner.mjs  # Sandbox-compatible integration test runner
+└── memory-credentials.ts   # Test-only in-memory credential provider
+```
 
 ## License
 

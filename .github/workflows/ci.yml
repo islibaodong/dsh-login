@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - name: Checkout dsh-login
+        uses: actions/checkout@v4
+
+      # The unit tests (tests/runner.mjs) have no DSH dependency; they run
+      # without the harness checkout.
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install test toolchain
+        run: npm install --no-save tsx
+
+      - name: Run unit tests
+        run: node --import tsx tests/runner.mjs
+
+  integration:
+    runs-on: ubuntu-latest
+    continue-on-error: true # requires the deepseek-harness checkout for package resolution
+    steps:
+      - name: Checkout dsh-login
+        uses: actions/checkout@v4
+
+      - name: Checkout deepseek-harness (package resolution source)
+        uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          path: dsh-deps/deepseek-harness
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install test toolchain
+        run: npm install --no-save tsx
+
+      - name: Run integration tests
+        env:
+          DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness
+        run: node --import tsx tests/integration-runner.mjs

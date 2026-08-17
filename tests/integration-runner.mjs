@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const DSH_ROOT = 'E:/code/deepseek-harness'
+const DSH_ROOT = process.env.DSH_ROOT || 'E:/code/deepseek-harness'
 
 // Link DSH packages into node_modules
 const { mkdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync } = await import('node:fs')

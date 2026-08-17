@@ -1,8 +1,29 @@
 # DSH Login Plugin Design
 
 **Date:** 2026-08-17  
-**Status:** Approved  
+**Status:** Approved (amended 2026-08-17: first-time setup flow)  
 **Approach:** B - Authentication Gateway Plugin (no DSH core modifications)
+
+## Amendment: First-Time Setup Flow
+
+The original design required the password to be pre-configured via the
+`DSH_LOGIN_PASSWORD` environment variable. The amended behavior removes that
+requirement:
+
+1. **Detection:** the `/login` page handler calls `ctx.credentials.describe(ref)`.
+   While `configured === false`, `/login` renders the setup page
+   (`renderSetupPage()`) instead of the login form.
+2. **Setup endpoint:** `POST /api/auth/setup` accepts `{ password: string }`
+   and stores it via `ctx.credentials.set(ref, value)`, which the local
+   credentials provider persists to its writable file source.
+3. **Security gate:** `/api/auth/setup` first re-checks `describe(ref)`; once a
+   password exists it answers 403 `{ error: 'password already set' }`, so the
+   endpoint cannot be used to hijack an already-configured instance.
+4. **Setup page UX:** two inputs (password + confirmation) validated
+   client-side (non-empty, match) before the POST; on success it redirects to
+   `/`, which then shows the normal login page.
+
+All original sections below remain in force, with this flow added on top.
 
 ## Purpose
 

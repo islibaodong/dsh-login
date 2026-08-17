@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-const DSH_ROOT = resolve('E:/code/deepseek-harness')
+const DSH_ROOT = resolve(process.env.DSH_ROOT || 'E:/code/deepseek-harness')
 
 // Map @deepseek-ai/* package names to their DSH source directories.
 const PACKAGE_MAP = {

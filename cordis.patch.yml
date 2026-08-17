@@ -4,10 +4,9 @@
 #
 # Or copy these rows into your profile's cordis.patch.yml.
 #
-# Prerequisite: set the DSH_LOGIN_PASSWORD environment variable (or file
-# credential) to your desired login password.
-#
-#   export DSH_LOGIN_PASSWORD='your-password-here'
+# Password: no pre-configuration needed. On first visit the /login page
+# shows a "Set Password" form; the password is stored automatically in
+# the DSH credentials system (credential ref DSH_LOGIN_PASSWORD).
 #
 # IMPORTANT: dsh-login claims the webserver fallback seat to serve as the
 # authentication gateway. The dsh-web-app bundle includes frontend-static
