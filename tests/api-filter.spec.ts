@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiProxy, MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { createUserProxy, frameVisible, ownedSessionIds } from '../src/api-filter.ts'
+import { createUserProxy, frameVisible, isUserAllowed, ownedSessionIds } from '../src/api-filter.ts'
 import { OwnershipIndex } from '../src/ownership.ts'
 import { tmpFile } from './helpers.ts'
 
@@ -41,6 +41,9 @@ function fakeApi(over: Partial<ApiProxy> = {}): ApiProxy {
     },
     workspace: {
       list: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { items: [], archivedSessionIds: [] } } }),
+      archiveSession: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { archivedSessionIds: [(r.payload as { sessionId: string }).sessionId as never] } } }),
+      insertSessionBefore: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { workspace: {} } } }),
+      insertBefore: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: {} } }),
     },
     goals: {
       create: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { ref: { id: 'g' as never, revision: 1 } } } }),
@@ -121,6 +124,31 @@ describe('createUserProxy', () => {
     expect(denied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
   })
 
+  it('workspace.archiveSession guards the session; insertSessionBefore guards every session field', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    const proxy = createUserProxy(fakeApi(), alice, idx)
+    const denied = await proxy.workspace.archiveSession(req({ sessionId: 'alien' }))
+    expect(denied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const ok = await proxy.workspace.archiveSession(req({ sessionId: 'own1' }))
+    expect(ok.result).toMatchObject({ ok: true })
+    // beforeSessionId is guarded even when sessionId itself is owned.
+    const anchorDenied = await proxy.workspace.insertSessionBefore(req({ workspaceId: 'w' as never, sessionId: 'own1', beforeSessionId: 'alien' as never }))
+    expect(anchorDenied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const anchorOk = await proxy.workspace.insertSessionBefore(req({ workspaceId: 'w' as never, sessionId: 'own1' }))
+    expect(anchorOk.result).toMatchObject({ ok: true })
+  })
+
+  it('subagents.list rewrites parentAvailable to false for a non-owned parent', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    const proxy = createUserProxy(fakeApi(), alice, idx)
+    const alien = await proxy.subagents.list(req({ parentSessionId: 'alien' as never }))
+    expect((alien.result as { ok: true; value: { parentAvailable: boolean } }).value.parentAvailable).toBe(false)
+    const owned = await proxy.subagents.list(req({ parentSessionId: 'own1' as never }))
+    expect((owned.result as { ok: true; value: { parentAvailable: boolean } }).value.parentAvailable).toBe(true)
+  })
+
   it('frameVisible host rules', () => {
     const idx = new OwnershipIndex(tmpFile())
     idx.record('own1', 'alice')
@@ -131,5 +159,26 @@ describe('createUserProxy', () => {
     expect(frameVisible(root, idx, { type: 'host/remote-event', event: 'x', args: [] }, owned)).toBe(true)
     expect(frameVisible(alice, idx, { type: 'host/workspace-changed', workspace: { workspaceId: 'w' as never, path: 'p', title: 'w', sessionIds: ['own1' as never], createdAt: '', updatedAt: '' } }, owned)).toBe(true)
     expect(frameVisible(alice, idx, { type: 'host/workspace-changed', workspace: { workspaceId: 'w' as never, path: 'p', title: 'w', sessionIds: ['alien' as never], createdAt: '', updatedAt: '' } }, owned)).toBe(false)
+  })
+})
+
+describe('isUserAllowed', () => {
+  it('uses exact RpcMethodMap keys: allowed listings stay, privileged domains go', () => {
+    expect(isUserAllowed('session.list')).toBe(true)
+    expect(isUserAllowed('session.prompt')).toBe(true)
+    expect(isUserAllowed('subagent.list')).toBe(true)
+    expect(isUserAllowed('workspace.insertSessionBefore')).toBe(true)
+    expect(isUserAllowed('goal.create')).toBe(true)
+    expect(isUserAllowed('skill.list')).toBe(true)
+    expect(isUserAllowed('llm.providers')).toBe(true)
+    expect(isUserAllowed('host.describe')).toBe(true)
+    expect(isUserAllowed('credentials.set')).toBe(false)
+    expect(isUserAllowed('settings.describe')).toBe(false)
+    expect(isUserAllowed('agentPreset.list')).toBe(false)
+    expect(isUserAllowed('llm.discoverModels')).toBe(false)
+    expect(isUserAllowed('host.pickDirectory')).toBe(false)
+    // Wrong spellings must not sneak through (sessions.list does not exist).
+    expect(isUserAllowed('sessions.list')).toBe(false)
+    expect(isUserAllowed('session.export')).toBe(false)
   })
 })

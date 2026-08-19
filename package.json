@@ -8,6 +8,8 @@
     ".": {
       "default": "./src/index.ts"
     },
+    "./connection": "./src/connection.ts",
+    "./connection-client": "./src/connection.client.ts",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

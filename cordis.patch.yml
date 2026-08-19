@@ -32,3 +32,17 @@
 # dsh-login re-provides webRuntime, so disabling it is safe.
 - id: web-runtime
   disabled: true
+
+# The shipped /api carrier is replaced by dsh-login's identity-aware takeover
+# (`src/connection.ts`, mounted by dsh-login itself through the
+# createConnectionPlugin factory — its SessionStore/OwnershipIndex instances
+# live inside the dsh-login fiber, so it cannot ride a standalone row).
+# Browser half: `src/connection.client.ts` re-exports the shipped connection
+# client verbatim (export `./connection-client`); note the client-modules
+# scanner discovers browser halves from a package's own `dsh.client`
+# declaration + built `exports["./client"]` bundle, never a patch-row key —
+# disabling this row removes the shipped client bundle from the boot graph,
+# and restoring it requires dsh-login to ship a built browser bundle (follow-up
+# tracked with the Task 6 wiring).
+- id: connection
+  disabled: true

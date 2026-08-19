@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config'
 // packages; resolve it straight to the harness checkout (test-only — at
 // runtime the harness resolves the specifier through its own workspace).
 const apiproxy = join(process.env.DSH_HARNESS_CHECKOUT ?? 'E:/code/deepseek-harness', 'packages/host/apiproxy')
+// Same treatment for the client connection carrier (bridge, trust fence,
+// WebSocket downlinks): not linked into this checkout's node_modules.
+const connection = join(process.env.DSH_HARNESS_CHECKOUT ?? 'E:/code/deepseek-harness', 'packages/client/connection')
 
 export default defineConfig({
   test: {
@@ -20,6 +23,8 @@ export default defineConfig({
     alias: [
       { find: /^@deepseek-ai\/dsh-host-apiproxy\/api$/, replacement: join(apiproxy, 'lib/types/api/index.js') },
       { find: /^@deepseek-ai\/dsh-host-apiproxy$/, replacement: join(apiproxy, 'lib/index.js') },
+      { find: /^@deepseek-ai\/dsh-client-connection\/src$/, replacement: join(connection, 'src/index.ts') },
+      { find: /^@deepseek-ai\/dsh-client-connection\/src\/(.+)$/, replacement: join(connection, 'src') + '/$1' },
     ],
   },
 })

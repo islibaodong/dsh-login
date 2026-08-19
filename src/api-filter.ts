@@ -4,6 +4,38 @@ import type { OwnershipIndex } from './ownership.ts'
 
 export interface AuthUser { username: string; isAdmin: boolean }
 
+/**
+ * Physical-layer allow-list: every RpcMethodMap key (exact spellings copied
+ * from packages/host/apiproxy/src/api/rpc-map.ts — `session.list` singular,
+ * etc.) an ordinary user may call through the /api carrier. Derived to stay
+ * consistent with createUserProxy: the session/subagent/workspace/goal listing
+ * and guarded methods, `host.describe`, `skill.list`, and the read-only model
+ * catalog (`llm.providers`/`llm.models`). Everything else (credentials.*,
+ * settings.*, agentPreset.* — the admin-only domains — plus the privileged
+ * host.* dialogs and llm.discoverModels) is a physical 403 for ordinary users.
+ * `respond` is not an RpcMethodMap key (it carries a client-response, not a
+ * request) but passes through the decorator unguarded, so it is allowed here
+ * too — the browser needs it to answer server-requests (approvals).
+ */
+export const USER_ALLOWED: ReadonlySet<string> = new Set([
+  'session.list', 'session.search', 'session.create', 'session.history', 'session.models',
+  'session.selectModel', 'session.rename', 'session.fork', 'session.prompt', 'session.attachment',
+  'session.updateQueue', 'session.cancel',
+  'subagent.list', 'subagent.history', 'subagent.prompt', 'subagent.interrupt',
+  'host.describe',
+  'workspace.list', 'workspace.create', 'workspace.rename', 'workspace.delete',
+  'workspace.insertBefore', 'workspace.insertSessionBefore', 'workspace.archiveSession',
+  'skill.list',
+  'llm.providers', 'llm.models',
+  'goal.create', 'goal.edit', 'goal.pause', 'goal.resume', 'goal.complete', 'goal.clear',
+  'respond',
+])
+
+/** May an ordinary (non-admin) user call this wire method at the physical layer? */
+export function isUserAllowed(method: string): boolean {
+  return USER_ALLOWED.has(method)
+}
+
 /** Internal rpcId for the ownership-driven session.list probe (never surfaces to a client). */
 const OWNERSHIP_RPC = makeRpcId('dsh-login-ownership')
 
@@ -87,19 +119,33 @@ const SESSION_GUARDED = new Set(['history', 'models', 'selectModel', 'rename', '
 
 type GuardedPayload = { sessionId?: string; childSessionId?: string; parentSessionId?: string }
 
+/** Payload fields that may carry a session id; every present field must be owned. */
+const SESSION_ID_FIELDS = ['sessionId', 'childSessionId', 'parentSessionId'] as const
+
 export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: OwnershipIndex): ApiProxy {
-  const guard = async (request: RpcRequest<GuardedPayload>): Promise<boolean> => {
-    if (user.isAdmin) return true
-    const sid = request.payload.childSessionId ?? request.payload.sessionId ?? request.payload.parentSessionId
-    if (sid === undefined) return true
+  const guardSid = async (sid: string): Promise<boolean> => {
     const direct = ownership.lookup(sid)
     if (direct !== undefined) return direct === user.username
     const owned = await ownedSessionIds(api, user, ownership)
     return owned.has(sid)
   }
+  // A request passes when EVERY session-id field it carries is owned (or the
+  // user is admin): one alien anchor (insertSessionBefore's beforeSessionId,
+  // subagent history's parentSessionId beside a owned child) denies the call.
+  const guard = async (request: RpcRequest<GuardedPayload>, fields: readonly string[] = SESSION_ID_FIELDS): Promise<boolean> => {
+    if (user.isAdmin) return true
+    for (const field of fields) {
+      const sid = (request.payload as Record<string, string | undefined> | undefined)?.[field]
+      if (sid === undefined) continue
+      if (!(await guardSid(sid))) return false
+    }
+    return true
+  }
 
-  const wrapSessionMethod = (name: string, method: (r: never) => Promise<unknown>) => async (request: never) => {
-    if (SESSION_GUARDED.has(name) && !(await guard(request as never))) return forbidden(request as never)
+  // Guarded whenever the name is session-addressed (SESSION_GUARDED) or the
+  // caller passes explicit payload fields (workspace session mutations).
+  const wrapSessionMethod = (name: string, method: (r: never) => Promise<unknown>, fields?: readonly string[]) => async (request: never) => {
+    if ((fields !== undefined || SESSION_GUARDED.has(name)) && !(await guard(request as never, fields))) return forbidden(request as never)
     return await method(request)
   }
 
@@ -145,7 +191,12 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
         if (user.isAdmin || !res.result.ok) return res
         const owned = await ownedSessionIds(api, user, ownership)
         const value = res.result.value as { entries: Array<{ id: string }>; parentAvailable: boolean }
-        return { ...res, result: { ok: true, value: { ...value, entries: value.entries.filter(e => owned.has(e.id as string)) } } }
+        // parentAvailable leaks whether the requested parent exists for the
+        // caller: for a non-owned parent it is rewritten to false (minimal
+        // response — the entries filter already hides other users' children).
+        const parent = (request.payload as { parentSessionId?: string }).parentSessionId
+        const parentAvailable = parent === undefined || owned.has(parent)
+        return { ...res, result: { ok: true, value: { ...value, parentAvailable, entries: value.entries.filter(e => owned.has(e.id as string)) } } }
       },
       ...Object.fromEntries(['history', 'prompt', 'interrupt'].map(name => [
         name, wrapSessionMethod(name, (api.subagents as Record<string, (r: never) => Promise<unknown>>)[name]),
@@ -163,6 +214,16 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
           .filter(w => w.sessionIds.length > 0)
         return { ...res, result: { ok: true, value: { ...value, items, archivedSessionIds: value.archivedSessionIds.filter(id => owned.has(id)) } } }
       },
+      // Session-addressed mutations: every sessionId-bearing payload field is
+      // guarded (insertSessionBefore's optional beforeSessionId anchor included).
+      archiveSession: wrapSessionMethod('archiveSession',
+        (api.workspace as Record<string, (r: never) => Promise<unknown>>).archiveSession, ['sessionId']),
+      insertSessionBefore: wrapSessionMethod('insertSessionBefore',
+        (api.workspace as Record<string, (r: never) => Promise<unknown>>).insertSessionBefore, ['sessionId', 'beforeSessionId']),
+      // insertBefore reorders workspaces by workspaceId, not session: it stays
+      // passthrough. Accepted residual: reordering a workspace is low-harm
+      // metadata (any ordinary user of the deployment can shuffle the manual
+      // order); workspace-ownership derivation is deliberately out of scope.
     } as ApiProxy['workspace'],
     goals: {
       ...api.goals,
