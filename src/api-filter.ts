@@ -1,0 +1,219 @@
+import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, RpcResponse } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { RpcId as makeRpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { OwnershipIndex } from './ownership.ts'
+
+export interface AuthUser { username: string; isAdmin: boolean }
+
+/** Internal rpcId for the ownership-driven session.list probe (never surfaces to a client). */
+const OWNERSHIP_RPC = makeRpcId('dsh-login-ownership')
+
+/**
+ * `forbidden` is outside the harness RpcErrorCode union (the harness never
+ * emits it), so the literal is cast through unknown; on the wire it is an
+ * ordinary RpcResult error branch echoing the request's rpcId.
+ */
+function forbidden<T>(request: RpcRequest<unknown>): RpcResponse<T> {
+  return {
+    rpcId: request.rpcId,
+    result: { ok: false, error: { code: 'forbidden', message: 'not permitted for this user', details: {} } },
+  } as unknown as RpcResponse<T>
+}
+
+/** Domains whose every method is admin-only (wrapped wholesale for ordinary users). */
+const ADMIN_ONLY_DOMAINS = ['credentials', 'settings', 'agentPresets'] as const
+
+/**
+ * Direct index hits plus lineage closure: a child of an owned session is
+ * owned (subagents/forks). The closure walks `parentSessionId` to a fixpoint
+ * over one `session.list` snapshot, recording new attributions into the index.
+ */
+export async function ownedSessionIds(api: ApiProxy, user: AuthUser, ownership: OwnershipIndex): Promise<Set<string>> {
+  const owned = new Set<string>()
+  for (const [sid, owner] of ownership.entries()) {
+    if (owner === user.username) owned.add(sid)
+  }
+  const res = await api.sessions.list({ rpcId: OWNERSHIP_RPC, payload: {} })
+  if (!res.result.ok) return owned
+  const byParent = new Map<string, string[]>()
+  for (const item of res.result.value.items) {
+    if (item.parentSessionId !== undefined) {
+      const list = byParent.get(item.parentSessionId) ?? []
+      list.push(item.sessionId)
+      byParent.set(item.parentSessionId, list)
+    }
+  }
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const sid of [...owned]) {
+      for (const child of byParent.get(sid) ?? []) {
+        if (!owned.has(child)) {
+          owned.add(child)
+          ownership.record(child, user.username)
+          grew = true
+        }
+      }
+    }
+  }
+  return owned
+}
+
+/** Pure frame predicate: may this user see this mux/host frame given the owned set? */
+export function frameVisible(
+  user: AuthUser, ownership: OwnershipIndex,
+  frame: MuxFrame | HostFrame, owned: Set<string>,
+): boolean {
+  if (user.isAdmin) return true
+  void ownership // reserved for future per-owner frame rules; the owned set decides today
+  const f = frame as { type: string; sessionId?: string; workspace?: { sessionIds?: string[] }; workspaceIds?: string[]; archivedSessionIds?: string[] }
+  if (f.type === 'stream/error') return true
+  if (f.type === 'host/remote-event') return false
+  if (f.sessionId !== undefined) return owned.has(f.sessionId)
+  if (f.type === 'host/workspace-changed') {
+    const ids = f.workspace?.sessionIds ?? []
+    return ids.some(id => owned.has(id))
+  }
+  if (f.type === 'host/workspace-order-changed') {
+    return (f.workspaceIds ?? []).some(id => owned.has(id))
+  }
+  if (f.type === 'host/archived-sessions-changed') {
+    return (f.archivedSessionIds ?? []).some(id => owned.has(id))
+  }
+  return false
+}
+
+/** session.* method names addressed by payload sessionId (guarded per request). */
+const SESSION_GUARDED = new Set(['history', 'models', 'selectModel', 'rename', 'fork', 'prompt', 'attachment', 'updateQueue', 'cancel'])
+
+type GuardedPayload = { sessionId?: string; childSessionId?: string; parentSessionId?: string }
+
+export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: OwnershipIndex): ApiProxy {
+  const guard = async (request: RpcRequest<GuardedPayload>): Promise<boolean> => {
+    if (user.isAdmin) return true
+    const sid = request.payload.childSessionId ?? request.payload.sessionId ?? request.payload.parentSessionId
+    if (sid === undefined) return true
+    const direct = ownership.lookup(sid)
+    if (direct !== undefined) return direct === user.username
+    const owned = await ownedSessionIds(api, user, ownership)
+    return owned.has(sid)
+  }
+
+  const wrapSessionMethod = (name: string, method: (r: never) => Promise<unknown>) => async (request: never) => {
+    if (SESSION_GUARDED.has(name) && !(await guard(request as never))) return forbidden(request as never)
+    return await method(request)
+  }
+
+  const proxy: ApiProxy = {
+    ...api,
+    sessions: {
+      ...api.sessions,
+      list: async (request) => {
+        const res = await api.sessions.list(request)
+        if (user.isAdmin || !res.result.ok) return res
+        const owned = await ownedSessionIds(api, user, ownership)
+        return { ...res, result: { ok: true, value: { items: res.result.value.items.filter(i => owned.has(i.sessionId as string)) } } }
+      },
+      search: async (request, signal) => {
+        const res = await api.sessions.search(request, signal)
+        if (user.isAdmin || !res.result.ok) return res
+        const owned = await ownedSessionIds(api, user, ownership)
+        return { ...res, result: { ok: true, value: { ...res.result.value, items: res.result.value.items.filter(i => owned.has(i.sessionId as string)) } } }
+      },
+      create: async (request) => {
+        const res = await api.sessions.create(request)
+        if (res.result.ok) ownership.record(res.result.value.sessionId as string, user.username)
+        return res
+      },
+      // history/models/selectModel/rename/prompt/attachment/updateQueue/cancel + fork:
+      ...Object.fromEntries([...SESSION_GUARDED].map(name => [
+        name, name === 'fork'
+          ? (async (request: never) => {
+            if (!(await guard(request as never))) return forbidden(request as never)
+            const res = await (api.sessions.fork as (r: never) => Promise<unknown>)(request)
+            if ((res as { result: { ok: boolean; value?: { sessionId?: string } } }).result.ok) {
+              ownership.record((res as { result: { value: { sessionId: string } } }).result.value.sessionId as string, user.username)
+            }
+            return res
+          })
+          : wrapSessionMethod(name, (api.sessions as Record<string, (r: never) => Promise<unknown>>)[name]),
+      ])),
+    } as ApiProxy['sessions'],
+    subagents: {
+      ...api.subagents,
+      list: async (request, signal) => {
+        const res = await api.subagents.list(request, signal)
+        if (user.isAdmin || !res.result.ok) return res
+        const owned = await ownedSessionIds(api, user, ownership)
+        const value = res.result.value as { entries: Array<{ id: string }>; parentAvailable: boolean }
+        return { ...res, result: { ok: true, value: { ...value, entries: value.entries.filter(e => owned.has(e.id as string)) } } }
+      },
+      ...Object.fromEntries(['history', 'prompt', 'interrupt'].map(name => [
+        name, wrapSessionMethod(name, (api.subagents as Record<string, (r: never) => Promise<unknown>>)[name]),
+      ])),
+    } as ApiProxy['subagents'],
+    workspace: {
+      ...api.workspace,
+      list: async (request) => {
+        const res = await api.workspace.list(request)
+        if (user.isAdmin || !res.result.ok) return res
+        const owned = await ownedSessionIds(api, user, ownership)
+        const value = res.result.value as { items: Array<{ sessionIds: string[] }>; archivedSessionIds: string[] }
+        const items = value.items
+          .map(w => ({ ...w, sessionIds: w.sessionIds.filter(id => owned.has(id)) }))
+          .filter(w => w.sessionIds.length > 0)
+        return { ...res, result: { ok: true, value: { ...value, items, archivedSessionIds: value.archivedSessionIds.filter(id => owned.has(id)) } } }
+      },
+    } as ApiProxy['workspace'],
+    goals: {
+      ...api.goals,
+      ...Object.fromEntries(Object.getOwnPropertyNames(api.goals).map(name => [
+        name, wrapSessionMethod(name, (api.goals as Record<string, (r: never) => Promise<unknown>>)[name]),
+      ])),
+    } as ApiProxy['goals'],
+    events: {
+      ...api.events,
+      mux: (request, signal) => filterWithOwnership(api.events.mux(request, signal), async frame => {
+        if (user.isAdmin) return true
+        const f = frame.payload as MuxFrame & { sessionId?: string }
+        if (f.type === 'stream/error') return true
+        return (await ownedSessionIds(api, user, ownership)).has(f.sessionId as string)
+      }),
+      host: (request, signal) => filterWithOwnership(api.events.host(request, signal), async frame => {
+        if (user.isAdmin) return true
+        return frameVisible(user, ownership, frame.payload, await ownedSessionIds(api, user, ownership))
+      }),
+    } as ApiProxy['events'],
+    ...Object.fromEntries(ADMIN_ONLY_DOMAINS.map(domain => [
+      domain, domainGuard(api[domain] as object),
+    ])) as Pick<ApiProxy, typeof ADMIN_ONLY_DOMAINS[number]>,
+    llm: {
+      ...api.llm,
+      discoverModels: (request: never) => Promise.resolve(forbidden(request)),
+    } as ApiProxy['llm'],
+    host: {
+      ...api.host,
+      pickDirectory: methodForbidden,
+      listDirectory: methodForbidden,
+      createDirectory: methodForbidden,
+      openPath: methodForbidden,
+    } as ApiProxy['host'],
+  }
+  // Admin sees everything unfiltered.
+  return user.isAdmin ? { ...api } : proxy
+
+  function methodForbidden(request: never): Promise<never> {
+    return Promise.resolve(forbidden(request as never) as never)
+  }
+  function domainGuard<T extends object>(domain: T): T {
+    if (user.isAdmin) return domain
+    return new Proxy(domain, { get() { return methodForbidden } }) as T
+  }
+  async function* filterWithOwnership(
+    stream: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>,
+    keep: (frame: RpcRequest<MuxFrame | HostFrame>) => Promise<boolean>,
+  ): AsyncIterable<RpcRequest<MuxFrame | HostFrame>> {
+    for await (const frame of stream) {
+      if (await keep(frame)) yield frame
+    }
+  }
+}

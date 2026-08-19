@@ -1,12 +1,7 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { OwnershipIndex } from '../src/ownership.ts'
-
-function tmpFile(): string {
-  return join(mkdtempSync(join(tmpdir(), 'dsh-login-own-')), 'ownership.json')
-}
+import { tmpFile } from './helpers.ts'
 
 describe('OwnershipIndex', () => {
   it('records and looks up', () => {

@@ -47,6 +47,11 @@ export class OwnershipIndex {
     return new Set(this.map.values())
   }
 
+  /** All recorded [sessionId, username] pairs (snapshot). */
+  entries(): Array<[string, string]> {
+    return [...this.map.entries()]
+  }
+
   /** Force the pending save; resolves when the file write settled. */
   async flush(): Promise<void> {
     if (this.saveTimer !== undefined) {
