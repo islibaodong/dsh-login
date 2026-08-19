@@ -39,7 +39,7 @@ describe('SessionStore', () => {
     expect(() => store.revoke('nonexistent')).not.toThrow()
   })
 
-  it('rejects an expired session after TTL', () => {
+  it('rejects an expired session after TTL', async () => {
     // Use a TTL of 0 seconds so the session is immediately expired.
     const store = new SessionStore(0)
     const session = store.create()
@@ -50,7 +50,7 @@ describe('SessionStore', () => {
     expect(store.verify(session.token)).toBe(false)
   })
 
-  it('cleanup removes expired sessions', () => {
+  it('cleanup removes expired sessions', async () => {
     const store = new SessionStore(0)
     store.create()
     await new Promise<void>(r => setTimeout(r, 10))
