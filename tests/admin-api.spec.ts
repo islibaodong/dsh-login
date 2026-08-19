@@ -176,6 +176,17 @@ describe('POST /api/auth/admin/users/password', () => {
     expect((await req(port, 'POST', '/api/auth/login', { username: 'bob', password: 'bobpw' })).status).toBe(401)
   })
 
+  it('revokes the password-changed user\'s live sessions (old cookie → 401)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(200)
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/users/password', { username: 'bob', password: 'newpw' }, rootCookie)).status).toBe(200)
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(401)
+    // The admin's own session survives the change.
+    expect((await req(port, 'GET', '/api/auth/me', undefined, rootCookie)).status).toBe(200)
+  })
+
   it('returns 404 for an unknown user and 400 for an empty password', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })
     const cookie = await loginCookie(port, 'root', 'rootpw')
@@ -191,6 +202,17 @@ describe('POST /api/auth/admin/users/remove', () => {
     const res = await req(port, 'POST', '/api/auth/admin/users/remove', { username: 'bob' }, cookie)
     expect(res.status).toBe(200)
     expect((await users.list()).some(u => u.username === 'bob')).toBe(false)
+  })
+
+  it('revokes the removed user\'s live sessions (old cookie → 401 on /api/auth/me)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(200)
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/users/remove', { username: 'bob' }, rootCookie)).status).toBe(200)
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(401)
+    // The admin's own session survives the removal.
+    expect((await req(port, 'GET', '/api/auth/me', undefined, rootCookie)).status).toBe(200)
   })
 
   it('refuses to remove the last admin (409)', { timeout: 60_000 }, async () => {

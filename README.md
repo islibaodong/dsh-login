@@ -64,7 +64,7 @@ If you prefer managing `cordis.patch.yml` yourself, add these rows to your profi
 1. **First visit** (no users yet) -> `/login` shows a "Create administrator account" page (username + password)
 2. User picks credentials -> `POST /api/auth/setup` creates the forced-admin account (scrypt-hashed, stored under the `${password}_USERS` credential ref, default `DSH_LOGIN_PASSWORD_USERS`) and logs it in
 3. **Subsequent visits** -> `/login` shows the normal username/password login form
-4. **User management** -> admins open `/admin` to list, create, remove users and change passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused)
+4. **User management** -> admins open `/admin` to list, create, remove users and change passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused; removal or password change revokes that user's live sessions immediately)
 5. **Security** -> `/api/auth/setup` returns 403 once any user exists, preventing hijacking
 
 > **Migration note:** the legacy single-password credential (default ref `DSH_LOGIN_PASSWORD`) no longer logs anyone in. It stays configured but is unused for authentication — the `password` config key now only namespaces the user store credential ref (`${password}_USERS`). Upgrading an existing single-password deployment therefore requires the first visit to bootstrap a fresh administrator account.

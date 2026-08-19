@@ -44,6 +44,21 @@ export class SessionStore {
     this.store.delete(token)
   }
 
+  /**
+   * Revoke every live session belonging to `user` (user removal or password
+   * change). Returns the number of sessions removed.
+   */
+  revokeAllFor(user: string): number {
+    let removed = 0
+    for (const [token, session] of this.store) {
+      if (session.user === user) {
+        this.store.delete(token)
+        removed++
+      }
+    }
+    return removed
+  }
+
   /** Remove all expired sessions. */
   cleanup(): void {
     const now = Date.now()

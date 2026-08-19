@@ -79,4 +79,17 @@ describe('SessionStore', () => {
     const store = new SessionStore(60)
     expect(store.verify('nope')).toBeUndefined()
   })
+
+  it('revokeAllFor removes every session of the user and leaves others intact', () => {
+    const store = new SessionStore(3600)
+    const a1 = store.create('alice', false)
+    const a2 = store.create('alice', false)
+    const b1 = store.create('bob', false)
+    expect(store.revokeAllFor('alice')).toBe(2)
+    expect(store.verify(a1.token)).toBeUndefined()
+    expect(store.verify(a2.token)).toBeUndefined()
+    expect(store.verify(b1.token)).toBeDefined()
+    expect(store.revokeAllFor('alice')).toBe(0)
+    expect(store.revokeAllFor('nobody')).toBe(0)
+  })
 })

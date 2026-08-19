@@ -62,7 +62,7 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 1. **首次访问**（无任何用户）-> `/login` 显示「创建管理员账号」页面（用户名 + 密码）
 2. 用户选择凭据 -> `POST /api/auth/setup` 创建强制管理员的第一个账号（scrypt 哈希，存入 `${password}_USERS` 凭据引用，默认 `DSH_LOGIN_PASSWORD_USERS`）并自动登录
 3. **后续访问** -> `/login` 显示正常的用户名/密码登录表单
-4. **用户管理** -> 管理员打开 `/admin` 列出、创建、删除用户及修改密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝）
+4. **用户管理** -> 管理员打开 `/admin` 列出、创建、删除用户及修改密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝；删除用户或修改密码会立即吊销该用户的全部活跃会话）
 5. **安全保护** -> 已有用户后 `/api/auth/setup` 返回 403，防止劫持
 
 > **迁移说明：** 旧版单一密码凭据（默认引用 `DSH_LOGIN_PASSWORD`）不再能登录任何人。它保持已配置状态但认证不再使用——`password` 配置项现在只用于派生用户存储引用（`${password}_USERS`）。因此从单密码部署升级后，首次访问需要重新引导创建一个管理员账号。

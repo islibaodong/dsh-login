@@ -166,8 +166,23 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
         return { ...res, result: { ok: true, value: { ...res.result.value, items: res.result.value.items.filter(i => owned.has(i.sessionId as string)) } } }
       },
       create: async (request) => {
+        // sessions.create ADOPTS an already-live session when the payload
+        // supplies an existing sessionId: claiming another user's session
+        // here would transfer its ownership, so an alien sessionId is
+        // forbidden up front (admins exempt).
+        const adopt = (request.payload as { sessionId?: string } | undefined)?.sessionId
+        if (!user.isAdmin && adopt !== undefined) {
+          const owner = ownership.lookup(adopt)
+          if (owner !== undefined && owner !== user.username) return forbidden(request)
+        }
         const res = await api.sessions.create(request)
-        if (res.result.ok) ownership.record(res.result.value.sessionId as string, user.username)
+        if (res.result.ok) {
+          const sid = res.result.value.sessionId as string
+          // Record only when the resulting session had no prior different
+          // owner (unowned or already this user's).
+          const owner = ownership.lookup(sid)
+          if (owner === undefined || owner === user.username) ownership.record(sid, user.username)
+        }
         return res
       },
       // history/models/selectModel/rename/prompt/attachment/updateQueue/cancel + fork:
@@ -227,8 +242,11 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
     } as ApiProxy['workspace'],
     goals: {
       ...api.goals,
+      // Every GoalsApi method carries sessionId in its payload; guard each
+      // one on it (explicit fields, since goal verbs are not in
+      // SESSION_GUARDED — that set is the session.* method-name space).
       ...Object.fromEntries(Object.getOwnPropertyNames(api.goals).map(name => [
-        name, wrapSessionMethod(name, (api.goals as Record<string, (r: never) => Promise<unknown>>)[name]),
+        name, wrapSessionMethod(name, (api.goals as Record<string, (r: never) => Promise<unknown>>)[name], ['sessionId']),
       ])),
     } as ApiProxy['goals'],
     events: {

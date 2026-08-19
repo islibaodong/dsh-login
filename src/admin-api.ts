@@ -107,6 +107,9 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
       if (message.includes('unknown user')) return sendJson(res, 404, { error: 'unknown user' })
       return sendJson(res, 400, { error: 'bad request' })
     }
+    // A password change must force re-login with the new password: revoke
+    // the user's live cookie sessions so old cookies stop working.
+    deps.store.revokeAllFor(username)
     return sendJson(res, 200, { ok: true })
   } }
 
@@ -122,6 +125,9 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
       return sendJson(res, 409, { error: 'cannot remove the last admin' })
     }
     await deps.users.remove(target)
+    // The removed user must lose access immediately: revoke their live
+    // cookie sessions so a stale cookie cannot ride out the TTL.
+    deps.store.revokeAllFor(target)
     return sendJson(res, 200, { ok: true })
   } }
 

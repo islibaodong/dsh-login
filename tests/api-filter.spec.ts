@@ -18,7 +18,7 @@ function fakeApi(over: Partial<ApiProxy> = {}): ApiProxy {
           { sessionId: 'alien' as never, updatedAt: 3, running: false, blank: false },
         ] } },
       }),
-      create: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { sessionId: 'new-1' as never } } }),
+      create: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { sessionId: ((r.payload as { sessionId?: string } | undefined)?.sessionId ?? 'new-1') as never } } }),
       prompt: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { accepted: true } } }),
     },
     subagents: {
@@ -47,6 +47,7 @@ function fakeApi(over: Partial<ApiProxy> = {}): ApiProxy {
     },
     goals: {
       create: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { ref: { id: 'g' as never, revision: 1 } } } }),
+      complete: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { ref: { id: 'g' as never, revision: 2 } } } }),
     },
     host: { describe: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { version: 'v', cwd: 'c', attachedSessions: 0, canOpenPath: false } } }) },
     llm: { providers: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: [] } }) },
@@ -92,6 +93,42 @@ describe('createUserProxy', () => {
     const denied = await proxy.sessions.prompt(deniedReq)
     expect(denied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
     expect(denied.rpcId).toBe(deniedReq.rpcId) // rpcId echoed
+  })
+
+  it('goal methods guard the payload sessionId for ordinary users', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    idx.record('alien', 'bob')
+    const proxy = createUserProxy(fakeApi(), alice, idx)
+    const deniedCreate = await proxy.goals.create(req({ sessionId: 'alien' as never, objective: 'x' }))
+    expect(deniedCreate.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const deniedComplete = await proxy.goals.complete(req({ sessionId: 'alien' as never, ref: { id: 'g' as never, revision: 1 } }))
+    expect(deniedComplete.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const okCreate = await proxy.goals.create(req({ sessionId: 'own1' as never, objective: 'x' }))
+    expect(okCreate.result).toMatchObject({ ok: true })
+    const okComplete = await proxy.goals.complete(req({ sessionId: 'own1' as never, ref: { id: 'g' as never, revision: 1 } }))
+    expect(okComplete.result).toMatchObject({ ok: true })
+    // Admin is exempt from the goal session guard.
+    const adminProxy = createUserProxy(fakeApi(), root, idx)
+    const admin = await adminProxy.goals.create(req({ sessionId: 'alien' as never, objective: 'x' }))
+    expect(admin.result).toMatchObject({ ok: true })
+  })
+
+  it('session.create forbids adopting another user\'s session and only records unowned results', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('alien', 'bob')
+    const proxy = createUserProxy(fakeApi(), alice, idx)
+    // Alien sessionId in the payload: forbidden, ownership untouched.
+    const denied = await proxy.sessions.create(req({ sessionId: 'alien' as never }))
+    expect(denied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    expect(idx.lookup('alien')).toBe('bob')
+    // Unowned sessionId: allowed through and recorded for the caller.
+    const adopt = await proxy.sessions.create(req({ sessionId: 'free-1' as never }))
+    expect(adopt.result).toMatchObject({ ok: true })
+    expect(idx.lookup('free-1')).toBe('alice')
+    // Fresh create (no payload sessionId): current behavior, recorded.
+    await proxy.sessions.create(req({}))
+    expect(idx.lookup('new-1')).toBe('alice')
   })
 
   it('forbidden domains reject for ordinary users', async () => {
