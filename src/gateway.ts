@@ -37,7 +37,7 @@ export function createGatewayHandler(
       return
     }
     const token = extractSessionToken(req.headers.cookie)
-    if (token === undefined || !store.verify(token)) {
+    if (token === undefined || store.verify(token) === undefined) {
       res.writeHead(302, { Location: '/login' })
       res.end()
       return

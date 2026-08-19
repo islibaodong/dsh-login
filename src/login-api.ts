@@ -103,7 +103,7 @@ export function createLoginHandler(
       res.end(JSON.stringify({ error: 'invalid credentials' }))
       return
     }
-    const session = store.create()
+    const session = store.create('admin', true) // TODO(Task 6): rewire to real user login
     res.setHeader('Set-Cookie', buildCookieHeader(session.token, config.sessionTtl))
     res.writeHead(200)
     res.end(JSON.stringify({ ok: true }))

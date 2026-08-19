@@ -1,44 +1,42 @@
 import { randomBytes } from 'node:crypto'
 
-/** One created session with its token and expiry timestamps. */
+/** One created login session: token, owning user, and expiry timestamps. */
 export interface Session {
   token: string
+  user: string
+  isAdmin: boolean
   createdAt: number
   expiresAt: number
 }
 
 /**
  * In-memory session token store with automatic TTL expiry. Sessions are lost
- * on process restart - acceptable for single-password local/edge deployment.
+ * on process restart — users simply log in again.
  */
 export class SessionStore {
   private readonly store = new Map<string, Session>()
 
-  /**
-   * @param ttlSeconds - session lifetime in seconds.
-   */
   constructor(private readonly ttlSeconds: number) {}
 
-  /** Generate a 32-byte random token, store it with its expiry, and return it. */
-  create(): Session {
+  /** Generate a 32-byte random token for `user` with its admin flag. */
+  create(user: string, isAdmin: boolean): Session {
     const token = randomBytes(32).toString('hex')
     const createdAt = Date.now()
-    const expiresAt = createdAt + this.ttlSeconds * 1000
-    const session: Session = { token, createdAt, expiresAt }
+    const session: Session = { token, user, isAdmin, createdAt, expiresAt: createdAt + this.ttlSeconds * 1000 }
     this.store.set(token, session)
     return session
   }
 
-  /** Check whether a token exists and has not expired. */
-  verify(token: string): boolean {
-    if (token.length === 0) return false
+  /** Return the live session for a token, or undefined. */
+  verify(token: string): Session | undefined {
+    if (token.length === 0) return undefined
     const session = this.store.get(token)
-    if (session === undefined) return false
+    if (session === undefined) return undefined
     if (Date.now() > session.expiresAt) {
       this.store.delete(token)
-      return false
+      return undefined
     }
-    return true
+    return session
   }
 
   /** Remove a session. Revoking an unknown token is a no-op. */
@@ -46,7 +44,7 @@ export class SessionStore {
     this.store.delete(token)
   }
 
-  /** Remove all expired sessions. Called opportunistically inside verify. */
+  /** Remove all expired sessions. */
   cleanup(): void {
     const now = Date.now()
     for (const [token, session] of this.store) {

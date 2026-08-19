@@ -151,7 +151,7 @@ describe('POST /api/auth/logout', () => {
     const clearCookie = res.headers.get('set-cookie')
     expect(clearCookie).not.toBeNull()
     expect(clearCookie!).toContain('Max-Age=0')
-    expect(store.verify(token)).toBe(false)
+    expect(store.verify(token)).toBeUndefined()
   })
 
   it('returns 200 even without a session cookie', { timeout: 60_000 }, async () => {

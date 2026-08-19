@@ -4,7 +4,7 @@ import { SessionStore } from '../src/session.ts'
 describe('SessionStore', () => {
   it('creates a session with a 64-char hex token and correct expiry', () => {
     const store = new SessionStore(3600)
-    const session = store.create()
+    const session = store.create('alice', false)
     expect(session.token).toMatch(/^[0-9a-f]{64}$/)
     expect(session.createdAt).toBeGreaterThan(0)
     expect(session.expiresAt).toBe(session.createdAt + 3600 * 1000)
@@ -12,26 +12,26 @@ describe('SessionStore', () => {
 
   it('verifies a freshly created session', () => {
     const store = new SessionStore(3600)
-    const session = store.create()
-    expect(store.verify(session.token)).toBe(true)
+    const session = store.create('alice', false)
+    expect(store.verify(session.token)).toBeDefined()
   })
 
   it('rejects an unknown token', () => {
     const store = new SessionStore(3600)
-    expect(store.verify('deadbeef')).toBe(false)
+    expect(store.verify('deadbeef')).toBeUndefined()
   })
 
   it('rejects an empty token', () => {
     const store = new SessionStore(3600)
-    expect(store.verify('')).toBe(false)
+    expect(store.verify('')).toBeUndefined()
   })
 
-  it('revokes a session so verify returns false', () => {
+  it('revokes a session so verify returns undefined', () => {
     const store = new SessionStore(3600)
-    const session = store.create()
-    expect(store.verify(session.token)).toBe(true)
+    const session = store.create('alice', false)
+    expect(store.verify(session.token)).toBeDefined()
     store.revoke(session.token)
-    expect(store.verify(session.token)).toBe(false)
+    expect(store.verify(session.token)).toBeUndefined()
   })
 
   it('revoking an unknown token is a no-op', () => {
@@ -42,17 +42,17 @@ describe('SessionStore', () => {
   it('rejects an expired session after TTL', async () => {
     // Use a TTL of 0 seconds so the session is immediately expired.
     const store = new SessionStore(0)
-    const session = store.create()
+    const session = store.create('alice', false)
     // createdAt and expiresAt are the same epoch ms; verify checks
     // Date.now() > expiresAt, and even a synchronous verify is after.
     // Use a small delay to guarantee Date.now has advanced.
     await new Promise<void>(r => setTimeout(r, 10))
-    expect(store.verify(session.token)).toBe(false)
+    expect(store.verify(session.token)).toBeUndefined()
   })
 
   it('cleanup removes expired sessions', async () => {
     const store = new SessionStore(0)
-    store.create()
+    store.create('alice', false)
     await new Promise<void>(r => setTimeout(r, 10))
     store.cleanup()
     // After cleanup, the store should be empty. We can't inspect internals
@@ -63,7 +63,20 @@ describe('SessionStore', () => {
   it('each create returns a unique token', () => {
     const store = new SessionStore(3600)
     const tokens = new Set<string>()
-    for (let i = 0; i < 100; i++) tokens.add(store.create().token)
+    for (let i = 0; i < 100; i++) tokens.add(store.create('alice', false).token)
     expect(tokens.size).toBe(100)
+  })
+
+  it('creates sessions bound to a user', () => {
+    const store = new SessionStore(60)
+    const s = store.create('alice', true)
+    expect(s.user).toBe('alice')
+    expect(s.isAdmin).toBe(true)
+    expect(store.verify(s.token)?.user).toBe('alice')
+  })
+
+  it('verify returns undefined for unknown tokens', () => {
+    const store = new SessionStore(60)
+    expect(store.verify('nope')).toBeUndefined()
   })
 })

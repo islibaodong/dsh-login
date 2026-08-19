@@ -84,30 +84,30 @@ const { SessionStore } = await import('./../src/session.ts')
 
 {
   const store = new SessionStore(3600)
-  const session = store.create()
+  const session = store.create('alice', false)
   assert(/^[0-9a-f]{64}$/.test(session.token), 'token is 64-char hex')
   assert(session.createdAt > 0, 'createdAt > 0')
   assertEqual(session.expiresAt, session.createdAt + 3600 * 1000, 'expiresAt = createdAt + ttl')
 }
 {
   const store = new SessionStore(3600)
-  const session = store.create()
-  assertEqual(store.verify(session.token), true, 'verify fresh session')
+  const session = store.create('alice', false)
+  assertEqual(store.verify(session.token) !== undefined, 'verify fresh session')
 }
 {
   const store = new SessionStore(3600)
-  assertEqual(store.verify('deadbeef'), false, 'reject unknown token')
+  assertEqual(store.verify('deadbeef') === undefined, 'reject unknown token')
 }
 {
   const store = new SessionStore(3600)
-  assertEqual(store.verify(''), false, 'reject empty token')
+  assertEqual(store.verify('') === undefined, 'reject empty token')
 }
 {
   const store = new SessionStore(3600)
-  const session = store.create()
-  assertEqual(store.verify(session.token), true, 'verify before revoke')
+  const session = store.create('alice', false)
+  assertEqual(store.verify(session.token) !== undefined, 'verify before revoke')
   store.revoke(session.token)
-  assertEqual(store.verify(session.token), false, 'verify after revoke')
+  assertEqual(store.verify(session.token) === undefined, 'verify after revoke')
 }
 {
   const store = new SessionStore(3600)
@@ -115,13 +115,13 @@ const { SessionStore } = await import('./../src/session.ts')
 }
 {
   const store = new SessionStore(0)
-  const session = store.create()
+  const session = store.create('alice', false)
   await new Promise(r => setTimeout(r, 10))
-  assertEqual(store.verify(session.token), false, 'reject expired session')
+  assertEqual(store.verify(session.token) === undefined, 'reject expired session')
 }
 {
   const store = new SessionStore(0)
-  store.create()
+  store.create('alice', false)
   await new Promise(r => setTimeout(r, 10))
   store.cleanup()
   try { store.cleanup(); passed++ } catch { failed++; failures.push('second cleanup should not throw') }
@@ -129,7 +129,7 @@ const { SessionStore } = await import('./../src/session.ts')
 {
   const store = new SessionStore(3600)
   const tokens = new Set()
-  for (let i = 0; i < 100; i++) tokens.add(store.create().token)
+  for (let i = 0; i < 100; i++) tokens.add(store.create('alice', false).token)
   assertEqual(tokens.size, 100, '100 unique tokens')
 }
 
