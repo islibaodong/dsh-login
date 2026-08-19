@@ -80,7 +80,7 @@ describe('gateway handler', () => {
     const distIndex = join(dist, 'index.html')
     await writeFile(distIndex, '<html><body>shell</body></html>')
     const store = new SessionStore(3600)
-    const session = store.create()
+    const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
     ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
@@ -110,7 +110,7 @@ describe('gateway handler', () => {
     const distIndex = join(dist, 'index.html')
     await writeFile(distIndex, '<html><body>spa-fallback</body></html>')
     const store = new SessionStore(3600)
-    const session = store.create()
+    const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
     ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
