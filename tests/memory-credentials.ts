@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
 
@@ -6,7 +6,7 @@ import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepsee
 export class MemoryCredentials extends CredentialProvider {
   private readonly store = new Map<string, string>()
 
-  constructor(ctx: Context, seed: Record<string, string> = {}) {
+  constructor(ctx: Context = new Context(), seed: Record<string, string> = {}) {
     super(ctx)
     for (const [key, value] of Object.entries(seed)) this.store.set(key, value)
   }
