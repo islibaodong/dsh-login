@@ -4,9 +4,10 @@
 #   dsh plugin --profile web add github:islibaodong/dsh-login
 # (this file is declared in package.json's dsh.bundle.patch).
 #
-# Password: no pre-configuration needed. On first visit the /login page
-# shows a "Set Password" form; the password is stored automatically in
-# the DSH credentials system (credential ref DSH_LOGIN_PASSWORD).
+# Accounts: no pre-configuration needed. On first visit the /login page shows
+# a setup form that creates the administrator account (username + password,
+# scrypt-hashed in the DSH credentials system under ref
+# DSH_LOGIN_PASSWORD_USERS); admins then manage users at /admin.
 #
 # IMPORTANT: dsh-login claims the webserver fallback seat (the single
 # seat for everything no named route claims). The dsh-web-app bundle's
@@ -36,13 +37,17 @@
 # The shipped /api carrier is replaced by dsh-login's identity-aware takeover
 # (`src/connection.ts`, mounted by dsh-login itself through the
 # createConnectionPlugin factory — its SessionStore/OwnershipIndex instances
-# live inside the dsh-login fiber, so it cannot ride a standalone row).
-# Browser half: `src/connection.client.ts` re-exports the shipped connection
-# client verbatim (export `./connection-client`); note the client-modules
-# scanner discovers browser halves from a package's own `dsh.client`
-# declaration + built `exports["./client"]` bundle, never a patch-row key —
-# disabling this row removes the shipped client bundle from the boot graph,
-# and restoring it requires dsh-login to ship a built browser bundle (follow-up
-# tracked with the Task 6 wiring).
+# live inside the dsh-login fiber, so it cannot ride a standalone row). The
+# webserver rejects duplicate /api prefix registrations, so the shipped row
+# must stay disabled.
+#
+# Browser half (merge-gate Option A): dsh-login ships its own client bundle.
+# The package declares `dsh.client` (platform web, immediately) and exports
+# the built artifact `dist/client.js` — a re-stamped copy of the shipped
+# connection client bundle (src/connection.client.ts re-exports it verbatim;
+# regenerate with `npm run build:client` after upgrading the carrier). The
+# client-modules scanner picks browser halves from exactly this pair, so the
+# disabled shipped row no longer removes the GUI's wire client from the boot
+# graph.
 - id: connection
   disabled: true

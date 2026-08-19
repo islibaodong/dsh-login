@@ -10,17 +10,24 @@
     },
     "./connection": "./src/connection.ts",
     "./connection-client": "./src/connection.client.ts",
+    "./client": "./dist/client.js",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:client": "node scripts/build-client.mjs"
   },
   "license": "MIT",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web",
+      "immediately": true
     }
   },
   "peerDependencies": {

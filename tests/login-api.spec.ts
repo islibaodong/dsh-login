@@ -7,10 +7,11 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { MemoryCredentials } from './memory-credentials.ts'
 import { SessionStore } from '../src/session.ts'
-import { createLoginHandler, createLogoutHandler } from '../src/login-api.ts'
-import type { Config } from '../src/config.ts'
+import { UserStore } from '../src/users.ts'
+import { createLoginHandler, createLogoutHandler, createSetupHandler } from '../src/login-api.ts'
 import { COOKIE_NAME, extractSessionToken } from '../src/auth.ts'
 
 let root: string | undefined
@@ -23,14 +24,7 @@ afterEach(async () => {
   root = undefined
 })
 
-const config: Config = {
-  password: 'DSH_LOGIN_PASSWORD',
-  distIndex: '/nonexistent/index.html',
-  sessionTtl: 3600,
-  enabled: true,
-}
-
-async function bootWithCreds(seed: Record<string, string> = {}): Promise<{ ctx: Context; port: number }> {
+async function bootWithCreds(): Promise<{ ctx: Context; port: number; users: UserStore }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-login-api-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -54,8 +48,9 @@ async function bootWithCreds(seed: Record<string, string> = {}): Promise<{ ctx: 
   } as unknown as NonNullable<typeof context.loader.internal>
   await context.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
   await context.loader.await()
-  await context.plugin(MemoryCredentials, seed)
-  return { ctx: context, port: context.webServer.port }
+  await context.plugin(MemoryCredentials)
+  const users = new UserStore(context.credentials, credentialRef('DSH_LOGIN_PASSWORD_USERS'))
+  return { ctx: context, port: context.webServer.port, users }
 }
 
 async function postJson(port: number, path: string, body: unknown, cookie?: string): Promise<{ status: number; json: unknown; headers: Headers }> {
@@ -74,13 +69,29 @@ async function postJson(port: number, path: string, body: unknown, cookie?: stri
   return { status: res.status, json, headers: res.headers }
 }
 
+/** Register login/logout/setup/admin-free routes exactly like src/index.ts does. */
+async function registerAuthRoutes(ctx: Context, users: UserStore, store: SessionStore): Promise<void> {
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: '/api/auth/login',
+    handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
+  }), 'login')
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: '/api/auth/logout',
+    handler: createLogoutHandler(store),
+  }), 'logout')
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: '/api/auth/setup',
+    handler: createSetupHandler({ users, store, sessionTtl: 3600 }),
+  }), 'setup')
+}
+
 describe('POST /api/auth/login', () => {
-  it('returns 200 with Set-Cookie on correct password', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
+  it('returns 200 with Set-Cookie on correct username/password', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
     const store = new SessionStore(3600)
-    const handler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler }), 'login')
-    const res = await postJson(port, '/api/auth/login', { password: 's3cret' })
+    await registerAuthRoutes(ctx, users, store)
+    const res = await postJson(port, '/api/auth/login', { username: 'alice', password: 's3cret' })
     expect(res.status).toBe(200)
     expect(res.json).toEqual({ ok: true })
     const setCookie = res.headers.get('set-cookie')
@@ -88,34 +99,48 @@ describe('POST /api/auth/login', () => {
     expect(setCookie!).toContain('dsh_session=')
     expect(setCookie!).toContain('HttpOnly')
     expect(setCookie!).toContain('Max-Age=3600')
+    const token = extractSessionToken(setCookie!.split(';')[0])
+    expect(token).toBeDefined()
+    expect(store.verify(token!)).toMatchObject({ user: 'alice', isAdmin: true })
   })
 
   it('returns 401 on wrong password', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
-    const store = new SessionStore(3600)
-    const handler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler }), 'login')
-    const res = await postJson(port, '/api/auth/login', { password: 'wrong' })
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await postJson(port, '/api/auth/login', { username: 'alice', password: 'wrong' })
     expect(res.status).toBe(401)
     expect(res.json).toEqual({ error: 'invalid credentials' })
     expect(res.headers.get('set-cookie')).toBeNull()
   })
 
-  it('returns 500 when password is not configured', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({})
-    const store = new SessionStore(3600)
-    const handler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler }), 'login')
-    const res = await postJson(port, '/api/auth/login', { password: 'anything' })
+  it('returns 401 on unknown username', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await postJson(port, '/api/auth/login', { username: 'mallory', password: 's3cret' })
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 400 when the username field is missing', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await postJson(port, '/api/auth/login', { password: 's3cret' })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 500 when no user exists yet (setup mode)', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await postJson(port, '/api/auth/login', { username: 'alice', password: 's3cret' })
     expect(res.status).toBe(500)
-    expect(res.json).toEqual({ error: 'password not configured' })
   })
 
   it('returns 400 on malformed JSON body', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
-    const store = new SessionStore(3600)
-    const handler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler }), 'login')
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
     const res = await fetch(`http://127.0.0.1:${String(port)}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,29 +148,54 @@ describe('POST /api/auth/login', () => {
     })
     expect(res.status).toBe(400)
   })
+})
 
-  it('returns 400 when password field is missing', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
+describe('POST /api/auth/setup', () => {
+  it('creates the forced-admin account when the store is empty and logs it in', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
     const store = new SessionStore(3600)
-    const handler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler }), 'login')
-    const res = await postJson(port, '/api/auth/login', { notpassword: 'x' })
-    expect(res.status).toBe(400)
+    await registerAuthRoutes(ctx, users, store)
+    const res = await postJson(port, '/api/auth/setup', { username: 'root', password: 'pw123' })
+    expect(res.status).toBe(200)
+    expect(res.json).toEqual({ ok: true })
+    const records = await users.list()
+    expect(records).toHaveLength(1)
+    expect(records[0]!).toMatchObject({ username: 'root', isAdmin: true })
+    const setCookie = res.headers.get('set-cookie')
+    expect(setCookie).toContain('dsh_session=')
+    const token = extractSessionToken(setCookie!.split(';')[0])
+    expect(store.verify(token!)).toMatchObject({ user: 'root', isAdmin: true })
+  })
+
+  it('returns 403 when users already exist', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('root', 'pw', true)
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await postJson(port, '/api/auth/setup', { username: 'eve', password: 'pw' })
+    expect(res.status).toBe(403)
+    expect(await users.list()).toHaveLength(1)
+  })
+
+  it('returns 400 on missing username or empty password', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    expect((await postJson(port, '/api/auth/setup', { password: 'pw' })).status).toBe(400)
+    expect((await postJson(port, '/api/auth/setup', { username: 'root' })).status).toBe(400)
+    expect((await postJson(port, '/api/auth/setup', { username: 'bad name!', password: 'pw' })).status).toBe(400)
+    expect(await users.isEmpty()).toBe(true)
   })
 })
 
 describe('POST /api/auth/logout', () => {
   it('returns 200 and clears the session cookie', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
     const store = new SessionStore(3600)
-    const loginHandler = createLoginHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/login', handler: loginHandler }), 'login')
-    const loginRes = await postJson(port, '/api/auth/login', { password: 's3cret' })
+    await registerAuthRoutes(ctx, users, store)
+    const loginRes = await postJson(port, '/api/auth/login', { username: 'alice', password: 's3cret' })
     const setCookie = loginRes.headers.get('set-cookie')!
     const token = extractSessionToken(setCookie.split(';')[0])!
 
-    const logoutHandler = createLogoutHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/logout', handler: logoutHandler }), 'logout')
     const res = await postJson(port, '/api/auth/logout', {}, `${COOKIE_NAME}=${token}`)
     expect(res.status).toBe(200)
     const clearCookie = res.headers.get('set-cookie')
@@ -155,10 +205,8 @@ describe('POST /api/auth/logout', () => {
   })
 
   it('returns 200 even without a session cookie', { timeout: 60_000 }, async () => {
-    const { ctx, port } = await bootWithCreds({ DSH_LOGIN_PASSWORD: 's3cret' })
-    const store = new SessionStore(3600)
-    const handler = createLogoutHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/api/auth/logout', handler }), 'logout')
+    const { ctx, port, users } = await bootWithCreds()
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
     const res = await postJson(port, '/api/auth/logout', {})
     expect(res.status).toBe(200)
   })

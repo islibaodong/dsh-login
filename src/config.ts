@@ -7,6 +7,9 @@ export interface Config {
   /** Absolute path to index.html in the frontend dist directory. When empty,
    * resolved automatically from @deepseek-ai/dsh-web-frontend's exports. */
   distIndex: string
+  /** Directory for dsh-login-owned data files (ownership index). When empty,
+   * resolved to `<dshHome>/.dsh-login` at apply time. */
+  dataDir: string
   /** Session lifetime in seconds (default: 604800 = 7 days). */
   sessionTtl: number
   /** Whether the gateway is active (default: true). When false, the plugin
@@ -25,6 +28,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   password: z.string().required(),
   distIndex: z.string().default(''),
+  dataDir: z.string().default(''),
   sessionTtl: z.natural().default(604800),
   enabled: z.boolean().default(true),
   takeOverWebRuntime: z.boolean().default(true),

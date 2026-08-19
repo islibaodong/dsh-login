@@ -53,20 +53,26 @@ If you prefer managing `cordis.patch.yml` yourself, add these rows to your profi
 
 ## First-time setup flow
 
-1. **First visit** (no password configured) -> `/login` shows a "Set Password" page
-2. User enters a password twice (confirmation) -> `POST /api/auth/setup` stores it via `ctx.credentials.set()`
-3. **Subsequent visits** -> `/login` shows the normal login form (password already stored)
-4. **Security** -> `/api/auth/setup` returns 403 once a password is set, preventing hijacking
+1. **First visit** (no users yet) -> `/login` shows a "Create administrator account" page (username + password)
+2. User picks credentials -> `POST /api/auth/setup` creates the forced-admin account (scrypt-hashed, stored under the `DSH_LOGIN_PASSWORD_USERS` credential ref) and logs it in
+3. **Subsequent visits** -> `/login` shows the normal username/password login form
+4. **User management** -> admins open `/admin` to list, create, remove users and change passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused)
+5. **Security** -> `/api/auth/setup` returns 403 once any user exists, preventing hijacking
+
+> The `password` config key (default `DSH_LOGIN_PASSWORD`) is no longer used for authentication itself — it namespaces the user store credential ref (`${password}_USERS`).
 
 ## How it works
 
 ```
 Request -> WebServer
-  ├─ /login (exact)            -> setup page (if no password) OR login page
-  ├─ /api/auth/setup (exact)  -> POST: set password on first use (403 if already set)
-  ├─ /api/auth/login (exact)  -> POST: verify password, set cookie
+  ├─ /login (exact)            -> setup page (if no users) OR login page
+  ├─ /api/auth/setup (exact)  -> POST: create admin on first use (403 if users exist)
+  ├─ /api/auth/login (exact)  -> POST: verify {username,password}, set cookie
   ├─ /api/auth/logout (exact) -> POST: revoke session, clear cookie
-  ├─ /api/* (prefix)           -> client-connection (host trust check)
+  ├─ /api/auth/me (exact)     -> GET: current session identity
+  ├─ /api/auth/admin/* (exact) -> admin JSON API (users, password, remove)
+  ├─ /admin (exact)           -> admin management page (302 /login otherwise)
+  ├─ /api/* (prefix)           -> dsh-login connection takeover (per-user dispatch)
   └─ fallback                  -> dsh-login: auth gateway + static files
                                   ├─ no valid cookie -> 302 /login
                                   └─ valid cookie   -> serveStatic()
@@ -74,8 +80,7 @@ Request -> WebServer
 
 - **Cookie:** `dsh_session`, HttpOnly, SameSite=Strict, Path=/
 - **Session:** 32-byte random token (256-bit), in-memory with TTL expiry
-- **Password comparison:** constant-time via `crypto.timingSafeEqual`
-- **Password storage:** resolved through the DSH credentials system (`credentialRef`), written to local credential file on first use, never in config files
+- **Password storage:** scrypt hashes (per-user salt) in the DSH credentials system under `${password}_USERS`
 
 ## Security notes
 
