@@ -100,6 +100,7 @@ dsh plugin --profile web add github:islibaodong/dsh-login
   - 物理层允许清单：固定的一组 `session.*`、`subagent.*`、`workspace.*`、`goal.*` 方法，加上 `skill.list`、`host.describe`、`llm.providers`/`llm.models` 和 `respond`；其他任何线上方法在到达 harness 之前就是 403
   - 管理员专属域：`credentials.*`、`settings.*`、`agentPresets.*` 整体禁用
   - 同样禁止：`llm.discoverModels` 以及特权 `host.*` 目录对话框（`pickDirectory`、`listDirectory`、`createDirectory`、`openPath`）
+  - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及 `/admin` 管理页面。
 
