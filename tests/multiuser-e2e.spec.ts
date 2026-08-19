@@ -160,7 +160,7 @@ async function loadComposition(): Promise<{ port: number; host: FakeHost }> {
     "    host: '127.0.0.1'",
     '    port: 0',
     "- id: login",
-    "  name: '@deepseek-ai/dsh-login'",
+    "  name: '@islibaodong/dsh-login'",
     '  config:',
     '    password: DSH_LOGIN_PASSWORD',
     `    distIndex: '${distIndex}'`,
@@ -177,7 +177,7 @@ async function loadComposition(): Promise<{ port: number; host: FakeHost }> {
   context.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
-    ['@deepseek-ai/dsh-login', DshLogin],
+    ['@islibaodong/dsh-login', DshLogin],
   ])
   context.loader.internal = {
     version: 'v2',

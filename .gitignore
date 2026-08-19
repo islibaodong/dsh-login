@@ -9,3 +9,4 @@ esbuild-*
 test-esbuild*
 test-execfile*
 test-ts.ts
+/.idea/

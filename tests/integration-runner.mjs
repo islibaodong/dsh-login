@@ -391,7 +391,7 @@ async function loadComposition(seed = {}) {
     // Including both would cause "fallback already registered" since
     // frontend-static claims it first.
     "- id: login",
-    "  name: '@deepseek-ai/dsh-login'",
+    "  name: '@islibaodong/dsh-login'",
     '  config:',
     '    password: DSH_LOGIN_PASSWORD',
     `    distIndex: '${distIndex}'`,
@@ -412,7 +412,7 @@ async function loadComposition(seed = {}) {
   const modules = new Map([
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
     ['@deepseek-ai/dsh-host-frontend-static', FrontendStatic],
-    ['@deepseek-ai/dsh-login', DshLogin],
+    ['@islibaodong/dsh-login', DshLogin],
   ])
   ctx.loader.internal = {
     version: 'v2',
@@ -550,7 +550,7 @@ async function doLogin(port, password) {
 
   const loginRow = result.find((e) => e.id === 'dsh-login')
   assert(loginRow !== undefined, 'patch: dsh-login row inserted')
-  assert(loginRow.name === '@deepseek-ai/dsh-login', 'patch: inserted row name')
+  assert(loginRow.name === '@islibaodong/dsh-login', 'patch: inserted row name')
   assert(loginRow.config.password === 'DSH_LOGIN_PASSWORD', 'patch: credential ref config')
   assert(loginRow.config.takeOverWebRuntime === true, 'patch: takeOverWebRuntime config')
   const runtimeRow = result.find((e) => e.id === 'web-runtime')

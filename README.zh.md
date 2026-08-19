@@ -17,6 +17,12 @@
 dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
+卸载（按安装后的包名）：
+
+```bash
+dsh plugin --profile web remove @islibaodong/dsh-login
+```
+
 就这一步。该包的 `cordis.patch.yml` 声明为 bundle patch，`add` 之后会自动：
 
 - 挂载 `dsh-login` 插件行（配置默认值即可用；`distIndex` 自动解析前端 dist 目录），
@@ -36,7 +42,7 @@ dsh plugin --profile web add github:islibaodong/dsh-login
 ```yaml
 - insert:
     - id: dsh-login
-      name: '@deepseek-ai/dsh-login'
+      name: '@islibaodong/dsh-login'
       config:
         password: DSH_LOGIN_PASSWORD   # 凭据引用名；派生用户存储引用（<名称>_USERS）
         distIndex: ''                  # 留空则自动解析前端 dist

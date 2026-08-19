@@ -36,7 +36,7 @@ async function loadComposition(): Promise<{ ctx: Context; port: number; distInde
     // dsh-login takes over the fallback seat; frontend-static is not
     // included because both would try to claim the fallback handler.
     "- id: login",
-    "  name: '@deepseek-ai/dsh-login'",
+    "  name: '@islibaodong/dsh-login'",
     '  config:',
     '    password: DSH_LOGIN_PASSWORD',
     `    distIndex: '${distIndex}'`,
@@ -51,7 +51,7 @@ async function loadComposition(): Promise<{ ctx: Context; port: number; distInde
   context.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-host-webserver', HttpServer],
-    ['@deepseek-ai/dsh-login', DshLogin],
+    ['@islibaodong/dsh-login', DshLogin],
   ])
   context.loader.internal = {
     version: 'v2',

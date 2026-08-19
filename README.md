@@ -17,6 +17,12 @@ When the DSH web server is exposed on `0.0.0.0` or a public network, `dsh-login`
 dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
+Uninstall (by installed package name):
+
+```bash
+dsh plugin --profile web remove @islibaodong/dsh-login
+```
+
 That's it. The package declares its `cordis.patch.yml` as a bundle patch, so `add` automatically:
 
 - mounts the `dsh-login` plugin row (config defaults are sensible; `distIndex` resolves the frontend dist automatically),
@@ -36,7 +42,7 @@ If you prefer managing `cordis.patch.yml` yourself, add these rows to your profi
 ```yaml
 - insert:
     - id: dsh-login
-      name: '@deepseek-ai/dsh-login'
+      name: '@islibaodong/dsh-login'
       config:
         password: DSH_LOGIN_PASSWORD   # credential ref name; namespaces the user store (<name>_USERS)
         distIndex: ''                  # empty resolves the frontend dist automatically

@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-login",
+  "name": "@islibaodong/dsh-login",
   "description": "Single-password authentication gateway plugin for the DSH Web GUI",
   "version": "0.1.0",
   "type": "module",

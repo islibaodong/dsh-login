@@ -31,7 +31,7 @@ describe('dsh-login browser client bundle (merge gate, Option A)', () => {
     // Module-loader handoff stamped with dsh-login's package id (the scanner
     // keys boot-graph rows by the entry/package name).
     expect(bundle).toContain('window.__ModuleLoader__.load')
-    expect(bundle).toContain('"@deepseek-ai/dsh-login"')
+    expect(bundle).toContain('"@islibaodong/dsh-login"')
   })
 
   it('is self-contained: no cross-plugin require of the shipped connection bundle', () => {

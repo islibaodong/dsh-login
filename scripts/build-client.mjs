@@ -24,7 +24,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const PACKAGE_ID = '@deepseek-ai/dsh-login'
+const PACKAGE_ID = '@islibaodong/dsh-login'
 const SHIPPED_ID = '@deepseek-ai/dsh-client-connection'
 
 function shippedBundlePath() {

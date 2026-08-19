@@ -18,7 +18,7 @@
 
 - insert:
     - id: dsh-login
-      name: '@deepseek-ai/dsh-login'
+      name: '@islibaodong/dsh-login'
       config:
         password: DSH_LOGIN_PASSWORD
         # distIndex: '' resolves @deepseek-ai/dsh-web-frontend/dist automatically.
