@@ -7,6 +7,17 @@
 - Disabled rows drop their browser halves from the boot graph: with the
   shipped `connection` row disabled, the GUI's wire client must come from this
   package's own `dsh.client` declaration + built `dist/client.js`.
+- The disabled shipped `connection` row also stops providing the `connection`
+  service — without it the Typert Remote gateway never registers its shared
+  `/api` interceptor and every installed UI plugin's host RPC
+  (`POST /api/<namespace>/<method>`) dies after login. The takeover
+  re-provides it via `HostConnectionService`; two-segment endpoints dispatch
+  through `createSharedFetchHandler` (native, no per-user wrap — cookie auth
+  still applies; unclaimed `a/b` shapes 404).
+- `frameVisible` forwards global `host/remote-event` pushes
+  (commands/change, llm/adapters-updated, …) to ordinary users — UI-plugin
+  client caches freeze without them — but keeps `cordis/*` lifecycle frames
+  admin-only.
 - WebServer rejects duplicate `/api` prefix registrations (throws at boot):
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.

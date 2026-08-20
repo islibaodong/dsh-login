@@ -99,7 +99,16 @@ export function frameVisible(
   void ownership // reserved for future per-owner frame rules; the owned set decides today
   const f = frame as { type: string; sessionId?: string; workspace?: { sessionIds?: string[] }; workspaceIds?: string[]; archivedSessionIds?: string[] }
   if (f.type === 'stream/error') return true
-  if (f.type === 'host/remote-event') return false
+  if (f.type === 'host/remote-event') {
+    // Global deployment signals (commands/change, llm/adapters-updated,
+    // credentials/updated, settings/document-updated, agent-preset/selected)
+    // are cache-invalidation pushes every browser client — including UI
+    // plugins — needs after login; withholding them freezes their UIs. The
+    // cordis/* family carries session-scoped dynamic-plugin lifecycle and
+    // stays admin-only: its payloads are not ownership-filterable.
+    const event = (f as { event?: string }).event ?? ''
+    return !event.startsWith('cordis/')
+  }
   if (f.sessionId !== undefined) return owned.has(f.sessionId)
   if (f.type === 'host/workspace-changed') {
     const ids = f.workspace?.sessionIds ?? []

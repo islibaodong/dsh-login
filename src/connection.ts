@@ -17,6 +17,7 @@ import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from '@deepseek-ai/dsh-cl
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from '@deepseek-ai/dsh-client-connection/src/http-bridge.ts'
 import { isTrustedApiRequest, assertTrustedAuthority } from '@deepseek-ai/dsh-client-connection/src/api-request-trust.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from '@deepseek-ai/dsh-client-connection/src/websocket-downlink.ts'
+import { HostConnectionService } from '@deepseek-ai/dsh-client-connection/src/rpc-host.ts'
 import { extractSessionToken } from './auth.ts'
 import { createUserProxy, isUserAllowed, ownedSessionIds } from './api-filter.ts'
 import type { AuthUser } from './api-filter.ts'
@@ -45,13 +46,32 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
       for (const entry of deps.trustedHosts) assertTrustedAuthority(entry)
       const maxBytes = deps.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
       const proxyCache = new Map<string, { fetch: typeof fetch; downlinks: ApiProxy }>()
+      // The shipped connection row is disabled while this takeover is active,
+      // which also removes the `connection` service its host half provided —
+      // and with it the Typert Remote gateway (`dsh-api-gateway`), which only
+      // registers its shared `/api` interceptor once `ctx.inject(['connection'])`
+      // resolves. Every browser-side UI plugin (SSH host management, task
+      // board, command palette, plugin inventory, …) calls its host methods
+      // through that interceptor as `POST /api/<namespace>/<method>`, so the
+      // service must be re-provided here or those plugins die after login.
+      const connection = new HostConnectionService(ctx, deps.trustedHosts)
+      // Interceptor-aware dispatch for two-segment Typert endpoints. The
+      // 404 fallback keeps unclaimed `a/b` shapes from leaking into the
+      // RpcMethodMap handler below; interceptor-claimed endpoints dispatch
+      // natively (per-user ownership filtering cannot apply to them — the
+      // harness itself fences privileged Typert domains at the host side).
+      const typertDispatch = connection.createSharedFetchHandler(API_PATH, {
+        fetch: () => Promise.resolve(new Response('not found', { status: 404 })),
+      })
 
       const userProxy = (api: ApiProxy, user: AuthUser): ApiProxy => {
         const key = user.isAdmin ? `admin:${user.username}` : user.username
         let entry = proxyCache.get(key)
         if (entry === undefined) {
           entry = { fetch: undefined as never, downlinks: createUserProxy(api, user, deps.ownership) }
-          entry.fetch = (deps.fetchForTest ?? toFetchHandler)(entry.downlinks, user).fetch
+          entry.fetch = deps.fetchForTest !== undefined
+            ? deps.fetchForTest(entry.downlinks, user).fetch
+            : toFetchHandler(entry.downlinks).fetch
           proxyCache.set(key, entry)
         }
         return entry.downlinks
@@ -90,6 +110,15 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
             return userFetch(api, user)(request)
           }
           const method = url.pathname.startsWith(`${API_PATH}/`) ? url.pathname.slice(API_PATH.length + 1) : undefined
+          // RpcMethodMap names are single-segment (`session.list`, dots only);
+          // Typert Remote endpoints carry exactly one slash (`namespace/method`).
+          // Two-segment endpoints are UI-plugin territory: dispatch them
+          // through the Typert interceptor (authentication above already
+          // applies; admin-only legacy domains stay fenced by the single-
+          // segment allow-list below).
+          if (method !== undefined && method.includes('/')) {
+            return typertDispatch.fetch(request)
+          }
           // Non-admin methods the decorator rejects are rejected at the
           // physical layer too (cheaper than round-tripping an envelope) —
           // the wrapped proxy remains the authority; both stay in sync via

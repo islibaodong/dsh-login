@@ -39,7 +39,10 @@
 # createConnectionPlugin factory — its SessionStore/OwnershipIndex instances
 # live inside the dsh-login fiber, so it cannot ride a standalone row). The
 # webserver rejects duplicate /api prefix registrations, so the shipped row
-# must stay disabled.
+# must stay disabled. The takeover re-provides the `connection` service the
+# disabled row used to provide, so the Typert Remote gateway keeps serving
+# `POST /api/<namespace>/<method>` — the wire every installed UI plugin's
+# browser half calls — after login.
 #
 # Browser half (merge-gate Option A): dsh-login ships its own client bundle.
 # The package declares `dsh.client` (platform web, immediately) and exports

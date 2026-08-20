@@ -59,6 +59,7 @@ interface Setup {
   ownership: OwnershipIndex
   calls: string[]
   seen: string[]
+  ctx: Context
   dispose: () => Promise<void>
 }
 
@@ -135,7 +136,7 @@ async function setup(): Promise<Setup> {
   const fiber = ctx.plugin(createConnectionPlugin({ store, ownership, trustedHosts: [], fetchForTest }))
   await fiber.await()
   return {
-    routes, upgrades, store, alice, admin, ownership, calls, seen,
+    routes, upgrades, store, alice, admin, ownership, calls, seen, ctx,
     dispose: () => fiber.dispose(),
   }
 }
@@ -283,6 +284,66 @@ describe('dsh-login-connection', () => {
     )
     await ended
     expect(Buffer.concat(chunks).toString()).toContain('HTTP/1.1 403 Forbidden')
+    await dispose()
+  })
+
+  // Typert Remote endpoints (`POST /api/<namespace>/<method>`) are how
+  // browser UI plugins reach their host halves: the dsh-api-gateway
+  // registers a shared `/api` interceptor on the `connection` service the
+  // takeover must provide. Without it every installed UI plugin (SSH, task
+  // board, …) fails after login even for admins.
+  it('provides the connection service so the Typert gateway can register its interceptor', async () => {
+    const { ctx, dispose } = await setup()
+    expect(ctx.get('connection')).toBeDefined()
+    await dispose()
+  })
+
+  it('dispatches a Typert endpoint claimed by an interceptor for an ordinary user', async () => {
+    const { routes, alice, ctx, seen, dispose } = await setup()
+    ctx.connection.rpc.intercept(
+      '/api',
+      endpoint => endpoint === 'ssh/listHosts',
+      async () => ({ ok: true, value: { hosts: 1 } }),
+      { authority: 'trusted-host' },
+    )
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/ssh/listHosts', envelope('ssh/listHosts', 'rpc-ssh')),
+      response,
+    )
+    expect(state.status).toBe(200)
+    expect(JSON.parse(String(state.body))).toMatchObject({
+      type: 'server-response', rpcId: 'rpc-ssh', result: { ok: true, value: { hosts: 1 } },
+    })
+    // Native interceptor dispatch: no per-user RpcMethodMap proxy involved.
+    expect(seen).toEqual([])
+    await dispose()
+  })
+
+  it('still requires a session cookie for Typert endpoints', async () => {
+    const { routes, ctx, seen, dispose } = await setup()
+    ctx.connection.rpc.intercept(
+      '/api',
+      endpoint => endpoint === 'ssh/listHosts',
+      async () => ({ ok: true, value: {} }),
+      { authority: 'trusted-host' },
+    )
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(fakePost(LOOPBACK, '/api/ssh/listHosts', envelope('ssh/listHosts')), response)
+    expect(state).toMatchObject({ status: 401, body: 'authentication required' })
+    expect(seen).toEqual([])
+    await dispose()
+  })
+
+  it('answers 404 for an unclaimed two-segment endpoint instead of leaking into the RpcMethodMap handler', async () => {
+    const { routes, alice, seen, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/nope/missing', envelope('nope/missing')),
+      response,
+    )
+    expect(state).toMatchObject({ status: 404, body: 'not found' })
+    expect(seen).toEqual([])
     await dispose()
   })
 })
