@@ -84,6 +84,21 @@ export function createLogoutHandler(store: SessionStore): WebRoute['handler'] {
 }
 
 /**
+ * Create the GET /logout handler: revoke the session (if present), clear
+ * the cookie, and redirect to /login. A convenience twin of the POST route
+ * so a plain link can log the user out.
+ */
+export function createLogoutRedirectHandler(store: SessionStore): WebRoute['handler'] {
+  return async (req: IncomingMessage, res: ServerResponse) => {
+    const token = extractSessionToken(req.headers.cookie)
+    if (token !== undefined) store.revoke(token)
+    res.setHeader('Set-Cookie', buildClearCookieHeader())
+    res.writeHead(302, { Location: '/login' })
+    res.end()
+  }
+}
+
+/**
  * Create the POST /api/auth/setup handler. Only callable while no user
  * exists (first-time setup): creates the forced-admin account and logs it
  * in. Returns 403 once any user exists.

@@ -69,8 +69,15 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     if (req.method === 'GET') {
       if (requireAdmin(deps, req, res) === undefined) return
       const records = await deps.users.list()
+      const online = deps.store.onlineCounts()
       return sendJson(res, 200, {
-        users: records.map(record => ({ username: record.username, isAdmin: record.isAdmin, createdAt: record.createdAt })),
+        users: records.map(record => ({
+          username: record.username,
+          isAdmin: record.isAdmin,
+          createdAt: record.createdAt,
+          disabled: record.disabled === true,
+          onlineSessions: online.get(record.username) ?? 0,
+        })),
       })
     }
     if (requireAdmin(deps, req, res) === undefined) return
@@ -131,6 +138,26 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true })
   } }
 
+  const userDisable: WebRoute = { kind: 'exact', path: '/api/auth/admin/users/disable', handler: async (req, res) => {
+    if (requireAdmin(deps, req, res) === undefined) return
+    const body = await readJsonObject(req)
+    if (body === null || typeof body.username !== 'string' || typeof body.disabled !== 'boolean') {
+      return sendJson(res, 400, { error: 'bad request' })
+    }
+    const target = body.username
+    const records = await deps.users.list()
+    const record = records.find(u => u.username === target)
+    if (record === undefined) return sendJson(res, 404, { error: 'unknown user' })
+    if (body.disabled && record.isAdmin && records.filter(u => u.isAdmin && u.disabled !== true).length === 1) {
+      return sendJson(res, 409, { error: 'cannot disable the last enabled admin' })
+    }
+    await deps.users.setDisabled(target, body.disabled)
+    // Disabling must bite immediately: revoke the user's live cookie
+    // sessions so a stale cookie cannot ride out the TTL.
+    if (body.disabled) deps.store.revokeAllFor(target)
+    return sendJson(res, 200, { ok: true })
+  } }
+
   const adminPage: WebRoute = { kind: 'exact', path: '/admin', handler: async (req, res) => {
     const session = requireSession(deps, req)
     if (session === undefined || !session.isAdmin) {
@@ -142,5 +169,5 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     res.end(renderAdminPage())
   } }
 
-  return [me, usersRoute, userPassword, userRemove, adminPage]
+  return [me, usersRoute, userPassword, userRemove, userDisable, adminPage]
 }

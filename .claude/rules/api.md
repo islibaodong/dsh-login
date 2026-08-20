@@ -11,16 +11,19 @@ paths registered by the connection child plugin.
 | POST | `/api/auth/setup` | only while user store empty | Body `{username,password}` → create forced-admin + login; 403 once any user exists |
 | POST | `/api/auth/login` | none | Body `{username,password}` → verify vs UserStore → session cookie; 401 invalid; 500 no users |
 | POST | `/api/auth/logout` | session cookie (optional) | Revoke token, clear cookie |
+| GET | `/logout` | none | Same revocation + cookie clear, 302 `/login` (link-friendly) |
 | GET | `/api/auth/me` | session cookie | `{username,isAdmin}`; 401 without session |
-| GET/POST | `/api/auth/admin/users` | admin | GET list (`{users:[{username,isAdmin,createdAt}]}`); POST create `{username,password,isAdmin?}` (409 exists, 401/403 gate) |
+| GET/POST | `/api/auth/admin/users` | admin | GET list (`{users:[{username,isAdmin,createdAt,disabled,onlineSessions}]}`); POST create `{username,password,isAdmin?}` (409 exists, 401/403 gate) |
 | POST | `/api/auth/admin/users/password` | admin | `{username,password}` → reset (404 unknown user) |
+| POST | `/api/auth/admin/users/disable` | admin | `{username,disabled:boolean}` → disable blocks login + revokes sessions; 409 last enabled admin |
 | POST | `/api/auth/admin/users/remove` | admin | `{username}` → remove; 409 refuses the last admin |
 | GET | `/admin` | admin session | Management page HTML; 302 `/login` otherwise |
 | ANY | `/api` (prefix) | host trust + `dsh_session` cookie | Carrier takeover: 403 untrusted host, 401 no session, 426 plain GET on event paths, 403 non-allowed method (non-admin), per-user dispatch otherwise |
 | WS | `/api/events.mux`, `/api/events.host` | host trust + cookie on upgrade | Per-user, ownership-filtered downlinks |
 
 ## GET/HEAD fallback (gateway)
-`dsh_session` cookie required: 302 `/login` unauthenticated; else static dist;
+`dsh_session` cookie required: 302 `/login` unauthenticated; else static dist
+(HTML indexes get a fixed-position logout button injected before `</body>`);
 other methods 405.
 
 ## Cookie

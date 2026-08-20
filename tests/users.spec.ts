@@ -10,6 +10,24 @@ function makeStore(): { store: UserStore; creds: MemoryCredentials } {
   return { store: new UserStore(creds as never, ref), creds }
 }
 
+describe('UserStore disabled accounts', () => {
+  it('setDisabled(true) blocks verify; setDisabled(false) restores it', async () => {
+    const { store } = makeStore()
+    await store.create('alice', 'pw', true)
+    await store.setDisabled('alice', true)
+    expect((await store.list()).find(u => u.username === 'alice')?.disabled).toBe(true)
+    expect(await store.verify('alice', 'pw')).toBeUndefined()
+    await store.setDisabled('alice', false)
+    expect((await store.list()).find(u => u.username === 'alice')?.disabled).toBeUndefined()
+    expect((await store.verify('alice', 'pw'))?.username).toBe('alice')
+  })
+
+  it('setDisabled throws for an unknown user', async () => {
+    const { store } = makeStore()
+    await expect(store.setDisabled('ghost', true)).rejects.toThrow(/unknown user/i)
+  })
+})
+
 describe('UserStore', () => {
   it('starts empty', async () => {
     const { store } = makeStore()

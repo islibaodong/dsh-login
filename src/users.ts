@@ -7,6 +7,8 @@ export interface UserRecord {
   salt: string
   isAdmin: boolean
   createdAt: number
+  /** Disabled accounts cannot log in; absent on legacy records (= false). */
+  disabled?: boolean
 }
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/
@@ -60,7 +62,23 @@ export class UserStore {
   async verify(username: string, password: string): Promise<UserRecord | undefined> {
     const record = (await this.list()).find(u => u.username === username)
     if (record === undefined) return undefined
+    // Disabled accounts fail closed with the same generic miss as unknown
+    // users — no signal that the account exists.
+    if (record.disabled === true) return undefined
     return constantTimeEqualHex(hashPassword(password, record.salt), record.hash) ? record : undefined
+  }
+
+  /**
+   * Set or clear the disabled flag for `username`. The caller (admin API)
+   * owns the last-enabled-admin guard and session revocation.
+   */
+  async setDisabled(username: string, disabled: boolean): Promise<void> {
+    const records = await this.list()
+    const record = records.find(u => u.username === username)
+    if (record === undefined) throw new Error(`unknown user "${username}"`)
+    if (disabled) record.disabled = true
+    else delete record.disabled
+    await this.credentials.set(this.ref, JSON.stringify(records))
   }
 
   async setPassword(username: string, password: string): Promise<void> {

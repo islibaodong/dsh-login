@@ -59,6 +59,23 @@ export class SessionStore {
     return removed
   }
 
+  /**
+   * Count live (unexpired) sessions per username. Used by the admin user
+   * list to report online status; expired entries are swept along the way.
+   */
+  onlineCounts(): Map<string, number> {
+    const counts = new Map<string, number>()
+    const now = Date.now()
+    for (const [token, session] of this.store) {
+      if (now > session.expiresAt) {
+        this.store.delete(token)
+        continue
+      }
+      counts.set(session.user, (counts.get(session.user) ?? 0) + 1)
+    }
+    return counts
+  }
+
   /** Remove all expired sessions. */
   cleanup(): void {
     const now = Date.now()

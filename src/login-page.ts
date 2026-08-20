@@ -217,8 +217,24 @@ export function renderSetupPage(): string {
 /** Admin page CSS additions over the base card theme. */
 const ADMIN_CSS = `
     .card.wide {
-      width: 640px;
+      width: 760px;
     }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .topbar h1 { margin-bottom: 0; }
+    .topbar a.logout {
+      color: #8f9bb3;
+      font-size: 0.875rem;
+      text-decoration: none;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 6px 14px;
+    }
+    .topbar a.logout:hover { color: #ff6b6b; border-color: #ff6b6b; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -231,6 +247,28 @@ const ADMIN_CSS = `
       border-bottom: 1px solid #2a2a4a;
     }
     th { color: #888; font-weight: 500; }
+    td.actions { white-space: nowrap; }
+    td.actions button {
+      width: auto;
+      display: inline-block;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+      margin-right: 4px;
+      background: #3a3a5a;
+    }
+    td.actions button:hover { background: #4a4a7a; }
+    td.actions button.danger { background: #6b3546; }
+    td.actions button.danger:hover { background: #8b4560; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      margin-right: 4px;
+    }
+    .badge.online { background: #1d4d33; color: #7fe0a5; }
+    .badge.offline { background: #2a2a4a; color: #888; }
+    .badge.disabled { background: #5a2a2a; color: #ff9b9b; }
     .forms {
       display: flex;
       flex-direction: column;
@@ -241,16 +279,6 @@ const ADMIN_CSS = `
       margin-bottom: 12px;
       color: #c0c0d0;
     }
-    .row {
-      display: flex;
-      gap: 8px;
-    }
-    .row input { margin-bottom: 0; }
-    .row button {
-      white-space: nowrap;
-      width: auto;
-      padding: 12px 16px;
-    }
     .status {
       color: #8f8;
       font-size: 0.875rem;
@@ -258,12 +286,24 @@ const ADMIN_CSS = `
       min-height: 1.25rem;
       margin-top: 8px;
     }
+    dialog {
+      background: #16213e;
+      color: #e0e0e0;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 24px;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+    dialog h2 { font-size: 1rem; margin-bottom: 16px; }
+    dialog input { width: 100%; }
+    dialog .row { margin-top: 16px; }
 `
 
 /**
- * Admin management page: the user table plus create/change-password/remove
- * forms. Populated client-side from GET /api/auth/admin/users; every form
- * POSTs its JSON route via fetch and reloads on success.
+ * Admin management page: the user table (role, created, online/disabled
+ * status, per-row reset-password / disable / remove actions) plus the
+ * create-user form. Populated client-side from GET /api/auth/admin/users;
+ * row actions POST their JSON route via fetch and refresh the table.
  */
 export function renderAdminPage(): string {
   return `<!DOCTYPE html>
@@ -276,12 +316,15 @@ export function renderAdminPage(): string {
 </head>
 <body>
   <div class="card wide">
-    <h1>DSH Admin</h1>
+    <div class="topbar">
+      <h1>DSH Admin</h1>
+      <a class="logout" href="/logout">Log out</a>
+    </div>
     <div class="error" id="error"></div>
     <div class="status" id="status"></div>
     <table id="userTable">
       <thead>
-        <tr><th>Username</th><th>Role</th><th>Created</th></tr>
+        <tr><th>Username</th><th>Role</th><th>Created</th><th>Status</th><th>Actions</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -293,22 +336,24 @@ export function renderAdminPage(): string {
         <label><input type="checkbox" id="newIsAdmin"> Admin</label>
         <button type="submit">Create</button>
       </form>
-      <form id="passwordForm">
-        <h2>Change password</h2>
-        <input type="text" id="pwUsername" placeholder="Username" autocomplete="off" required>
-        <input type="password" id="pwPassword" placeholder="New password" autocomplete="new-password" required>
-        <button type="submit">Set Password</button>
-      </form>
-      <form id="removeForm">
-        <h2>Remove user</h2>
-        <input type="text" id="removeUsername" placeholder="Username" autocomplete="off" required>
-        <button type="submit">Remove</button>
-      </form>
     </div>
   </div>
+  <dialog id="passwordDialog">
+    <form id="dialogForm" method="dialog">
+      <h2 id="dialogTitle">Reset password</h2>
+      <input type="password" id="dialogPassword" placeholder="New password" autocomplete="new-password" required>
+      <div class="row">
+        <button type="submit" id="dialogConfirm">Set Password</button>
+        <button type="button" id="dialogCancel" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <script>
     const error = document.getElementById('error');
     const status = document.getElementById('status');
+    const dialog = document.getElementById('passwordDialog');
+    const dialogPassword = document.getElementById('dialogPassword');
+    let dialogUser = null;
 
     const fmtDate = (ms) => new Date(ms).toLocaleString();
     const flash = (msg) => { status.textContent = msg; setTimeout(() => { status.textContent = ''; }, 3000); };
@@ -337,7 +382,31 @@ export function renderAdminPage(): string {
           const name = document.createElement('td'); name.textContent = u.username;
           const role = document.createElement('td'); role.textContent = u.isAdmin ? 'admin' : 'user';
           const created = document.createElement('td'); created.textContent = fmtDate(u.createdAt);
-          tr.append(name, role, created);
+          const st = document.createElement('td');
+          const online = document.createElement('span');
+          online.className = 'badge ' + (u.onlineSessions > 0 ? 'online' : 'offline');
+          online.textContent = u.onlineSessions > 0 ? ('online ×' + String(u.onlineSessions)) : 'offline';
+          st.append(online);
+          if (u.disabled) {
+            const dis = document.createElement('span');
+            dis.className = 'badge disabled';
+            dis.textContent = 'disabled';
+            st.append(dis);
+          }
+          const actions = document.createElement('td'); actions.className = 'actions';
+          const mk = (label, fn, cls) => {
+            const b = document.createElement('button');
+            b.type = 'button'; b.textContent = label;
+            if (cls) b.className = cls;
+            b.addEventListener('click', () => { fn(u.username); });
+            return b;
+          };
+          actions.append(
+            mk('Reset password', openPasswordDialog),
+            mk(u.disabled ? 'Enable' : 'Disable', toggleDisable),
+            mk('Remove', removeUser, 'danger'),
+          );
+          tr.append(name, role, created, st, actions);
           tbody.append(tr);
         }
       } catch (err) {
@@ -345,37 +414,73 @@ export function renderAdminPage(): string {
       }
     }
 
-    const formHandler = (form, action) => {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        error.textContent = '';
-        try {
-          await action();
-          flash('OK');
-          window.location.reload();
-        } catch (err) {
-          error.textContent = err.message;
-        }
-      });
-    };
+    function openPasswordDialog(username) {
+      dialogUser = username;
+      document.getElementById('dialogTitle').textContent = 'Reset password — ' + username;
+      dialogPassword.value = '';
+      dialog.showModal();
+      dialogPassword.focus();
+    }
 
-    formHandler(document.getElementById('createForm'), async () => {
-      await call('/api/auth/admin/users', 'POST', {
-        username: document.getElementById('newUsername').value,
-        password: document.getElementById('newPassword').value,
-        isAdmin: document.getElementById('newIsAdmin').checked,
-      });
+    document.getElementById('dialogCancel').addEventListener('click', () => dialog.close());
+    document.getElementById('dialogForm').addEventListener('submit', async () => {
+      const username = dialogUser;
+      const password = dialogPassword.value;
+      dialog.close();
+      if (username === null || password.length === 0) return;
+      error.textContent = '';
+      try {
+        await call('/api/auth/admin/users/password', 'POST', { username, password });
+        flash('Password reset for ' + username);
+        refresh();
+      } catch (err) {
+        error.textContent = err.message;
+      }
     });
-    formHandler(document.getElementById('passwordForm'), async () => {
-      await call('/api/auth/admin/users/password', 'POST', {
-        username: document.getElementById('pwUsername').value,
-        password: document.getElementById('pwPassword').value,
-      });
-    });
-    formHandler(document.getElementById('removeForm'), async () => {
-      await call('/api/auth/admin/users/remove', 'POST', {
-        username: document.getElementById('removeUsername').value,
-      });
+
+    async function toggleDisable(username) {
+      error.textContent = '';
+      const row = document.querySelector('#userTable tbody').querySelectorAll('tr');
+      let disabled = false;
+      for (const tr of row) {
+        if (tr.cells[0].textContent === username) disabled = tr.querySelector('.badge.disabled') !== null;
+      }
+      if (!disabled && !window.confirm('Disable user "' + username + '"? Their sessions will be revoked.')) return;
+      try {
+        await call('/api/auth/admin/users/disable', 'POST', { username, disabled: !disabled });
+        flash((!disabled ? 'Disabled ' : 'Enabled ') + username);
+        refresh();
+      } catch (err) {
+        error.textContent = err.message;
+      }
+    }
+
+    async function removeUser(username) {
+      if (!window.confirm('Remove user "' + username + '"? This cannot be undone.')) return;
+      error.textContent = '';
+      try {
+        await call('/api/auth/admin/users/remove', 'POST', { username });
+        flash('Removed ' + username);
+        refresh();
+      } catch (err) {
+        error.textContent = err.message;
+      }
+    }
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      error.textContent = '';
+      try {
+        await call('/api/auth/admin/users', 'POST', {
+          username: document.getElementById('newUsername').value,
+          password: document.getElementById('newPassword').value,
+          isAdmin: document.getElementById('newIsAdmin').checked,
+        });
+        flash('OK');
+        refresh();
+      } catch (err) {
+        error.textContent = err.message;
+      }
     });
 
     refresh();

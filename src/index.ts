@@ -8,7 +8,7 @@ import { SessionStore } from './session.ts'
 import { UserStore } from './users.ts'
 import { OwnershipIndex } from './ownership.ts'
 import { createGatewayHandler } from './gateway.ts'
-import { createLoginHandler, createLogoutHandler, createSetupHandler } from './login-api.ts'
+import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
 import { renderLoginPage, renderSetupPage } from './login-page.ts'
 import { provideWebRuntime, resolveDistIndex } from './web-runtime.ts'
@@ -82,6 +82,13 @@ export function apply(ctx: Context, config: Config): void {
     path: '/api/auth/logout',
     handler: createLogoutHandler(store),
   }), 'dsh-login: /api/auth/logout')
+  // Link-friendly logout: same revocation, but answers with a redirect so
+  // plain <a href="/logout"> entries (e.g. the admin page topbar) work.
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/logout',
+    handler: createLogoutRedirectHandler(store),
+  }), 'dsh-login: /logout')
   for (const route of createAdminRoutes({ users, store })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }

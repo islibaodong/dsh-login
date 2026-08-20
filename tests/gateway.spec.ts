@@ -120,4 +120,26 @@ describe('gateway handler', () => {
     expect(res.status).toBe(200)
     expect(res.body).toContain('spa-fallback')
   })
+
+  it('injects the logout widget into served HTML indexes', { timeout: 60_000 }, async () => {
+    const { ctx, port } = await bootServer()
+    const dist = join(root!, 'dist')
+    await mkdir(dist, { recursive: true })
+    const distIndex = join(dist, 'index.html')
+    await writeFile(distIndex, '<html><body>shell</body></html>')
+    const store = new SessionStore(3600)
+    const session = store.create('alice', true)
+    const cfg = { ...config, distIndex }
+    const handler = createGatewayHandler(ctx, cfg, store)
+    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    const res = await request(port, '/', {
+      headers: { Cookie: `dsh_session=${session.token}` },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body).toContain('shell')
+    expect(res.body).toContain('/api/auth/logout')
+    expect(res.body).toContain('Log out')
+    // Injected before the closing body tag, not appended after </html>.
+    expect(res.body.indexOf('/api/auth/logout')).toBeLessThan(res.body.lastIndexOf('</body>'))
+  })
 })

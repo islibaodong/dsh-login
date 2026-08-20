@@ -241,6 +241,70 @@ describe('POST /api/auth/admin/users/remove', () => {
   })
 })
 
+describe('GET /api/auth/admin/users (status fields)', () => {
+  it('reports onlineSessions and disabled per user', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    const res = await req(port, 'GET', '/api/auth/admin/users', undefined, rootCookie)
+    expect(res.status).toBe(200)
+    const body = res.json as { users: Array<{ username: string; onlineSessions: number; disabled: boolean }> }
+    const root = body.users.find(u => u.username === 'root')!
+    const bob = body.users.find(u => u.username === 'bob')!
+    expect(root.onlineSessions).toBeGreaterThanOrEqual(1)
+    expect(bob.onlineSessions).toBeGreaterThanOrEqual(1)
+    expect(root.disabled).toBe(false)
+    expect(bob.disabled).toBe(false)
+    void bobCookie
+  })
+})
+
+describe('POST /api/auth/admin/users/disable', () => {
+  it('disables a user: login rejected, live sessions revoked', { timeout: 60_000 }, async () => {
+    const { port, users } = await boot({ rootPassword: 'rootpw' })
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(200)
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    const res = await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: true }, rootCookie)
+    expect(res.status).toBe(200)
+    // Cookie dead, fresh login rejected with the generic invalid-credentials 401.
+    expect((await req(port, 'GET', '/api/auth/me', undefined, bobCookie)).status).toBe(401)
+    expect((await req(port, 'POST', '/api/auth/login', { username: 'bob', password: 'bobpw' })).status).toBe(401)
+    expect((await users.list()).find(u => u.username === 'bob')?.disabled).toBe(true)
+  })
+
+  it('re-enables a disabled user who can then log in again', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: true }, rootCookie)
+    expect((await req(port, 'POST', '/api/auth/login', { username: 'bob', password: 'bobpw' })).status).toBe(401)
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: false }, rootCookie)).status).toBe(200)
+    expect((await req(port, 'POST', '/api/auth/login', { username: 'bob', password: 'bobpw' })).status).toBe(200)
+  })
+
+  it('refuses to disable the last enabled admin (409), allows when another enabled admin remains', { timeout: 60_000 }, async () => {
+    const { port, users } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    await req(port, 'POST', '/api/auth/admin/users', { username: 'root2', password: 'pw', isAdmin: true }, cookie)
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'root2', disabled: true }, cookie)).status).toBe(200)
+    // root is now the last ENABLED admin — disabling them is refused.
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'root', disabled: true }, cookie)).status).toBe(409)
+    expect((await users.list()).find(u => u.username === 'root')?.disabled).toBeUndefined()
+    // Re-enabling root2 is always allowed (un-disabling can never lock out).
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'root2', disabled: false }, cookie)).status).toBe(200)
+  })
+
+  it('returns 404 unknown, 400 bad input, 403 for ordinary users', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'ghost', disabled: true }, rootCookie)).status).toBe(404)
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob' }, rootCookie)).status).toBe(400)
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: 'yes' }, rootCookie)).status).toBe(400)
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: true }, bobCookie)).status).toBe(403)
+  })
+})
+
 describe('GET /admin', () => {
   it('serves the admin page to an admin session', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })

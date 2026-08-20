@@ -11,7 +11,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { MemoryCredentials } from './memory-credentials.ts'
 import { SessionStore } from '../src/session.ts'
 import { UserStore } from '../src/users.ts'
-import { createLoginHandler, createLogoutHandler, createSetupHandler } from '../src/login-api.ts'
+import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from '../src/login-api.ts'
 import { COOKIE_NAME, extractSessionToken } from '../src/auth.ts'
 
 let root: string | undefined
@@ -79,6 +79,10 @@ async function registerAuthRoutes(ctx: Context, users: UserStore, store: Session
     kind: 'exact', path: '/api/auth/logout',
     handler: createLogoutHandler(store),
   }), 'logout')
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: '/logout',
+    handler: createLogoutRedirectHandler(store),
+  }), 'logout redirect')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/setup',
     handler: createSetupHandler({ users, store, sessionTtl: 3600 }),
@@ -209,5 +213,33 @@ describe('POST /api/auth/logout', () => {
     await registerAuthRoutes(ctx, users, new SessionStore(3600))
     const res = await postJson(port, '/api/auth/logout', {})
     expect(res.status).toBe(200)
+  })
+})
+
+describe('GET /logout', () => {
+  it('revokes the session, clears the cookie, and redirects to /login', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    const store = new SessionStore(3600)
+    await registerAuthRoutes(ctx, users, store)
+    const loginRes = await postJson(port, '/api/auth/login', { username: 'alice', password: 's3cret' })
+    const token = extractSessionToken(loginRes.headers.get('set-cookie')!.split(';')[0])!
+
+    const res = await fetch(`http://127.0.0.1:${String(port)}/logout`, {
+      headers: { Cookie: `${COOKIE_NAME}=${token}` },
+      redirect: 'manual',
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/login')
+    expect(res.headers.get('set-cookie')).toContain('Max-Age=0')
+    expect(store.verify(token)).toBeUndefined()
+  })
+
+  it('redirects to /login anonymously without error', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await registerAuthRoutes(ctx, users, new SessionStore(3600))
+    const res = await fetch(`http://127.0.0.1:${String(port)}/logout`, { redirect: 'manual' })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/login')
   })
 })

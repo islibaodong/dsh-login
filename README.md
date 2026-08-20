@@ -83,8 +83,9 @@ Request -> WebServer
   ├─ /api/auth/setup (exact)  -> POST: create admin on first use (403 if users exist)
   ├─ /api/auth/login (exact)  -> POST: verify {username,password}, set cookie
   ├─ /api/auth/logout (exact) -> POST: revoke session, clear cookie
+  ├─ /logout (exact)          -> GET: same revocation, redirect to /login
   ├─ /api/auth/me (exact)     -> GET: current session identity
-  ├─ /api/auth/admin/* (exact) -> admin JSON API (users, password, remove)
+  ├─ /api/auth/admin/* (exact) -> admin JSON API (users, password, disable, remove)
   ├─ /admin (exact)           -> admin management page (302 /login otherwise)
   ├─ /api/* (prefix)          -> dsh-login connection takeover:
   │                             ├─ untrusted host -> 403
@@ -95,7 +96,10 @@ Request -> WebServer
   │                             then ownership-filtered per-user downlinks
   └─ fallback                  -> dsh-login: auth gateway + static files
                                   ├─ no valid cookie -> 302 /login
-                                  └─ valid cookie   -> serveStatic()
+                                  └─ valid cookie   -> serveStatic(); HTML indexes
+                                                      get a fixed-position logout
+                                                      button injected (POST
+                                                      /api/auth/logout → /login)
 ```
 
 - **Cookie:** `dsh_session`, HttpOnly, SameSite=Strict, Path=/
@@ -111,6 +115,8 @@ Request -> WebServer
   - the physical `session.export` channel (target in the query string, outside the envelope) is ownership-guarded at the carrier
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the `/admin` management page.
+- **Logout:** every served HTML index carries a fixed-position logout button (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link; the admin page has a topbar logout link.
+- **Admin user management:** the user list reports each account's online session count and disabled flag; per-row actions reset passwords, disable/enable accounts (disabled users cannot log in and their live sessions are revoked; the last enabled admin cannot be disabled), and remove users.
 
 ## Data locations
 

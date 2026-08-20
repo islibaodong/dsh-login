@@ -1,6 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { SessionStore } from '../src/session.ts'
 
+describe('SessionStore.onlineCounts', () => {
+  it('counts live sessions per user and sweeps expired ones', () => {
+    const store = new SessionStore(3600)
+    store.create('alice', false)
+    store.create('alice', false)
+    store.create('bob', true)
+    const counts = store.onlineCounts()
+    expect(counts.get('alice')).toBe(2)
+    expect(counts.get('bob')).toBe(1)
+    expect(counts.has('carol')).toBe(false)
+  })
+
+  it('omits revoked sessions', () => {
+    const store = new SessionStore(3600)
+    const a = store.create('alice', false)
+    store.create('alice', false)
+    store.revoke(a.token)
+    expect(store.onlineCounts().get('alice')).toBe(1)
+  })
+
+  it('drops expired sessions from the counts', () => {
+    const store = new SessionStore(-1) // already expired at creation
+    store.create('alice', false)
+    expect(store.onlineCounts().get('alice')).toBeUndefined()
+  })
+})
+
 describe('SessionStore', () => {
   it('creates a session with a 64-char hex token and correct expiry', () => {
     const store = new SessionStore(3600)

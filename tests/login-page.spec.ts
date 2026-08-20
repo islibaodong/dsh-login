@@ -71,15 +71,27 @@ describe('renderAdminPage', () => {
     expect(html).toContain('.card')
   })
 
-  it('calls all three admin JSON routes and refreshes on success', () => {
+  it('calls all four admin JSON routes and refreshes the table on success', () => {
     expect(html).toContain('/api/auth/admin/users')
     expect(html).toContain('/api/auth/admin/users/password')
     expect(html).toContain('/api/auth/admin/users/remove')
-    expect(html).toMatch(/window\.location|location\.reload/)
+    expect(html).toContain('/api/auth/admin/users/disable')
+    expect(html).toContain('refresh()')
   })
 
-  it('renders a user table populated from the list endpoint', () => {
+  it('renders a user table with status badges and per-row actions', () => {
     expect(html).toContain('<table')
     expect(html).toContain('fetch(')
+    expect(html).toContain("badge ' + (u.onlineSessions > 0 ? 'online' : 'offline')")
+    expect(html).toContain('badge.disabled')
+    expect(html).toContain('Reset password')
+    expect(html).toContain("'Disable'")
+    expect(html).toContain("'Remove'")
+  })
+
+  it('offers a logout link and a reset-password dialog', () => {
+    expect(html).toContain('href="/logout"')
+    expect(html).toContain('<dialog')
+    expect(html).toContain('dialogPassword')
   })
 })
