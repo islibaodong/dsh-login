@@ -10,6 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * half), the returned plugin is applied over a fake Cordis context with a
  * stubbed /api/auth/me fetch, and the registered settings-section component
  * renders an element tree for both the admin and ordinary-user identities.
+ *
+ * The plugin is the boot graph's only `connection` provider, so the wire
+ * discipline is asserted too: inject stays empty (a hard slots/locale wait
+ * would deadlock — locale itself waits on connection) and the internal
+ * connection client applies synchronously, before any identity probing.
  */
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const source = readFileSync(join(repoRoot, 'src/settings-panel.client.js'), 'utf8')
@@ -18,7 +23,7 @@ const source = readFileSync(join(repoRoot, 'src/settings-panel.client.js'), 'utf
 const factory = new Function(`return (${source})`)() as (require: (spec: string) => unknown) => {
   name: string
   inject: string[]
-  apply: (ctx: unknown) => Promise<void>
+  apply: (ctx: unknown) => void
 }
 
 const innerApply = vi.fn()
@@ -50,7 +55,7 @@ interface RegisteredSection {
 function makeCtx() {
   const sections: RegisteredSection[] = []
   const disposers: Array<() => void> = []
-  const ctx = {
+  const base = {
     effect(fn: () => (() => void) | undefined): (() => void) | undefined {
       const dispose = fn()
       if (typeof dispose === 'function') disposers.push(dispose)
@@ -69,10 +74,26 @@ function makeCtx() {
       register: (options: RegisteredSection['options'], render: unknown) => ({ options, render }),
     },
   }
+  // Cordis dependency-fiber shape: ctx.inject(deps, callback) starts the
+  // callback once the services exist. The stub resolves it immediately and
+  // hands the same face to the callback.
+  const ctx = {
+    ...base,
+    inject: (deps: string[], callback: (sub: typeof base) => void) => {
+      expect(deps).toEqual(['slots', 'locale'])
+      callback(base)
+      return Promise.resolve()
+    },
+  }
   return { ctx, sections, disposers }
 }
 
 const fetchMock = vi.fn()
+
+/** Drain enough microtask ticks for fetchMe()'s awaits + the .then chain. */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 8; i++) await Promise.resolve()
+}
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -81,17 +102,21 @@ afterEach(() => {
 })
 
 describe('settings-panel client factory', () => {
-  it('returns the dsh-login plugin waiting on slots and locale', () => {
+  it('returns the wire-root dsh-login plugin with no hard dependencies', () => {
     const plugin = factory(makeRequire())
     expect(plugin.name).toBe('dsh-login')
-    expect(plugin.inject).toEqual(['slots', 'locale'])
+    // Deadlock guard: this fiber provides `connection`; a hard inject on
+    // anything (locale waits on connection transitively) stalls the whole
+    // boot graph — exactly the 59-pending-entries failure mode.
+    expect(plugin.inject).toEqual([])
   })
 
-  it('applies the internal connection client verbatim', async () => {
+  it('applies the internal connection client synchronously, before any probe', () => {
     const { ctx } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true }) })
-    await factory(makeRequire()).apply(ctx)
+    // A stalled identity probe (never resolving) must not delay connection.
+    fetchMock.mockReturnValue(new Promise(() => {}))
+    factory(makeRequire()).apply(ctx)
     expect(innerApply).toHaveBeenCalledTimes(1)
   })
 
@@ -99,7 +124,8 @@ describe('settings-panel client factory', () => {
     const { ctx, sections } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true }) })
-    await factory(makeRequire()).apply(ctx)
+    factory(makeRequire()).apply(ctx)
+    await flush()
     expect(sections).toHaveLength(1)
     expect(sections[0]!.options.id).toBe('users')
     expect(sections[0]!.options.order).toBe(25)
@@ -113,7 +139,8 @@ describe('settings-panel client factory', () => {
     const { ctx, sections } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'bob', isAdmin: false }) })
-    await factory(makeRequire()).apply(ctx)
+    factory(makeRequire()).apply(ctx)
+    await flush()
     expect(sections).toHaveLength(1)
     expect(sections[0]!.options.id).toBe('account')
     expect(sections[0]!.options.label()).toBe('account.nav')
@@ -121,11 +148,12 @@ describe('settings-panel client factory', () => {
     expect(element).toBeTypeOf('object')
   })
 
-  it('registers nothing when the identity probe fails', async () => {
+  it('registers nothing when the identity probe fails (connection still applied)', async () => {
     const { ctx, sections } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: false, json: async () => ({ error: 'authentication required' }) })
-    await factory(makeRequire()).apply(ctx)
+    factory(makeRequire()).apply(ctx)
+    await flush()
     expect(sections).toHaveLength(0)
     // The connection client still applied — the wire half must not depend
     // on the identity probe.

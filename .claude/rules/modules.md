@@ -90,12 +90,18 @@
 - Settings-panel browser half (plain JS, appended verbatim to
   `dist/client.js`): a wrapper factory that materializes the re-stamped
   connection client (`@islibaodong/dsh-login/connection`, same-bundle
-  require) and returns one plugin that applies it verbatim + registers the
-  `settings.section` slot entry — 用户管理 (id `users`, admin) or 账户
-  (id `account`, ordinary) picked from `/api/auth/me`. Table + create card +
+  require) and returns one wire-root plugin — `inject: []`, `inner.apply`
+  runs synchronously to provide `connection`. NEVER add a hard inject here:
+  this fiber is the only `connection` provider (shipped row disabled) and
+  `locale` waits on `connection`, so a hard slots/locale wait deadlocks the
+  whole boot (the 59-pending-entries failure). Dictionaries + the
+  `settings.section` slot entry (用户管理 id `users` admin / 账户 id
+  `account` ordinary, picked from `/api/auth/me`, 15s-bounded) register via
+  a `ctx.inject(['slots','locale'])` dependency fiber. Table + create card +
   reset/disable/remove dialogs + logout entry; React and Button/Input/Modal/
   RiskConfirmation come from the platform module-table seeds; styles are
-  `--dsw-alias-*` theme tokens (auto light/dark).
+  `--dsw-alias-*` theme tokens (auto light/dark), style tag pre-tagged
+  data-plugin/data-plugin-css and deduped.
 
 ## src/web-runtime.ts
 - `resolveLanTrust` (LAN IPv4 literals when bound 0.0.0.0 + extras),

@@ -426,39 +426,46 @@ function (require) {
   }
 
   // ---- the wrapper plugin ----
+  // Wire-root discipline: this fiber is the ONLY provider of `connection`
+  // (the shipped connection row is disabled while this takeover is active),
+  // so it must not declare ANY hard service dependency — `locale` itself
+  // waits on `connection`, and a hard inject here deadlocks the whole boot
+  // (every UI plugin transitively waits on connection). The settings-panel
+  // registration therefore runs in a dependency fiber (ctx.inject callback)
+  // once slots+locale exist, never blocking this plugin's activation.
   return {
     name: 'dsh-login',
-    inject: ['slots', 'locale'],
-    apply: async function (ctx) {
-      // 1. The shipped wire client, applied verbatim: provides `connection`.
+    inject: [],
+    apply: function (ctx) {
+      // 1. The shipped wire client, applied verbatim — synchronously, so
+      //    `connection` exists the moment this fiber activates.
       inner.apply(ctx)
 
-      // 2. Locale dictionaries for this panel.
-      ctx.effect(function () {
-        return ctx.locale.register(NS, { zh: zh, en: en })
-      }, 'dsh-login: settings-panel dictionaries')
-      var t = ctx.locale.bind(NS)
+      // 2. Dictionaries + the settings section, registered in a dependency
+      //    fiber that starts once slots and locale are available.
+      ctx.inject(['slots', 'locale'], function (sub) {
+        sub.effect(function () {
+          return sub.locale.register(NS, { zh: zh, en: en })
+        }, 'dsh-login: settings-panel dictionaries')
+        var t = sub.locale.bind(NS)
 
-      // 3. Identity probe: pick the admin (用户管理) or ordinary (账户)
-      //    section. Unauthenticated pages never reach the SPA shell (the
-      //    gateway redirects first); a failed probe registers nothing.
-      var me = await fetchMe()
-      if (me === undefined) return
-      var isAdmin = me.isAdmin === true
-      var Component = isAdmin ? UsersPanel : AccountPanel
-      var panelProps = { t: t, me: me }
-
-      ctx.effect(function () {
-        return ctx.slots.inject('settings.section', function () {
-          return ctx.slots.register({
-            name: 'settings.section',
-            id: isAdmin ? 'users' : 'account',
-            order: 25,
-            label: function () { return t(isAdmin ? 'users.nav' : 'account.nav') },
-            locale: NS,
-          }, function () { return h(Component, panelProps) })
+        // Identity probe: pick the admin (用户管理) or ordinary (账户)
+        // section. Unauthenticated pages never reach the SPA shell (the
+        // gateway redirects first); a failed probe registers nothing.
+        void fetchMe().then(function (me) {
+          if (me === undefined) return
+          var isAdmin = me.isAdmin === true
+          sub.slots.inject('settings.section', function () {
+            return sub.slots.register({
+              name: 'settings.section',
+              id: isAdmin ? 'users' : 'account',
+              order: 25,
+              label: function () { return t(isAdmin ? 'users.nav' : 'account.nav') },
+              locale: NS,
+            }, function () { return h(isAdmin ? UsersPanel : AccountPanel, { t: t, me: me }) })
+          })
         })
-      }, 'dsh-login: settings section')
+      })
     },
   }
 }
