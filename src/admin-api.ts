@@ -1,9 +1,10 @@
 /**
- * Admin JSON API + admin HTML page routes.
+ * Admin JSON API routes.
  *
- * All JSON routes live under /api/auth (session-cookie authenticated, admin
- * gates where noted, 8 KB body cap). `GET /admin` serves the self-contained
- * management page to admin sessions and redirects everyone else to /login.
+ * All routes live under /api/auth (session-cookie authenticated, admin
+ * gated, 8 KB body cap). The standalone /admin HTML page was removed: user
+ * management ships inside the GUI settings panel (设置-用户管理) via the
+ * browser bundle's settings section — these JSON routes are its backend.
  * The webserver registers (kind, path) pairs — not methods — so the users
  * collection path dispatches GET (list) and POST (create) inside one handler.
  */
@@ -13,7 +14,6 @@ import type { Session, SessionStore } from './session.ts'
 import type { UserStore } from './users.ts'
 import { readBody, sendJson } from './http-json.ts'
 import { extractSessionToken } from './auth.ts'
-import { renderAdminPage } from './login-page.ts'
 
 /** Shared dependencies for the admin routes. */
 export interface AdminDeps {
@@ -158,16 +158,5 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true })
   } }
 
-  const adminPage: WebRoute = { kind: 'exact', path: '/admin', handler: async (req, res) => {
-    const session = requireSession(deps, req)
-    if (session === undefined || !session.isAdmin) {
-      res.writeHead(302, { Location: '/login' })
-      res.end()
-      return
-    }
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(renderAdminPage())
-  } }
-
-  return [me, usersRoute, userPassword, userRemove, userDisable, adminPage]
+  return [me, usersRoute, userPassword, userRemove, userDisable]
 }

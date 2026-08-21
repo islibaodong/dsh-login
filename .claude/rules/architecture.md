@@ -26,8 +26,8 @@ WS upgrades) with per-user dispatch and ownership filtering.
 ## Data Flow
 1. `apply()` builds SessionStore, UserStore (credential ref `${password}_USERS`),
    OwnershipIndex (`<dshHome>/.dsh-login/ownership.json`), gateway config
-2. Registers named routes: `/login`, `/api/auth/setup|login|logout`,
-   `/api/auth/me`, `/api/auth/admin/users[|/password|/remove]`, `/admin`
+2. Registers named routes: `/login`, `/api/auth/setup|login|logout`, `/logout`,
+   `/api/auth/me`, `/api/auth/admin/users[|/password|/disable|/remove]`
 3. Registers **fallback** handler (gateway): unauthenticated GET → 302 `/login`;
    authenticated → `serveStatic` from frontend dist (`distIndex`)
 4. Mounts the connection child plugin: `/api` prefix route (trust fence →

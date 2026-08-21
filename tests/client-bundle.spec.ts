@@ -40,4 +40,28 @@ describe('dsh-login browser client bundle (merge gate, Option A)', () => {
     expect(bundle).not.toContain("require('@deepseek-ai/dsh-client-connection")
     expect(bundle).not.toContain('require("@deepseek-ai/dsh-client-connection')
   })
+
+  it('carries the settings-panel wrapper as a second registration', () => {
+    const client = pkg.exports['./client'] as string
+    const bundle = readFileSync(join(repoRoot, client), 'utf8')
+    // Two registrations total: the re-stamped wire half (multi-line banner
+    // in the shipped bundle) and the single-line wrapper appended after it.
+    expect(bundle.match(/window\.__ModuleLoader__\.load\(/g)).toHaveLength(2)
+    // The shipped wire half is re-stamped to the internal id the wrapper
+    // materializes through the same-file require.
+    expect(bundle).toContain('id: "@islibaodong/dsh-login/connection"')
+    // The graph-row registration wraps it and carries the settings panel.
+    expect(bundle).toContain('window.__ModuleLoader__.load({ id: "@islibaodong/dsh-login"')
+    expect(bundle).toContain("require('@islibaodong/dsh-login/connection')")
+    expect(bundle).toContain('settings.section')
+    expect(bundle).toContain('/api/auth/admin/users/disable')
+    // Theme-following styles: the panel must skin via --dsw-alias-* tokens.
+    expect(bundle).toContain('--dsw-alias-label-primary')
+    expect(bundle).toContain('--dsw-alias-border-l2')
+  })
+
+  it('declares the settings-panel service needs in dsh.client.inject', () => {
+    expect(pkg.dsh.client!.inject).toContain('slots')
+    expect(pkg.dsh.client!.inject).toContain('locale')
+  })
 })

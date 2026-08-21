@@ -153,16 +153,16 @@ describe('dsh-login plugin (full composition)', () => {
     expect(anon.status).toBe(401)
   })
 
-  it('serves /admin and the admin JSON routes for admins', { timeout: 60_000 }, async () => {
+  it('serves the admin JSON routes for admins; the standalone /admin page is gone', { timeout: 60_000 }, async () => {
     const { port } = await loadComposition()
+    // The exact /admin route was removed (user management moved into the
+    // GUI settings panel); anonymous hits fall through to the gateway
+    // fallback, which redirects to /login.
     const anon = await request(port, '/admin')
     expect(anon.status).toBe(302)
     expect(anon.headers.get('location')).toBe('/login')
 
     const cookie = await setupAdmin(port, 's3cret')
-    const page = await request(port, '/admin', { headers: { Cookie: cookie } })
-    expect(page.status).toBe(200)
-    expect(page.body).toContain('/api/auth/admin/users')
 
     const created = await postJson(port, '/api/auth/admin/users', { username: 'alice', password: 'apw' }, cookie)
     expect(created.status).toBe(201)

@@ -17,9 +17,14 @@ paths registered by the connection child plugin.
 | POST | `/api/auth/admin/users/password` | admin | `{username,password}` → reset (404 unknown user) |
 | POST | `/api/auth/admin/users/disable` | admin | `{username,disabled:boolean}` → disable blocks login + revokes sessions; 409 last enabled admin |
 | POST | `/api/auth/admin/users/remove` | admin | `{username}` → remove; 409 refuses the last admin |
-| GET | `/admin` | admin session | Management page HTML; 302 `/login` otherwise |
 | ANY | `/api` (prefix) | host trust + `dsh_session` cookie | Carrier takeover: 403 untrusted host, 401 no session, 426 plain GET on event paths, 403 non-allowed method (non-admin), per-user dispatch otherwise |
 | WS | `/api/events.mux`, `/api/events.host` | host trust + cookie on upgrade | Per-user, ownership-filtered downlinks |
+
+No standalone `/admin` page anymore: user management ships inside the GUI
+settings panel (设置-用户管理 for admins, 账户 for ordinary users) via the
+browser bundle's settings section (`src/settings-panel.client.js`, appended to
+`dist/client.js` by `scripts/build-client.mjs`; theme via `--dsw-alias-*`
+tokens; identity picked from `/api/auth/me` at client apply).
 
 ## GET/HEAD fallback (gateway)
 `dsh_session` cookie required: 302 `/login` unauthenticated; else static dist

@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh.md)
 
-Multi-user authentication gateway plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI: user accounts with an admin page, and per-user conversation isolation on the `/api` carrier.
+Multi-user authentication gateway plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI: user accounts managed inside the GUI settings panel, and per-user conversation isolation on the `/api` carrier.
 
 ## What it does
 
@@ -33,7 +33,7 @@ That's it. The package declares its `cordis.patch.yml` as a bundle patch, so `ad
 
 Start DSH (`dsh web`), open the GUI in your browser, and you'll see the setup page. Pick a username and password -- that first account becomes the administrator (scrypt-hashed, stored automatically in the DSH credentials system). On subsequent visits, the normal username/password login page appears.
 
-No environment variables to set, no config files to edit. Accounts are created through the browser: the first (admin) account on first use, further accounts by an admin on the `/admin` page.
+No environment variables to set, no config files to edit. Accounts are created through the browser: the first (admin) account on first use, further accounts by an admin in the GUI settings panel (设置 → 用户管理).
 
 ### Manual installation (alternative)
 
@@ -70,7 +70,7 @@ If you prefer managing `cordis.patch.yml` yourself, add these rows to your profi
 1. **First visit** (no users yet) -> `/login` shows a "Create administrator account" page (username + password)
 2. User picks credentials -> `POST /api/auth/setup` creates the forced-admin account (scrypt-hashed, stored under the `${password}_USERS` credential ref, default `DSH_LOGIN_PASSWORD_USERS`) and logs it in
 3. **Subsequent visits** -> `/login` shows the normal username/password login form
-4. **User management** -> admins open `/admin` to list, create, remove users and change passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused; removal or password change revokes that user's live sessions immediately)
+4. **User management** -> admins open 设置 → 用户管理 in the GUI to list (online status), create, disable/enable, remove users and reset passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused; removal, password change, or disabling revokes that user's live sessions immediately)
 5. **Security** -> `/api/auth/setup` returns 403 once any user exists, preventing hijacking
 
 > **Migration note:** the legacy single-password credential (default ref `DSH_LOGIN_PASSWORD`) no longer logs anyone in. It stays configured but is unused for authentication — the `password` config key now only namespaces the user store credential ref (`${password}_USERS`). Upgrading an existing single-password deployment therefore requires the first visit to bootstrap a fresh administrator account.
@@ -86,7 +86,6 @@ Request -> WebServer
   ├─ /logout (exact)          -> GET: same revocation, redirect to /login
   ├─ /api/auth/me (exact)     -> GET: current session identity
   ├─ /api/auth/admin/* (exact) -> admin JSON API (users, password, disable, remove)
-  ├─ /admin (exact)           -> admin management page (302 /login otherwise)
   ├─ /api/* (prefix)          -> dsh-login connection takeover:
   │                             ├─ untrusted host -> 403
   │                             ├─ no valid cookie -> 401
@@ -114,9 +113,9 @@ Request -> WebServer
   - also forbidden: `llm.discoverModels` and the privileged `host.*` directory dialogs (`pickDirectory`, `listDirectory`, `createDirectory`, `openPath`)
   - the physical `session.export` channel (target in the query string, outside the envelope) is ownership-guarded at the carrier
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
-- **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the `/admin` management page.
-- **Logout:** every served HTML index carries a fixed-position logout button (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link; the admin page has a topbar logout link.
-- **Admin user management:** the user list reports each account's online session count and disabled flag; per-row actions reset passwords, disable/enable accounts (disabled users cannot log in and their live sessions are revoked; the last enabled admin cannot be disabled), and remove users.
+- **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
+- **Logout:** every served HTML index carries a fixed-position logout button (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link; the settings panel's 用户管理/账户 section carries a logout entry for every user.
+- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. The user list reports each account's online session count and disabled flag; per-row actions reset passwords, disable/enable accounts (disabled users cannot log in and their live sessions are revoked; the last enabled admin cannot be disabled), and remove users. Ordinary users get an 账户 section with their identity and the logout entry. The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
 
 ## Data locations
 
@@ -130,13 +129,13 @@ Request -> WebServer
 
 This plugin replaces the shipped `/api` connection row: `cordis.patch.yml` disables it (the WebServer rejects duplicate `/api` prefix registrations, so the shipped row must stay off) and `dsh-login` mounts its own identity-aware carrier (`src/connection.ts`) as a child plugin — same host-trust fence, but every request is resolved from the session cookie and dispatched per user.
 
-The browser half is untouched protocol-wise, but the GUI's wire client must keep coming from this package: the client-modules scanner drops browser halves of disabled rows from the boot graph. dsh-login therefore declares its own `dsh.client` and ships the bundle `dist/client.js` — a re-stamped copy of the shipped connection client (`src/connection.client.ts` re-exports it verbatim). Regenerate it with:
+The browser half is untouched protocol-wise, but the GUI's wire client must keep coming from this package: the client-modules scanner drops browser halves of disabled rows from the boot graph. dsh-login therefore declares its own `dsh.client` and ships the bundle `dist/client.js` — a re-stamped copy of the shipped connection client (`src/connection.client.ts` re-exports it verbatim) **plus a second module registration**: the settings-panel wrapper (`src/settings-panel.client.js`) that applies the wire client verbatim and registers the 设置 → 用户管理/账户 settings section (styled via the framework's `--dsw-alias-*` theme tokens). Regenerate it with:
 
 ```bash
 npm run build:client   # node scripts/build-client.mjs; uses node_modules or $DSH_HARNESS_CHECKOUT
 ```
 
-**You must re-run this after upgrading `@deepseek-ai/dsh-client-connection`**, or the browser bundle goes stale against the new carrier.
+**You must re-run this after upgrading `@deepseek-ai/dsh-client-connection` or editing `src/settings-panel.client.js`**, or the browser bundle goes stale against the new carrier.
 
 ## Security notes
 
@@ -189,15 +188,16 @@ src/
 ├── api-filter.ts     # per-user ApiProxy decorator: allow-list, ownership guards, frame filtering
 ├── connection.ts     # dsh-login-connection: /api carrier takeover + WS downlinks (child plugin)
 ├── connection.client.ts  # browser half: re-exports the shipped connection client verbatim
-├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON routes + GET /admin page
+├── settings-panel.client.js  # settings-panel browser half (plain JS): 用户管理/账户 section, theme-token styled
+├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON routes (settings-panel backend)
 ├── auth.ts           # Cookie management + constant-time compare helpers
 ├── gateway.ts        # Auth gateway handler (fallback + serveStatic)
 ├── login-api.ts      # POST /api/auth/login + logout + setup
-├── login-page.ts     # Login, setup and admin page HTML
+├── login-page.ts     # Login and setup page HTML
 ├── http-json.ts      # readBody/sendJson helpers + resolveDshHome
 └── web-runtime.ts    # webRuntime takeover: LAN trust + DSH_WEB_URL
 dist/client.js        # built browser bundle (npm run build:client)
-scripts/build-client.mjs  # regenerates dist/client.js from the shipped carrier bundle
+scripts/build-client.mjs  # regenerates dist/client.js: shipped carrier bundle + settings panel
 tests/
 ├── *.spec.ts         # vitest test definitions
 └── memory-credentials.ts   # Test-only in-memory credential provider

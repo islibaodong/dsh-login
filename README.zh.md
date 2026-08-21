@@ -2,7 +2,7 @@
 
 [English](./README.md) | 简体中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的多用户认证网关插件：用户账号 + 管理员页面，`/api` 通道按用户做会话隔离。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的多用户认证网关插件：用户账号在 GUI 设置面板内管理，`/api` 通道按用户做会话隔离。
 
 ## 它做什么
 
@@ -33,7 +33,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 
 启动 DSH（`dsh web`），在浏览器中打开 Web GUI，你会看到初始设置页面。选择用户名和密码——首个账号即成为管理员（scrypt 哈希后自动存入 DSH 凭据系统）。后续访问将显示正常的用户名/密码登录页。
 
-无需设置环境变量，无需编辑配置文件。账号全部通过浏览器创建：首个（管理员）账号在首次访问时创建，其余账号由管理员在 `/admin` 页面添加。
+无需设置环境变量，无需编辑配置文件。账号全部通过浏览器创建：首个（管理员）账号在首次访问时创建，其余账号由管理员在 GUI「设置 → 用户管理」中添加。
 
 ### 手动安装（可选）
 
@@ -68,7 +68,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 1. **首次访问**（无任何用户）-> `/login` 显示「创建管理员账号」页面（用户名 + 密码）
 2. 用户选择凭据 -> `POST /api/auth/setup` 创建强制管理员的第一个账号（scrypt 哈希，存入 `${password}_USERS` 凭据引用，默认 `DSH_LOGIN_PASSWORD_USERS`）并自动登录
 3. **后续访问** -> `/login` 显示正常的用户名/密码登录表单
-4. **用户管理** -> 管理员打开 `/admin` 列出、创建、删除用户及修改密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝；删除用户或修改密码会立即吊销该用户的全部活跃会话）
+4. **用户管理** -> 管理员在 GUI「设置 → 用户管理」列出（在线状态）、创建、禁用/启用、删除用户及重置密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝；删除、改密码或禁用会立即吊销该用户的全部活跃会话）
 5. **安全保护** -> 已有用户后 `/api/auth/setup` 返回 403，防止劫持
 
 > **迁移说明：** 旧版单一密码凭据（默认引用 `DSH_LOGIN_PASSWORD`）不再能登录任何人。它保持已配置状态但认证不再使用——`password` 配置项现在只用于派生用户存储引用（`${password}_USERS`）。因此从单密码部署升级后，首次访问需要重新引导创建一个管理员账号。
@@ -84,7 +84,6 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   ├─ /logout (精确)           -> GET: 同样撤销，重定向到 /login
   ├─ /api/auth/me (精确)      -> GET: 当前会话身份
   ├─ /api/auth/admin/* (精确) -> 管理员 JSON API（users、password、disable、remove）
-  ├─ /admin (精确)            -> 管理页面（非管理员 302 /login）
   ├─ /api/* (前缀匹配)        -> dsh-login 通道接管：
   │                             ├─ 主机不可信 -> 403
   │                             ├─ 无有效 Cookie -> 401
@@ -112,9 +111,9 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   - 同样禁止：`llm.discoverModels` 以及特权 `host.*` 目录对话框（`pickDirectory`、`listDirectory`、`createDirectory`、`openPath`）
   - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
-- **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及 `/admin` 管理页面。
-- **登出：** 每个下发的 HTML 首页都带固定位置的登出按钮（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用；管理页顶栏也有登出入口。
-- **管理员用户管理：** 用户列表显示每个账号的在线会话数与禁用标记；每行提供重置密码、禁用/启用（被禁用户无法登录且现有会话立即吊销；最后一个启用中的管理员不可禁用）、删除用户操作。
+- **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
+- **登出：** 每个下发的 HTML 首页都带固定位置的登出按钮（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用；设置面板的「用户管理/账户」分区为每个用户提供登出入口。
+- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。用户列表显示每个账号的在线会话数与禁用标记；每行提供重置密码、禁用/启用（被禁用户无法登录且现有会话立即吊销；最后一个启用中的管理员不可禁用）、删除用户操作。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
 
 ## 数据位置
 
@@ -128,13 +127,13 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 
 本插件替换自带的 `/api` connection 行：`cordis.patch.yml` 将其禁用（WebServer 拒绝重复的 `/api` 前缀注册，因此自带行必须保持关闭），`dsh-login` 以子插件形式挂载自己的身份感知通道（`src/connection.ts`）——同样的主机信任围栏，但每个请求都从会话 Cookie 解析身份并按用户分发。
 
-浏览器端的协议不变，但 GUI 的线上客户端必须继续由本包提供：client-modules 扫描器会把被禁用行的浏览器半边从启动图中剔除。因此 dsh-login 声明了自身的 `dsh.client` 并随包发布 bundle `dist/client.js`——它是自带 connection 客户端的重新打标副本（`src/connection.client.ts` 原样转发导出）。重新生成：
+浏览器端的协议不变，但 GUI 的线上客户端必须继续由本包提供：client-modules 扫描器会把被禁用行的浏览器半边从启动图中剔除。因此 dsh-login 声明了自身的 `dsh.client` 并随包发布 bundle `dist/client.js`——它是自带 connection 客户端的重新打标副本（`src/connection.client.ts` 原样转发导出），**外加第二个模块注册**：设置面板包装器（`src/settings-panel.client.js`），它原样应用线上客户端并注册「设置 → 用户管理/账户」设置分区（样式走框架 `--dsw-alias-*` 主题令牌）。重新生成：
 
 ```bash
 npm run build:client   # node scripts/build-client.mjs；使用 node_modules 或 $DSH_HARNESS_CHECKOUT
 ```
 
-**升级 `@deepseek-ai/dsh-client-connection` 之后必须重新执行**，否则浏览器 bundle 会与新通道脱节。
+**升级 `@deepseek-ai/dsh-client-connection` 或修改 `src/settings-panel.client.js` 之后必须重新执行**，否则浏览器 bundle 会与新通道脱节。
 
 ## 安全说明
 
@@ -187,15 +186,16 @@ src/
 ├── api-filter.ts     # 按用户的 ApiProxy 装饰器：允许清单、所有权守卫、帧过滤
 ├── connection.ts     # dsh-login-connection：/api 通道接管 + WS 下联（子插件）
 ├── connection.client.ts  # 浏览器半边：原样转发自带 connection 客户端
-├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON 路由 + GET /admin 页面
+├── settings-panel.client.js  # 设置面板浏览器半边（纯 JS）：用户管理/账户分区，主题令牌样式
+├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON 路由（设置面板后端）
 ├── auth.ts           # Cookie 管理 + 常量时间比较工具
 ├── gateway.ts        # 认证网关 handler（fallback + serveStatic）
 ├── login-api.ts      # POST /api/auth/login + logout + setup
-├── login-page.ts     # 登录页、设置页与管理页 HTML
+├── login-page.ts     # 登录页与设置页 HTML
 ├── http-json.ts      # readBody/sendJson 工具 + resolveDshHome
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
-scripts/build-client.mjs  # 从自带通道 bundle 重新生成 dist/client.js
+scripts/build-client.mjs  # 重新生成 dist/client.js：自带通道 bundle + 设置面板
 tests/
 ├── *.spec.ts         # vitest 测试定义
 └── memory-credentials.ts   # 测试用内存凭据提供器

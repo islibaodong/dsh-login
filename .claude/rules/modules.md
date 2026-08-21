@@ -58,9 +58,10 @@
 ## src/admin-api.ts
 - `createAdminRoutes`: GET `/api/auth/me`; GET/POST `/api/auth/admin/users`
   (list / create); POST `/api/auth/admin/users/password`;
-  POST `/api/auth/admin/users/remove` (refuses the last admin);
-  GET `/admin` HTML page (302 `/login` for non-admins). 8KB body cap;
-  webserver registers (kind,path) pairs, so GET/POST dispatch inside handlers.
+  POST `/api/auth/admin/users/disable`;
+  POST `/api/auth/admin/users/remove` (refuses the last admin).
+  8KB body cap; webserver registers (kind,path) pairs, so GET/POST dispatch
+  inside handlers. No `/admin` HTML page — the settings panel owns the UI.
 
 ## src/http-json.ts
 - `readBody` (8KB default cap), `sendJson`, `resolveDshHome` (`DSH_HOME` env
@@ -82,8 +83,19 @@
   (else 403); creates the forced-admin account and logs it in.
 
 ## src/login-page.ts
-- `renderLoginPage()` / `renderSetupPage()` / `renderAdminPage()`:
-  self-contained HTML (inline CSS/JS, DSH dark theme).
+- `renderLoginPage()` / `renderSetupPage()`: self-contained HTML (inline
+  CSS/JS, DSH dark theme).
+
+## src/settings-panel.client.js
+- Settings-panel browser half (plain JS, appended verbatim to
+  `dist/client.js`): a wrapper factory that materializes the re-stamped
+  connection client (`@islibaodong/dsh-login/connection`, same-bundle
+  require) and returns one plugin that applies it verbatim + registers the
+  `settings.section` slot entry — 用户管理 (id `users`, admin) or 账户
+  (id `account`, ordinary) picked from `/api/auth/me`. Table + create card +
+  reset/disable/remove dialogs + logout entry; React and Button/Input/Modal/
+  RiskConfirmation come from the platform module-table seeds; styles are
+  `--dsw-alias-*` theme tokens (auto light/dark).
 
 ## src/web-runtime.ts
 - `resolveLanTrust` (LAN IPv4 literals when bound 0.0.0.0 + extras),
@@ -94,9 +106,12 @@
 ## scripts/build-client.mjs
 - Regenerates `dist/client.js`: copies the shipped connection client bundle
   (from node_modules or `$DSH_HARNESS_CHECKOUT`), re-stamps the
-  `window.__ModuleLoader__.load({ id: ... })` banner to this package, drops
-  the sourceMappingURL comment. Run via `npm run build:client` after upgrading
-  `@deepseek-ai/dsh-client-connection`.
+  `window.__ModuleLoader__.load({ id: ... })` banner to the internal id
+  `@islibaodong/dsh-login/connection`, drops the sourceMappingURL comment,
+  then appends the settings-panel wrapper registration under the package id.
+  Run via `npm run build:client` after upgrading
+  `@deepseek-ai/dsh-client-connection` or editing
+  `src/settings-panel.client.js`.
 
 ## tests/
 - `session/auth/login-page/login-api/gateway/plugin-entry/users/ownership/

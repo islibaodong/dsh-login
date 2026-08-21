@@ -305,22 +305,14 @@ describe('POST /api/auth/admin/users/disable', () => {
   })
 })
 
-describe('GET /admin', () => {
-  it('serves the admin page to an admin session', { timeout: 60_000 }, async () => {
+describe('GET /admin (removed standalone page)', () => {
+  it('no longer registers a route: the path falls through unclaimed', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })
     const cookie = await loginCookie(port, 'root', 'rootpw')
-    const res = await req(port, 'GET', '/admin', undefined, cookie)
-    expect(res.status).toBe(200)
-    expect(res.text).toContain('/api/auth/admin/users')
-  })
-
-  it('redirects anonymous and non-admin sessions to /login', { timeout: 60_000 }, async () => {
-    const { port } = await boot({ rootPassword: 'rootpw' })
-    const anon = await req(port, 'GET', '/admin')
-    expect(anon.status).toBe(302)
-    expect(anon.headers.get('location')).toBe('/login')
-    const bob = await req(port, 'GET', '/admin', undefined, await loginCookie(port, 'bob', 'bobpw'))
-    expect(bob.status).toBe(302)
-    expect(bob.headers.get('location')).toBe('/login')
+    // User management moved into the GUI settings panel; without the old
+    // exact route (and with no gateway fallback in this harness) the
+    // webserver itself answers 404 for admin and ordinary sessions alike.
+    expect((await req(port, 'GET', '/admin', undefined, cookie)).status).toBe(404)
+    expect((await req(port, 'GET', '/admin')).status).toBe(404)
   })
 })

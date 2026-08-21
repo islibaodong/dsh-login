@@ -1,6 +1,6 @@
 {
   "name": "@islibaodong/dsh-login",
-  "description": "Single-password authentication gateway plugin for the DSH Web GUI",
+  "description": "Multi-user authentication gateway plugin for the DSH Web GUI",
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
@@ -25,7 +25,7 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": [],
+      "inject": ["slots", "locale"],
       "platform": "web",
       "immediately": true
     }
