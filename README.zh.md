@@ -127,7 +127,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 
 本插件替换自带的 `/api` connection 行：`cordis.patch.yml` 将其禁用（WebServer 拒绝重复的 `/api` 前缀注册，因此自带行必须保持关闭），`dsh-login` 以子插件形式挂载自己的身份感知通道（`src/connection.ts`）——同样的主机信任围栏，但每个请求都从会话 Cookie 解析身份并按用户分发。
 
-浏览器端的协议不变，但 GUI 的线上客户端必须继续由本包提供：client-modules 扫描器会把被禁用行的浏览器半边从启动图中剔除。因此 dsh-login 声明了自身的 `dsh.client` 并随包发布 bundle `dist/client.js`——它是自带 connection 客户端的重新打标副本（`src/connection.client.ts` 原样转发导出），**外加第二个模块注册**：设置面板包装器（`src/settings-panel.client.js`），它原样应用线上客户端并注册「设置 → 用户管理/账户」设置分区（样式走框架 `--dsw-alias-*` 主题令牌）。重新生成：
+浏览器端的协议不变，但 GUI 的线上客户端必须继续由本包提供：client-modules 扫描器会把被禁用行的浏览器半边从启动图中剔除。因此 dsh-login 声明了自身的 `dsh.client` 并随包发布 bundle `dist/client.js`——它是自带 connection 客户端的重新打标副本（`src/connection.client.ts` 原样转发导出），**外加第二个模块注册**：设置面板包装器（`src/settings-panel.client.js`），它原样应用线上客户端并注册「设置 → 用户管理/账户」设置分区（样式走框架 `--dsw-alias-*` 主题令牌；样式表按框架 bundle 预置的形状预打 `data-plugin`/`data-plugin-css` 标签）。`dsh.client.inject` 字段遵循生态惯例——填浏览器半边所需服务背后的**包 id**（`@deepseek-ai/dsh-client-ui-settings`、`@deepseek-ai/dsh-client-locale`），而非服务名；运行时纤维自身导出的 `inject` 才是权威依赖。React 与 UI 原语经平台模块表种子解析，任何 bundle 都可合法 require。重新生成：
 
 ```bash
 npm run build:client   # node scripts/build-client.mjs；使用 node_modules 或 $DSH_HARNESS_CHECKOUT
