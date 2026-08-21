@@ -55,13 +55,22 @@ describe('dsh-login browser client bundle (merge gate, Option A)', () => {
     expect(bundle).toContain("require('@islibaodong/dsh-login/connection')")
     expect(bundle).toContain('settings.section')
     expect(bundle).toContain('/api/auth/admin/users/disable')
-    // Theme-following styles: the panel must skin via --dsw-alias-* tokens.
+    // Theme-following styles: the panel must skin via --dsw-alias-* tokens,
+    // injected as a pre-tagged deduped style (framework bundle-preset shape).
     expect(bundle).toContain('--dsw-alias-label-primary')
     expect(bundle).toContain('--dsw-alias-border-l2')
+    expect(bundle).toContain('dataset.pluginCss')
+    expect(bundle).toContain('settings-panel.css')
   })
 
-  it('declares the settings-panel service needs in dsh.client.inject', () => {
-    expect(pkg.dsh.client!.inject).toContain('slots')
-    expect(pkg.dsh.client!.inject).toContain('locale')
+  it('declares the settings-panel dependency edges in dsh.client.inject', () => {
+    // Convention (official + third-party settings plugins): inject lists the
+    // PACKAGE ids owning the services the browser half needs — not service
+    // names. Informational for the boot graph; the runtime fiber's own
+    // exported inject ('slots', 'locale') stays authoritative.
+    expect(pkg.dsh.client!.inject).toEqual([
+      '@deepseek-ai/dsh-client-ui-settings',
+      '@deepseek-ai/dsh-client-locale',
+    ])
   })
 })

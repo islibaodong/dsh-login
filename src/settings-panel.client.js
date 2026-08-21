@@ -411,12 +411,18 @@ function (require) {
   }
 
   // Factory-time side effect (module-system contract): inject the themed
-  // stylesheet. The module system claims untagged <style> tags for the
-  // materializing plugin id (HMR bookkeeping).
+  // stylesheet, pre-tagged the way the framework's own bundle preset does
+  // (data-plugin + a stable data-plugin-css tag id, deduped by that id) so
+  // HMR re-materialization reuses the tag instead of stacking duplicates.
   if (typeof document !== 'undefined') {
-    var styleEl = document.createElement('style')
-    styleEl.textContent = CSS
-    document.head.append(styleEl)
+    var styleTagId = '@islibaodong/dsh-login/settings-panel.css'
+    if (document.querySelector('style[data-plugin-css=' + JSON.stringify(styleTagId) + ']') === null) {
+      var styleEl = document.createElement('style')
+      styleEl.dataset.plugin = '@islibaodong/dsh-login'
+      styleEl.dataset.pluginCss = styleTagId
+      styleEl.textContent = CSS
+      document.head.append(styleEl)
+    }
   }
 
   // ---- the wrapper plugin ----
