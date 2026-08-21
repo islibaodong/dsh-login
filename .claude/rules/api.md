@@ -28,7 +28,7 @@ tokens; identity picked from `/api/auth/me` at client apply).
 
 ## GET/HEAD fallback (gateway)
 `dsh_session` cookie required: 302 `/login` unauthenticated; else static dist
-(HTML indexes get a fixed-position logout button injected before `</body>`);
+served verbatim (no injected widgets — logout lives in the settings panel);
 other methods 405.
 
 ## Cookie

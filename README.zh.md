@@ -93,10 +93,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   │                             之后按用户过滤事件下联
   └─ fallback (兜底)          -> dsh-login: 认证网关 + 静态文件服务
                                   ├─ 无有效 Cookie -> 302 重定向到 /login
-                                  └─ 有有效 Cookie -> serveStatic() 提供文件；
-                                                      HTML 首页注入固定位置的
-                                                      登出按钮（POST
-                                                      /api/auth/logout → /login）
+                                  └─ 有有效 Cookie -> serveStatic() 提供文件
 ```
 
 - **Cookie 名称**：`dsh_session`，HttpOnly、SameSite=Strict、Path=/
@@ -112,7 +109,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
-- **登出：** 每个下发的 HTML 首页都带固定位置的登出按钮（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用；设置面板的「用户管理/账户」分区为每个用户提供登出入口。
+- **登出：** 设置面板的「用户管理/账户」分区为每个用户提供登出入口（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用。
 - **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。用户列表显示每个账号的在线会话数与禁用标记；每行提供重置密码、禁用/启用（被禁用户无法登录且现有会话立即吊销；最后一个启用中的管理员不可禁用）、删除用户操作。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
 
 ## 数据位置

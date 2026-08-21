@@ -25,15 +25,8 @@ export function createGatewayHandler(
   store: SessionStore,
 ): WebRoute['handler'] {
   const distRoot = dirname(config.distIndex)
-  // Minimal fixed-position logout button injected into every served HTML
-  // index: revokes the session via POST /api/auth/logout, then returns to
-  // the login page. The main GUI has no logout affordance of its own, so
-  // this is the universal entry point for every logged-in user.
-  const logoutWidget = `<script>(function(){function ready(fn){if(document.readyState!=='loading'){fn()}else{document.addEventListener('DOMContentLoaded',fn)}}ready(function(){var b=document.createElement('button');b.textContent='Log out';b.setAttribute('aria-label','Log out');b.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;padding:6px 14px;border-radius:8px;border:1px solid #2a2a4a;background:#16213e;color:#8f9bb3;font-size:13px;cursor:pointer;opacity:0.55;transition:opacity .2s';b.onmouseenter=function(){b.style.opacity='1';b.style.color='#ff6b6b';b.style.borderColor='#ff6b6b'};b.onmouseleave=function(){b.style.opacity='0.55';b.style.color='#8f9bb3';b.style.borderColor='#2a2a4a'};b.onclick=function(){b.disabled=true;b.textContent='…';fetch('/api/auth/logout',{method:'POST'}).catch(function(){}).finally(function(){window.location.href='/login'})};document.body.appendChild(b)})})();</script>`
-  const renderIndex = async (): Promise<string> => {
-    const html = ctx.webServer.applyIndexTaps(await readFile(config.distIndex, 'utf8'))
-    return html.includes('</body>') ? html.replace('</body>', `${logoutWidget}</body>`) : html + logoutWidget
-  }
+  const renderIndex = async (): Promise<string> =>
+    ctx.webServer.applyIndexTaps(await readFile(config.distIndex, 'utf8'))
 
   return async (req: IncomingMessage, res: ServerResponse) => {
     // Non-GET/HEAD without a matching named route is 405 (fallback-only

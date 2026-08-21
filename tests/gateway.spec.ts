@@ -121,7 +121,7 @@ describe('gateway handler', () => {
     expect(res.body).toContain('spa-fallback')
   })
 
-  it('injects the logout widget into served HTML indexes', { timeout: 60_000 }, async () => {
+  it('serves HTML indexes unmodified (no injected widgets)', { timeout: 60_000 }, async () => {
     const { ctx, port } = await bootServer()
     const dist = join(root!, 'dist')
     await mkdir(dist, { recursive: true })
@@ -136,10 +136,8 @@ describe('gateway handler', () => {
       headers: { Cookie: `dsh_session=${session.token}` },
     })
     expect(res.status).toBe(200)
-    expect(res.body).toContain('shell')
-    expect(res.body).toContain('/api/auth/logout')
-    expect(res.body).toContain('Log out')
-    // Injected before the closing body tag, not appended after </html>.
-    expect(res.body.indexOf('/api/auth/logout')).toBeLessThan(res.body.lastIndexOf('</body>'))
+    // Logout moved to the settings panel (用户管理/账户); the gateway must
+    // serve the shell's HTML verbatim apart from index taps.
+    expect(res.body).toBe('<html><body>shell</body></html>')
   })
 })

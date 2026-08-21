@@ -95,10 +95,7 @@ Request -> WebServer
   │                             then ownership-filtered per-user downlinks
   └─ fallback                  -> dsh-login: auth gateway + static files
                                   ├─ no valid cookie -> 302 /login
-                                  └─ valid cookie   -> serveStatic(); HTML indexes
-                                                      get a fixed-position logout
-                                                      button injected (POST
-                                                      /api/auth/logout → /login)
+                                  └─ valid cookie   -> serveStatic()
 ```
 
 - **Cookie:** `dsh_session`, HttpOnly, SameSite=Strict, Path=/
@@ -114,7 +111,7 @@ Request -> WebServer
   - the physical `session.export` channel (target in the query string, outside the envelope) is ownership-guarded at the carrier
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
-- **Logout:** every served HTML index carries a fixed-position logout button (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link; the settings panel's 用户管理/账户 section carries a logout entry for every user.
+- **Logout:** the settings panel's 用户管理/账户 section carries a logout entry for every user (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link.
 - **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. The user list reports each account's online session count and disabled flag; per-row actions reset passwords, disable/enable accounts (disabled users cannot log in and their live sessions are revoked; the last enabled admin cannot be disabled), and remove users. Ordinary users get an 账户 section with their identity and the logout entry. The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
 
 ## Data locations
