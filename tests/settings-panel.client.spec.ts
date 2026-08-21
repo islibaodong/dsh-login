@@ -111,6 +111,20 @@ describe('settings-panel client factory', () => {
     expect(plugin.inject).toEqual([])
   })
 
+  it('keeps the users table single-line: actions column never wraps, last-login replaces created', () => {
+    // Layout guards for the 用户管理 table:
+    // - the actions cell must be a regular grid track that cannot wrap
+    //   (flex-wrap: nowrap; no grid-column span onto its own line);
+    // - the audit column is last login, never creation time, with a
+    //   never-logged-in placeholder.
+    expect(source).toContain('.dshlu-cell--actions { display: flex; flex-wrap: nowrap;')
+    expect(source).not.toContain('grid-column: 1 / -1')
+    expect(source).toContain("'col.lastLogin'")
+    expect(source).toContain("'status.never'")
+    expect(source).not.toContain("'col.created'")
+    expect(source).not.toContain('u.createdAt')
+  })
+
   it('applies the internal connection client synchronously, before any probe', () => {
     const { ctx } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)

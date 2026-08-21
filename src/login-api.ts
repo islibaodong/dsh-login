@@ -63,6 +63,9 @@ export function createLoginHandler(deps: LoginDeps): WebRoute['handler'] {
       sendJson(res, 401, { error: 'invalid credentials' })
       return
     }
+    // Best-effort audit stamp (shown in 设置-用户管理): never fail a
+    // verified login over it.
+    await deps.users.touchLastLogin(record.username).catch(() => {})
     const session = deps.store.create(record.username, record.isAdmin)
     res.setHeader('Set-Cookie', buildCookieHeader(session.token, deps.sessionTtl))
     sendJson(res, 200, { ok: true })
@@ -123,6 +126,9 @@ export function createSetupHandler(deps: LoginDeps): WebRoute['handler'] {
       sendJson(res, 400, { error: 'bad request' })
       return
     }
+    // First-time setup both creates the forced-admin account and signs it
+    // in, so its last-login stamp starts at creation.
+    await deps.users.touchLastLogin(record.username).catch(() => {})
     const session = deps.store.create(record.username, record.isAdmin)
     res.setHeader('Set-Cookie', buildCookieHeader(session.token, deps.sessionTtl))
     sendJson(res, 200, { ok: true })

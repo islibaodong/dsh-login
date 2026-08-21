@@ -1,5 +1,16 @@
 # Memory Changelog
 
+## 2026-08-21 — Users table: single-line actions + last-login column
+- 设置-用户管理 table: the actions cell (重置密码/禁用-启用/删除) is now a
+  regular grid track at the row's end — `flex-wrap: nowrap`, no more
+  `grid-column: 1 / -1` second line. `UserRecord.lastLoginAt?` (epoch ms)
+  stamped by `touchLastLogin()` on every successful login/setup; the table
+  dropped `createdAt` for a compact 最后登录 column (从未登录 placeholder,
+  API returns `lastLoginAt: null` for never).
+- Tests: admin list (root stamped / bob null → stamped after login), login
+  200 stamps / 401 does not, setup stamps; settings-panel spec guards the
+  layout invariants in source.
+
 ## 2026-08-20 — Fix: UI plugins dead after login
 - Root cause: the takeover bridged `/api` straight to `toFetchHandler` and
   never re-provided the `connection` service, so the Typert Remote gateway

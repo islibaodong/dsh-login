@@ -115,17 +115,26 @@ describe('GET /api/auth/me', () => {
 })
 
 describe('GET /api/auth/admin/users', () => {
-  it('lists users for an admin', { timeout: 60_000 }, async () => {
+  it('lists users for an admin, with last-login stamps', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })
     const cookie = await loginCookie(port, 'root', 'rootpw')
     const res = await req(port, 'GET', '/api/auth/admin/users', undefined, cookie)
     expect(res.status).toBe(200)
-    const body = res.json as { users: Array<{ username: string; isAdmin: boolean; createdAt: number }> }
+    const body = res.json as { users: Array<{ username: string; isAdmin: boolean; lastLoginAt: number | null }> }
     expect(body.users.map(u => u.username).sort()).toEqual(['bob', 'root'])
     for (const u of body.users) {
-      expect(typeof u.createdAt).toBe('number')
       expect(typeof u.isAdmin).toBe('boolean')
     }
+    // root just logged in (loginCookie); bob never did since the feature shipped.
+    const root = body.users.find(u => u.username === 'root')!
+    const bob = body.users.find(u => u.username === 'bob')!
+    expect(typeof root.lastLoginAt).toBe('number')
+    expect(bob.lastLoginAt).toBeNull()
+    // Logging in stamps bob's record.
+    await loginCookie(port, 'bob', 'bobpw')
+    const res2 = await req(port, 'GET', '/api/auth/admin/users', undefined, cookie)
+    const body2 = res2.json as typeof body
+    expect(typeof body2.users.find(u => u.username === 'bob')!.lastLoginAt).toBe('number')
   })
 
   it('returns 403 for an ordinary user', { timeout: 60_000 }, async () => {

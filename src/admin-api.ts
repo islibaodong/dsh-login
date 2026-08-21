@@ -74,7 +74,7 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
         users: records.map(record => ({
           username: record.username,
           isAdmin: record.isAdmin,
-          createdAt: record.createdAt,
+          lastLoginAt: record.lastLoginAt ?? null,
           disabled: record.disabled === true,
           onlineSessions: online.get(record.username) ?? 0,
         })),

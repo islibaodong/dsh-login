@@ -40,15 +40,16 @@ function (require) {
 .dshlu-notice--error { color: var(--dsw-alias-state-error-primary); }
 .dshlu-notice--success { color: var(--dsw-alias-state-success-primary); }
 .dshlu-table { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 0; }
-.dshlu-head, .dshlu-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 64px 168px 148px; gap: 8px; align-items: center; }
+.dshlu-head, .dshlu-row { display: grid; grid-template-columns: minmax(0, 1fr) 56px 150px 112px max-content; gap: 8px; align-items: center; }
 .dshlu-head { padding: 0 14px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
-.dshlu-row { padding: 8px 14px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
+.dshlu-head > :last-child { text-align: right; }
+.dshlu-row { padding: 8px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
 .dshlu-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .dshlu-row--disabled .dshlu-name { color: var(--dsw-alias-label-tertiary); }
 .dshlu-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; line-height: 22px; font-weight: 500; overflow-wrap: anywhere; }
 .dshlu-cell { font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-secondary); }
-.dshlu-cell--created { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
-.dshlu-cell--actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.dshlu-cell--login { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dshlu-cell--actions { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .dshlu-badge { flex: none; padding: 1px 6px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 4px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
 .dshlu-badge--muted { color: var(--dsw-alias-label-caption); }
 .dshlu-badge--admin { border-color: transparent; background: var(--dsw-alias-fill-tsp-secondary); color: var(--dsw-alias-label-secondary); }
@@ -83,8 +84,10 @@ function (require) {
     'account.logout': '退出登录',
     'col.username': '用户名',
     'col.role': '角色',
-    'col.created': '创建时间',
+    'col.lastLogin': '最后登录',
     'col.status': '状态',
+    'col.actions': '操作',
+    'status.never': '从未登录',
     'role.admin': '管理员',
     'role.user': '用户',
     'status.online': '在线 ×{n}',
@@ -122,8 +125,10 @@ function (require) {
     'account.logout': 'Log out',
     'col.username': 'Username',
     'col.role': 'Role',
-    'col.created': 'Created',
+    'col.lastLogin': 'Last login',
     'col.status': 'Status',
+    'col.actions': 'Actions',
+    'status.never': 'never',
     'role.admin': 'admin',
     'role.user': 'user',
     'status.online': 'online ×{n}',
@@ -192,7 +197,9 @@ function (require) {
 
   function fmtDate(ms) {
     var d = new Date(ms)
-    return isNaN(d.getTime()) ? String(ms) : d.toLocaleString()
+    if (isNaN(d.getTime())) return String(ms)
+    // Compact minute precision keeps the last-login column narrow.
+    return d.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
   }
 
   // ---- shared pieces ----
@@ -297,15 +304,17 @@ function (require) {
         h('div', { className: 'dshlu-head' },
           h('div', null, t('col.username')),
           h('div', null, t('col.role')),
-          h('div', null, t('col.created')),
-          h('div', null, t('col.status'))),
+          h('div', null, t('col.lastLogin')),
+          h('div', null, t('col.status')),
+          h('div', null, t('col.actions'))),
         list.users.map(function (u) {
           return h('div', { key: u.username, className: 'dshlu-row' + (u.disabled ? ' dshlu-row--disabled' : '') },
             h('div', { className: 'dshlu-cell dshlu-name' },
               u.username,
               u.isAdmin ? Badge('admin', 'role.admin', t) : null),
             h('div', { className: 'dshlu-cell' }, t(u.isAdmin ? 'role.admin' : 'role.user')),
-            h('div', { className: 'dshlu-cell dshlu-cell--created' }, fmtDate(u.createdAt)),
+            h('div', { className: 'dshlu-cell dshlu-cell--login', title: u.lastLoginAt !== null && u.lastLoginAt !== undefined ? fmtDate(u.lastLoginAt) : undefined },
+              u.lastLoginAt !== null && u.lastLoginAt !== undefined ? fmtDate(u.lastLoginAt) : t('status.never')),
             h('div', { className: 'dshlu-cell' },
               u.onlineSessions > 0 ? Badge('online', 'status.online', t, u.onlineSessions) : Badge('muted', 'status.offline', t),
               u.disabled ? Badge('disabled', 'status.disabled', t) : null),

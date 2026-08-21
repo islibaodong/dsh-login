@@ -106,9 +106,11 @@ describe('POST /api/auth/login', () => {
     const token = extractSessionToken(setCookie!.split(';')[0])
     expect(token).toBeDefined()
     expect(store.verify(token!)).toMatchObject({ user: 'alice', isAdmin: true })
+    // A successful login stamps the audit field shown in 设置-用户管理.
+    expect((await users.list()).find(u => u.username === 'alice')!.lastLoginAt).toBeGreaterThan(0)
   })
 
-  it('returns 401 on wrong password', { timeout: 60_000 }, async () => {
+  it('returns 401 on wrong password and does not stamp lastLoginAt', { timeout: 60_000 }, async () => {
     const { ctx, port, users } = await bootWithCreds()
     await users.create('alice', 's3cret', true)
     await registerAuthRoutes(ctx, users, new SessionStore(3600))
@@ -116,6 +118,7 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401)
     expect(res.json).toEqual({ error: 'invalid credentials' })
     expect(res.headers.get('set-cookie')).toBeNull()
+    expect((await users.list()).find(u => u.username === 'alice')!.lastLoginAt).toBeUndefined()
   })
 
   it('returns 401 on unknown username', { timeout: 60_000 }, async () => {
@@ -165,6 +168,8 @@ describe('POST /api/auth/setup', () => {
     const records = await users.list()
     expect(records).toHaveLength(1)
     expect(records[0]!).toMatchObject({ username: 'root', isAdmin: true })
+    // Setup signs the first account in immediately, so it is stamped too.
+    expect(records[0]!.lastLoginAt).toBeGreaterThan(0)
     const setCookie = res.headers.get('set-cookie')
     expect(setCookie).toContain('dsh_session=')
     const token = extractSessionToken(setCookie!.split(';')[0])

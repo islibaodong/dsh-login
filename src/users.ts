@@ -7,6 +7,8 @@ export interface UserRecord {
   salt: string
   isAdmin: boolean
   createdAt: number
+  /** Epoch ms of the user's most recent successful login; absent = never. */
+  lastLoginAt?: number
   /** Disabled accounts cannot log in; absent on legacy records (= false). */
   disabled?: boolean
 }
@@ -78,6 +80,18 @@ export class UserStore {
     if (record === undefined) throw new Error(`unknown user "${username}"`)
     if (disabled) record.disabled = true
     else delete record.disabled
+    await this.credentials.set(this.ref, JSON.stringify(records))
+  }
+
+  /**
+   * Stamp `lastLoginAt` for a verified login. Best-effort audit field:
+   * unknown users are a silent no-op so this can never fail a login.
+   */
+  async touchLastLogin(username: string): Promise<void> {
+    const records = await this.list()
+    const record = records.find(u => u.username === username)
+    if (record === undefined) return
+    record.lastLoginAt = Date.now()
     await this.credentials.set(this.ref, JSON.stringify(records))
   }
 

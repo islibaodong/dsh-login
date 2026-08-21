@@ -14,11 +14,12 @@
   `trustedHosts`.
 
 ## src/users.ts
-- `UserStore`: user records (`username/hash/salt/isAdmin/createdAt`) persisted
-  as JSON in the DSH credentials system (ref `${password}_USERS`). scrypt
-  hashing (per-user salt, timing-safe compare). Methods: list/isEmpty/create
-  (first user is forced admin)/verify/setPassword/remove. Username pattern
-  `[a-zA-Z0-9_-]{1,32}`.
+- `UserStore`: user records (`username/hash/salt/isAdmin/createdAt/lastLoginAt?`
+  /`disabled?`) persisted as JSON in the DSH credentials system (ref
+  `${password}_USERS`). scrypt hashing (per-user salt, timing-safe compare).
+  Methods: list/isEmpty/create (first user is forced admin)/verify
+  /touchLastLogin (stamps epoch ms; no-op for unknown users)/setPassword
+  /setDisabled/remove. Username pattern `[a-zA-Z0-9_-]{1,32}`.
 
 ## src/session.ts
 - `SessionStore`: in-memory Map of 32-byte hex tokens with TTL; Session
