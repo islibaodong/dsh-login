@@ -2,42 +2,68 @@
 
 English | [简体中文](./README.zh.md)
 
-Multi-user authentication gateway plugin for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI: user accounts managed inside the GUI settings panel, and per-user conversation isolation on the `/api` carrier.
+Adds a **login page, user accounts, and per-user conversation isolation** to the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI: every visit requires sign-in, ordinary users cannot see each other's conversations, and an admin manages all accounts from inside the GUI.
 
-## What it does
+| Login page | User management (设置 → 用户管理) |
+|:---:|:---:|
+| ![Login page](images/login.png) | ![User management](images/users.png) |
 
-When the DSH web server is exposed on `0.0.0.0` or a public network, `dsh-login` requires a user account before serving the web GUI. It claims the webserver fallback handler, so every request not matched by a named route (like `/api/*`) goes through the authentication gateway:
+## The problem it solves
 
-- **Unauthenticated requests** -> redirects to `/login`
-- **Authenticated requests** -> serves static files from the frontend dist directory
+The DSH Web GUI ships with **no login** — it assumes a single user on localhost. The moment you bind it to `0.0.0.0` (phone access, LAN sharing, a small team), **anyone on that network can open your GUI**: read every conversation, burn your configured model API keys, even change host settings.
+
+`dsh-login` turns that exposure into a multi-user deployment:
+
+- 🔐 **Login wall** — pages, static assets, SPA routes, the API, and WebSockets all require a valid session; unauthenticated visitors are redirected to `/login`
+- 👥 **Multiple accounts** — the first visit creates the administrator account; further users are added by an admin right inside the GUI, no CLI needed
+- 🙈 **Conversation isolation** — ordinary users see and act on **their own** conversations only (including their subagents/forks); other users' sessions, messages, and workspaces are invisible; credentials, host settings, and other admin domains are forbidden wholesale
+- 🛠 **User management** — 设置 → 用户管理: last-login time, online session count, reset password, disable, remove; disabling/removing/password-changes **immediately revoke** that user's live sessions
+- 👑 **Admin exception** — the admin is not isolated: all sessions visible, full configuration access
+- 🚪 **Logout** — every user gets a logout entry in their settings panel
 
 ## Quick start
 
+No environment variables, no config edits — three steps:
+
 ```bash
+# 1. Install (web is the profile that boots the Web GUI)
 dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
-Uninstall (by installed package name):
+2. **Initialize**: restart `dsh web` and open the GUI — the first visit shows a one-time "create administrator account" page; pick a username and password
+3. **Add users**: sign in as admin → 设置 → 用户管理 → 新建用户
+
+Uninstall:
 
 ```bash
 dsh plugin --profile web remove @islibaodong/dsh-login
 ```
 
-That's it. The package declares its `cordis.patch.yml` as a bundle patch, so `add` automatically:
+> Why `--profile web`? DSH installs plugins per profile directory (`$DSH_HOME/profiles/<name>`); `web` is the profile that boots the Web GUI. Use your profile's name if you run a custom one.
 
-- mounts the `dsh-login` plugin row (config defaults are sensible; `distIndex` resolves the frontend dist automatically),
-- disables the `web-runtime` row (where dsh-web-app mounts the frontend-static fallback); dsh-login takes over the fallback seat and re-provides the `webRuntime` service (LAN trust for the `/api` fence + the `DSH_WEB_URL` variable),
-- disables the shipped `connection` row (the `/api` carrier); dsh-login mounts its own identity-aware takeover and ships the matching browser bundle `dist/client.js`.
+## FAQ
 
-> Why `--profile web`? DSH has no global plugin install: plugins are installed per profile directory (`$DSH_HOME/profiles/<name>`). `web` is the profile that boots the Web GUI; use another profile name if you run a custom one.
+- **Do I have to log in again after restarting DSH?** Yes — login sessions live in memory only and are lost on process restart (cookies otherwise last 7 days by default).
+- **What can an ordinary user do?** Use the chat normally: create/open/continue their own sessions, run subagents, manage their own workspace content. Everything else (other people's sessions, credentials, plugins/presets/host settings, model-key management) is refused.
+- **Upgrading from the old single-password version?** The old single password no longer logs anyone in; the first visit after upgrading bootstraps a fresh administrator account (details in the migration note below).
 
-Start DSH (`dsh web`), open the GUI in your browser, and you'll see the setup page. Pick a username and password -- that first account becomes the administrator (scrypt-hashed, stored automatically in the DSH credentials system). On subsequent visits, the normal username/password login page appears.
+---
 
-No environment variables to set, no config files to edit. Accounts are created through the browser: the first (admin) account on first use, further accounts by an admin in the GUI settings panel (设置 → 用户管理).
+# Technical details
+
+> For contributors, security reviewers, and troubleshooting. You don't need any of this to use the plugin.
+
+## What installation does
+
+`dsh plugin add` reads this package's declared `cordis.patch.yml` (a bundle patch) and automatically:
+
+- mounts the `dsh-login` plugin row (config defaults are sensible; `distIndex` resolves the frontend dist automatically)
+- disables the `web-runtime` row (where dsh-web-app mounts the frontend-static fallback); dsh-login takes over the fallback seat and re-provides the `webRuntime` service (LAN trust for the `/api` fence + the `DSH_WEB_URL` variable)
+- disables the shipped `connection` row (the `/api` carrier); dsh-login mounts its own identity-aware takeover and ships the matching browser bundle `dist/client.js`
 
 ### Manual installation (alternative)
 
-If you prefer managing `cordis.patch.yml` yourself, add these rows to your profile's patch file instead:
+If you prefer managing the patch file yourself, add these rows to your profile's `cordis.patch.yml`:
 
 ```yaml
 - insert:
@@ -70,7 +96,7 @@ If you prefer managing `cordis.patch.yml` yourself, add these rows to your profi
 1. **First visit** (no users yet) -> `/login` shows a "Create administrator account" page (username + password)
 2. User picks credentials -> `POST /api/auth/setup` creates the forced-admin account (scrypt-hashed, stored under the `${password}_USERS` credential ref, default `DSH_LOGIN_PASSWORD_USERS`) and logs it in
 3. **Subsequent visits** -> `/login` shows the normal username/password login form
-4. **User management** -> admins open 设置 → 用户管理 in the GUI to list (online status), create, disable/enable, remove users and reset passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused; removal, password change, or disabling revokes that user's live sessions immediately)
+4. **User management** -> admins open 设置 → 用户管理 in the GUI to list (last login/online status), create, disable/enable, remove users and reset passwords (`/api/auth/admin/*` JSON routes; removing the last admin is refused)
 5. **Security** -> `/api/auth/setup` returns 403 once any user exists, preventing hijacking
 
 > **Migration note:** the legacy single-password credential (default ref `DSH_LOGIN_PASSWORD`) no longer logs anyone in. It stays configured but is unused for authentication — the `password` config key now only namespaces the user store credential ref (`${password}_USERS`). Upgrading an existing single-password deployment therefore requires the first visit to bootstrap a fresh administrator account.
@@ -112,7 +138,7 @@ Request -> WebServer
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
 - **Logout:** the settings panel's 用户管理/账户 section carries a logout entry for every user (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link.
-- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions — reset passwords, disable/enable accounts (disabled users cannot log in and their live sessions are revoked; the last enabled admin cannot be disabled), and remove users — sit on a single non-wrapping line at the row's end. Ordinary users get an 账户 section with their identity and the logout entry. The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
+- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
 
 ## Data locations
 
@@ -166,12 +192,12 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (109 tests; requires the DSH checkout for package
+# Canonical full suite (134 tests; requires the DSH checkout for package
 # resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
 npx vitest run
 ```
 
-The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
+The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`, `settings-panel`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
 
 ## Project structure
 

@@ -2,42 +2,68 @@
 
 [English](./README.md) | 简体中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的多用户认证网关插件：用户账号在 GUI 设置面板内管理，`/api` 通道按用户做会话隔离。
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 加上**登录页、用户账号和会话隔离**的插件：访问先登录，普通用户互相看不见对话，管理员在 GUI 内管理所有账号。
 
-## 它做什么
+| 登录页 | 用户管理（设置 → 用户管理） |
+|:---:|:---:|
+| ![登录页](images/login.png) | ![用户管理](images/users.png) |
 
-当 DSH Web 服务器暴露在 `0.0.0.0` 或公网时，`dsh-login` 要求登录用户账号后才能访问 Web GUI。它接管 WebServer 的 fallback 处理器，所有未被命名路由（如 `/api/*`）匹配的请求都会经过认证网关：
+## 这个插件解决什么问题
 
-- **未认证请求** -> 重定向到 `/login`
-- **已认证请求** -> 从前端 dist 目录提供静态文件
+DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设计。只要把服务绑到 `0.0.0.0`（手机访问、局域网共享、团队共用），**网络上任何人都能直接打开你的 GUI**：看到全部对话、用你配置的模型密钥消耗额度，甚至修改宿主配置。
+
+`dsh-login` 把它变成一个多用户部署：
+
+- 🔐 **登录墙** —— 页面、静态资源、SPA 路由、API、WebSocket 全部要求有效会话，未登录一律跳转 `/login`
+- 👥 **多账号** —— 首次访问创建管理员账号，其余用户由管理员在 GUI 里直接新建，无需命令行
+- 🙈 **会话隔离** —— 普通用户只能看到、操作**自己**的对话（含其派生的子代理/分叉）；其他人的会话、消息、工作区一律不可见；凭据、宿主设置等管理域整体禁用
+- 🛠 **用户管理** —— 设置 → 用户管理：最后登录时间、在线会话数、重置密码、禁用、删除；禁用/删除/改密会**立即吊销**该用户的现有会话
+- 👑 **管理员例外** —— 管理员不受隔离限制，可见全部会话，可配置宿主
+- 🚪 **登出** —— 每个用户的设置面板里都有登出入口
 
 ## 快速开始
 
+无需环境变量、无需改配置文件，三步：
+
 ```bash
+# 1. 安装（web 就是启动 Web GUI 的 profile）
 dsh plugin --profile web add github:islibaodong/dsh-login
 ```
 
-卸载（按安装后的包名）：
+2. **初始化**：重启 `dsh web` 并打开 GUI，首次访问会出现「创建管理员账号」页面，选好用户名密码即完成
+3. **添加用户**：以管理员登录 → 设置 → 用户管理 → 新建用户
+
+卸载：
 
 ```bash
 dsh plugin --profile web remove @islibaodong/dsh-login
 ```
 
-就这一步。该包的 `cordis.patch.yml` 声明为 bundle patch，`add` 之后会自动：
+> 为什么 `--profile web`？DSH 插件按 profile 目录安装（`$DSH_HOME/profiles/<name>`）；`web` 就是启动 Web GUI 的 profile，用自定义 profile 的话换成对应名字即可。
 
-- 挂载 `dsh-login` 插件行（配置默认值即可用；`distIndex` 自动解析前端 dist 目录），
-- 禁用 `web-runtime` 行（dsh-web-app 通过它挂载 frontend-static fallback），dsh-login 接管 fallback 席位并重新提供 `webRuntime` 服务（`/api` 信任围栏的 LAN 信任 + `DSH_WEB_URL` 环境变量），
-- 禁用自带的 `connection` 行（`/api` 通道）；dsh-login 挂载自己的身份感知接管插件，并提供配套的浏览器 bundle `dist/client.js`。
+## 常见问题
 
-> 为什么需要 `--profile web`？DSH 没有"全局安装插件"的概念：插件按 profile 目录（`$DSH_HOME/profiles/<name>`）安装。`web` 就是启动 Web GUI 的 profile；如果你用的是自定义 profile，换成对应名字即可。
+- **重启 DSH 后要重新登录？** 是——登录会话只存内存，进程重启即失效（正常运行下 Cookie 有效期默认 7 天）。
+- **普通用户能做什么？** 正常使用对话：新建/打开/继续自己的会话、派生子代理、管理工作区里自己的内容。除此之外（他人会话、凭据、插件/预设/宿主设置、模型密钥管理）一律拒绝。
+- **从旧版（单密码）升级？** 旧的单密码凭据不再能登录任何人；升级后首次访问会引导创建新的管理员账号（细节见下方「迁移说明」）。
 
-启动 DSH（`dsh web`），在浏览器中打开 Web GUI，你会看到初始设置页面。选择用户名和密码——首个账号即成为管理员（scrypt 哈希后自动存入 DSH 凭据系统）。后续访问将显示正常的用户名/密码登录页。
+---
 
-无需设置环境变量，无需编辑配置文件。账号全部通过浏览器创建：首个（管理员）账号在首次访问时创建，其余账号由管理员在 GUI「设置 → 用户管理」中添加。
+# 技术细节
+
+> 以下内容面向二次开发、安全审阅与排障；日常使用不需要阅读。
+
+## 安装时发生了什么
+
+`dsh plugin add` 读取本包声明的 `cordis.patch.yml`（bundle patch），自动完成：
+
+- 挂载 `dsh-login` 插件行（配置默认值即可用；`distIndex` 自动解析前端 dist 目录）
+- 禁用 `web-runtime` 行（dsh-web-app 通过它挂载 frontend-static fallback）；dsh-login 接管 fallback 席位并重新提供 `webRuntime` 服务（`/api` 信任围栏的 LAN 信任 + `DSH_WEB_URL` 环境变量）
+- 禁用自带的 `connection` 行（`/api` 通道）；dsh-login 挂载自己的身份感知接管插件，并提供配套的浏览器 bundle `dist/client.js`
 
 ### 手动安装（可选）
 
-如果你希望自己管理 `cordis.patch.yml`，可以把以下内容手动加进 profile 的 patch 文件：
+希望自己管理 patch 文件时，把以下内容加进 profile 的 `cordis.patch.yml`：
 
 ```yaml
 - insert:
@@ -68,7 +94,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 1. **首次访问**（无任何用户）-> `/login` 显示「创建管理员账号」页面（用户名 + 密码）
 2. 用户选择凭据 -> `POST /api/auth/setup` 创建强制管理员的第一个账号（scrypt 哈希，存入 `${password}_USERS` 凭据引用，默认 `DSH_LOGIN_PASSWORD_USERS`）并自动登录
 3. **后续访问** -> `/login` 显示正常的用户名/密码登录表单
-4. **用户管理** -> 管理员在 GUI「设置 → 用户管理」列出（在线状态）、创建、禁用/启用、删除用户及重置密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝；删除、改密码或禁用会立即吊销该用户的全部活跃会话）
+4. **用户管理** -> 管理员在 GUI「设置 → 用户管理」列出（最后登录/在线状态）、创建、禁用/启用、删除用户及重置密码（`/api/auth/admin/*` JSON 路由；删除最后一个管理员会被拒绝）
 5. **安全保护** -> 已有用户后 `/api/auth/setup` 返回 403，防止劫持
 
 > **迁移说明：** 旧版单一密码凭据（默认引用 `DSH_LOGIN_PASSWORD`）不再能登录任何人。它保持已配置状态但认证不再使用——`password` 配置项现在只用于派生用户存储引用（`${password}_USERS`）。因此从单密码部署升级后，首次访问需要重新引导创建一个管理员账号。
@@ -110,7 +136,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
 - **登出：** 设置面板的「用户管理/账户」分区为每个用户提供登出入口（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用。
-- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行的操作——重置密码、禁用/启用（被禁用户无法登录且现有会话立即吊销；最后一个启用中的管理员不可禁用）、删除用户——保持单行右对齐不换行。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
+- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
 
 ## 数据位置
 
@@ -164,12 +190,12 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（109 项；需要 DSH 源码做包解析——
+# 标准全量测试（134 项；需要 DSH 源码做包解析——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
 
-`.spec.ts` 文件是标准的 vitest 测试定义，含多用户套件（`users`、`ownership`、`api-filter`、`connection`、`admin-api`、`multiuser-e2e`、`client-bundle`）。`tests/runner.mjs` 和 `tests/integration-runner.mjs` 是针对原单密码核心的沙箱兼容运行器，未随多用户功能扩展。
+`.spec.ts` 文件是标准的 vitest 测试定义，含多用户套件（`users`、`ownership`、`api-filter`、`connection`、`admin-api`、`multiuser-e2e`、`client-bundle`、`settings-panel`）。`tests/runner.mjs` 和 `tests/integration-runner.mjs` 是针对原单密码核心的沙箱兼容运行器，未随多用户功能扩展。
 
 ## 项目结构
 

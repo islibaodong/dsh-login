@@ -1,5 +1,19 @@
 # Memory Changelog
 
+## 2026-08-21 — README restructure: showcase first, tech later
+- Both READMEs rewritten front-to-back: one-liner → side-by-side
+  screenshots (images/login.png, images/users.png — new, committed) →
+  "problem it solves" in plain language (DSH GUI has no login; exposing
+  0.0.0.0 hands everything to the network) → 6-bullet feature list →
+  3-step quick start → FAQ (re-login after restart / what ordinary
+  users can do / single-password migration). ALL prior technical
+  content preserved verbatim under a `# 技术细节` / `# Technical
+  details` divider at the bottom (install mechanics + manual install,
+  setup flow, request-routing diagram, permission model, data
+  locations, carrier takeover & bundle, security notes, fallback
+  architecture, tests — count updated 109 → 134, settings-panel suite
+  added to the list —, project structure).
+
 ## 2026-08-21 — Users table: single-line actions + last-login column
 - 设置-用户管理 table: the actions cell (重置密码/禁用-启用/删除) is now a
   regular grid track at the row's end — `flex-wrap: nowrap`, no more
