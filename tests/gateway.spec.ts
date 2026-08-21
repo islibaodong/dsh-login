@@ -103,12 +103,16 @@ describe('gateway handler', () => {
     expect(res.headers.get('location')).toBe('/login')
   })
 
-  it('serves SPA fallback (index.html) for unknown paths when authenticated', { timeout: 60_000 }, async () => {
+  it('returns 404 for unknown paths when authenticated (hash-routed shell)', { timeout: 60_000 }, async () => {
+    // Harness 0.1.1-rc.1 removed frontend-static's SPA fallback: the web shell
+    // is hash-routed and only '/' and the configured index path serve HTML,
+    // every miss is a plain 404. The gateway delegates to serveStatic and
+    // inherits the same semantics.
     const { ctx, port } = await bootServer()
     const dist = join(root!, 'dist')
     await mkdir(dist, { recursive: true })
     const distIndex = join(dist, 'index.html')
-    await writeFile(distIndex, '<html><body>spa-fallback</body></html>')
+    await writeFile(distIndex, '<html><body>shell</body></html>')
     const store = new SessionStore(3600)
     const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
@@ -117,8 +121,37 @@ describe('gateway handler', () => {
     const res = await request(port, '/some/spa/route', {
       headers: { Cookie: `dsh_session=${session.token}` },
     })
+    expect(res.status).toBe(404)
+  })
+
+  it('renders the structured index injection table (boot manifest)', { timeout: 60_000 }, async () => {
+    // Regression for harness 0.1.1-rc.1: the boot manifest (the
+    // window.__ModuleLoader__ queue facade and window.__DSH_BOOT__) moved from
+    // raw tapIndex transforms into the structured injection table, rendered
+    // only by webServer.renderIndex. A gateway that still calls
+    // applyIndexTaps alone serves an index with no module loader and the shell
+    // fails with "web boot: window.__ModuleLoader__ bootstrap facade is
+    // missing". The gateway must render through whichever pipeline exists.
+    const { ctx, port } = await bootServer()
+    const dist = join(root!, 'dist')
+    await mkdir(dist, { recursive: true })
+    const distIndex = join(dist, 'index.html')
+    await writeFile(distIndex, '<html><head></head><body>shell</body></html>')
+    const store = new SessionStore(3600)
+    const session = store.create('alice', true)
+    const cfg = { ...config, distIndex }
+    const handler = createGatewayHandler(ctx, cfg, store)
+    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.on('webserver/index-inject', (table) => {
+      table.push({ kind: 'script', placement: 'head', text: 'window.__ModuleLoader__ = { marker: true }' })
+      table.push({ kind: 'global', name: '__DSH_BOOT__', value: { marker: true } })
+    })
+    const res = await request(port, '/', {
+      headers: { Cookie: `dsh_session=${session.token}` },
+    })
     expect(res.status).toBe(200)
-    expect(res.body).toContain('spa-fallback')
+    expect(res.body).toContain('window.__ModuleLoader__ = { marker: true }')
+    expect(res.body).toContain('globalThis["__DSH_BOOT__"]')
   })
 
   it('serves HTML indexes unmodified (no injected widgets)', { timeout: 60_000 }, async () => {
