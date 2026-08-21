@@ -7,6 +7,13 @@
   stamped by `touchLastLogin()` on every successful login/setup; the table
   dropped `createdAt` for a compact 最后登录 column (从未登录 placeholder,
   API returns `lastLoginAt: null` for never).
+- Layout fix (same day): the first inline-actions attempt used three
+  fixed-px tracks (56/150/112) + a nowrap max-content actions track — the
+  minimum row width exceeded the panel and the grid overflowed/collapsed.
+  Now only 状态+操作 are max-content; 用户名/最后登录 are `minmax(0, …)`
+  flexible (ellipsis), the redundant 角色 column is gone (admin badge on
+  the name covers it), and `@media (max-width: 620px)` drops the
+  last-login column. Spec guards: no px-valued grid tracks, no col.role.
 - Tests: admin list (root stamped / bob null → stamped after login), login
   200 stamps / 401 does not, setup stamps; settings-panel spec guards the
   layout invariants in source.

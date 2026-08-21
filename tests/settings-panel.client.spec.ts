@@ -111,18 +111,28 @@ describe('settings-panel client factory', () => {
     expect(plugin.inject).toEqual([])
   })
 
-  it('keeps the users table single-line: actions column never wraps, last-login replaces created', () => {
+  it('keeps the users table single-line and overflow-proof: flexible tracks, no fixed widths, last-login replaces created', () => {
     // Layout guards for the 用户管理 table:
-    // - the actions cell must be a regular grid track that cannot wrap
-    //   (flex-wrap: nowrap; no grid-column span onto its own line);
-    // - the audit column is last login, never creation time, with a
-    //   never-logged-in placeholder.
+    // - only status + actions may be fixed-width (max-content tracks);
+    //   name and last-login must be flexible (minmax(0, …)) so a row can
+    //   never overflow the panel — fixed px tracks plus a nowrap actions
+    //   column is exactly what broke the layout before;
+    // - the actions cell must not wrap (flex-wrap: nowrap; no
+    //   grid-column span onto its own line);
+    // - the redundant role column is gone (the admin badge on the name
+    //   covers it) and the audit column is last login, never creation.
     expect(source).toContain('.dshlu-cell--actions { display: flex; flex-wrap: nowrap;')
     expect(source).not.toContain('grid-column: 1 / -1')
+    expect(source).toContain('grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) max-content max-content')
+    // No px-valued grid tracks anywhere in the stylesheet.
+    expect(source.match(/grid-template-columns:[^;]*\d+px[^;]*;/)).toBeNull()
     expect(source).toContain("'col.lastLogin'")
     expect(source).toContain("'status.never'")
     expect(source).not.toContain("'col.created'")
+    expect(source).not.toContain("'col.role'")
     expect(source).not.toContain('u.createdAt')
+    // Narrow viewports drop the last-login column instead of squeezing.
+    expect(source).toContain('@media (max-width: 620px)')
   })
 
   it('applies the internal connection client synchronously, before any probe', () => {
