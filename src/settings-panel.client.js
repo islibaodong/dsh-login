@@ -39,13 +39,17 @@ function (require) {
 .dshlu-notice { margin: 0; font-size: 12px; line-height: 18px; min-height: 18px; }
 .dshlu-notice--error { color: var(--dsw-alias-state-error-primary); }
 .dshlu-notice--success { color: var(--dsw-alias-state-success-primary); }
-.dshlu-table { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 0; }
-/* Only status + actions are fixed-width (max-content tracks); name and
-   last-login are flexible and shrink with ellipsis, so a row can never
-   overflow the panel. The role column is gone — the admin badge next to
-   the username covers it. */
-.dshlu-head, .dshlu-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) max-content max-content; gap: 8px; align-items: center; }
-.dshlu-head { padding: 0 14px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
+/* ONE shared grid for the whole table: .dshlu-table owns the columns and
+   the header/rows are subgrids spanning all of them, so every track —
+   including the content-sized 状态/操作 ones — resolves once for the whole
+   table. (Per-row grids were the bug: max-content tracks sized to each
+   container's own content, so the narrow header labels got ~30px tracks
+   while the rows' buttons got ~250px — header and body fully misaligned.)
+   Head and row share identical side insets (14px padding + 1px border)
+   so the subgrid tracks also start at the same origin pixel. */
+.dshlu-table { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) max-content max-content; column-gap: 8px; row-gap: 8px; align-items: center; margin: 4px 0 0; }
+.dshlu-head, .dshlu-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; }
+.dshlu-head { padding: 0 14px; border: 1px solid transparent; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
 .dshlu-head > :last-child { text-align: right; }
 .dshlu-row { padding: 8px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
 .dshlu-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -55,8 +59,10 @@ function (require) {
 .dshlu-cell--login { min-width: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dshlu-cell--status { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px; }
 .dshlu-cell--actions { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+/* Narrow viewports drop the last-login column (header cell + row cells)
+   instead of squeezing; subgridded rows follow the parent template. */
 @media (max-width: 620px) {
-  .dshlu-head, .dshlu-row { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+  .dshlu-table { grid-template-columns: minmax(0, 1fr) max-content max-content; }
   .dshlu-head > :nth-child(2), .dshlu-row > .dshlu-cell--login { display: none; }
 }
 .dshlu-badge { flex: none; padding: 1px 6px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 4px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); }

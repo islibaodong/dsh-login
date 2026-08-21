@@ -14,6 +14,14 @@
   flexible (ellipsis), the redundant 角色 column is gone (admin badge on
   the name covers it), and `@media (max-width: 620px)` drops the
   last-login column. Spec guards: no px-valued grid tracks, no col.role.
+- Alignment fix (same day): header and rows were SEPARATE grids, so the
+  max-content tracks (状态/操作) resolved per container — ~30px for the
+  header labels vs ~250px for row buttons — and the header landed fully
+  offset from the body. Now `.dshlu-table` owns one shared column grid
+  and head/rows are `grid-template-columns: subgrid` spanning `1 / -1`
+  (identical 14px side padding + 1px border on both, so tracks share the
+  same origin). Narrow-viewport rule now retargets `.dshlu-table`.
+  Spec guards: subgrid present, cells never carry grid-column spans.
 - Tests: admin list (root stamped / bob null → stamped after login), login
   200 stamps / 401 does not, setup stamps; settings-panel spec guards the
   layout invariants in source.
