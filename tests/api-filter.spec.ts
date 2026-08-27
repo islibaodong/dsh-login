@@ -202,6 +202,75 @@ describe('createUserProxy', () => {
   })
 })
 
+describe('createUserProxy workspace ownership guards', () => {
+  const wsBase = '/srv/ws'
+  // fakeApi whose workspace.list reports workspaces with owned, alien and empty sessions.
+  function wsApi(over: Partial<ApiProxy> = {}): ApiProxy {
+    const base = fakeApi()
+    return {
+      ...base,
+      workspace: {
+        ...(base.workspace as object),
+        list: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: {
+          items: [
+            { workspaceId: 'w-own', path: '/srv/ws/alice', title: 'A', sessionIds: ['own1'], createdAt: '', updatedAt: '' },
+            { workspaceId: 'w-alien', path: '/srv/ws/bob', title: 'B', sessionIds: ['alien'], createdAt: '', updatedAt: '' },
+            { workspaceId: 'w-empty', path: '/srv/ws/empty', title: 'E', sessionIds: [], createdAt: '', updatedAt: '' },
+          ],
+          archivedSessionIds: [],
+        } } }),
+        rename: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { workspace: {} } } }),
+        delete: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { deleted: true } } }),
+        insertBefore: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { workspaceIds: ['a', 'b'] } } }),
+        create: async (r: RpcRequest<never>) => ({ rpcId: r.rpcId, result: { ok: true, value: { workspace: {}, created: true } } }),
+        ...(over.workspace as object),
+      },
+    } as unknown as ApiProxy
+  }
+
+  it('delete/rename/insertBefore require the target workspace to hold an owned session', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    const proxy = createUserProxy(wsApi(), alice, idx, { workspaceRoot: wsBase })
+    for (const denied of [
+      await proxy.workspace.delete(req({ workspaceId: 'w-alien' as never })),
+      await proxy.workspace.rename(req({ workspaceId: 'w-alien' as never, title: 'x' })),
+      await proxy.workspace.insertBefore(req({ workspaceId: 'w-alien' as never })),
+      await proxy.workspace.delete(req({ workspaceId: 'w-empty' as never })),
+    ]) {
+      expect(denied.result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    }
+    for (const allowed of [
+      await proxy.workspace.delete(req({ workspaceId: 'w-own' as never })),
+      await proxy.workspace.rename(req({ workspaceId: 'w-own' as never, title: 'x' })),
+      await proxy.workspace.insertBefore(req({ workspaceId: 'w-own' as never })),
+    ]) {
+      expect(allowed.result).toMatchObject({ ok: true })
+    }
+  })
+
+  it('workspace.create is confined to the caller sandbox for ordinary users', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    const proxy = createUserProxy(wsApi(), alice, idx, { workspaceRoot: wsBase })
+    expect((await proxy.workspace.create(req({ path: '/srv/ws/alice' }))).result).toMatchObject({ ok: true })
+    expect((await proxy.workspace.create(req({ path: '/srv/ws/alice/proj' }))).result).toMatchObject({ ok: true })
+    expect((await proxy.workspace.create(req({ path: '/etc' }))).result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    expect((await proxy.workspace.create(req({ path: '/srv/ws/bob' }))).result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    // Traversal attempt must not escape the sandbox.
+    expect((await proxy.workspace.create(req({ path: '/srv/ws/alice/../../etc' }))).result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+  })
+
+  it('workspace.create without a configured root is forbidden for ordinary users; admin exempt', async () => {
+    const idx = new OwnershipIndex(tmpFile())
+    idx.record('own1', 'alice')
+    const noRoot = createUserProxy(wsApi(), alice, idx)
+    expect((await noRoot.workspace.create(req({ path: '/srv/ws/alice' }))).result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const admin = createUserProxy(wsApi(), root, idx, { workspaceRoot: wsBase })
+    expect((await admin.workspace.create(req({ path: '/etc' }))).result).toMatchObject({ ok: true })
+  })
+})
+
 describe('isUserAllowed', () => {
   it('uses exact RpcMethodMap keys: allowed listings stay, privileged domains go', () => {
     expect(isUserAllowed('session.list')).toBe(true)

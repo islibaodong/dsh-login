@@ -1,6 +1,8 @@
+import { isAbsolute, relative, resolve } from 'node:path'
 import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, RpcResponse } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { RpcId as makeRpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { OwnershipIndex } from './ownership.ts'
+import { sandboxSegment } from './provision.ts'
 
 export interface AuthUser { username: string; isAdmin: boolean }
 
@@ -13,6 +15,9 @@ export interface AuthUser { username: string; isAdmin: boolean }
  * catalog (`llm.providers`/`llm.models`). Everything else (credentials.*,
  * settings.*, agentPreset.* — the admin-only domains — plus the privileged
  * host.* dialogs and llm.discoverModels) is a physical 403 for ordinary users.
+ * Workspace-scoped mutations are additionally ownership-guarded by workspaceId
+ * (rename/delete/reorder only affect workspaces holding the caller's own
+ * sessions) and workspace.create is confined to the caller's sandbox.
  * `respond` is not an RpcMethodMap key (it carries a client-response, not a
  * request) but passes through the decorator unguarded, so it is allowed here
  * too — the browser needs it to answer server-requests (approvals).
@@ -38,6 +43,8 @@ export function isUserAllowed(method: string): boolean {
 
 /** Internal rpcId for the ownership-driven session.list probe (never surfaces to a client). */
 const OWNERSHIP_RPC = makeRpcId('dsh-login-ownership')
+/** Internal rpcId for the workspace-ownership probe (never surfaces to a client). */
+const WORKSPACE_RPC = makeRpcId('dsh-login-workspace-ownership')
 
 /**
  * `forbidden` is outside the harness RpcErrorCode union (the harness never
@@ -131,7 +138,22 @@ type GuardedPayload = { sessionId?: string; childSessionId?: string; parentSessi
 /** Payload fields that may carry a session id; every present field must be owned. */
 const SESSION_ID_FIELDS = ['sessionId', 'childSessionId', 'parentSessionId'] as const
 
-export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: OwnershipIndex): ApiProxy {
+/**
+ * Whether `path` (resolved) lies at or below the caller's sandbox directory
+ * (`workspaceRoot/<sanitized-username>`). `..`, trailing separators, symlink
+ * targets and absolute paths are all neutralized by `resolve`+`relative`, so a
+ * traversal attempt like `workspaceRoot/alice/../../etc` resolves outside and
+ * is refused.
+ */
+function isWithinSandbox(path: string, workspaceRoot: string, username: string): boolean {
+  const sandbox = resolve(workspaceRoot, sandboxSegment(username))
+  const target = resolve(path)
+  const rel = relative(sandbox, target)
+  return rel === '' || (rel !== '' && !rel.startsWith('..') && !isAbsolute(rel))
+}
+
+export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: OwnershipIndex, options: { workspaceRoot?: string } = {}): ApiProxy {
+  const { workspaceRoot } = options
   const guardSid = async (sid: string): Promise<boolean> => {
     const direct = ownership.lookup(sid)
     if (direct !== undefined) return direct === user.username
@@ -156,6 +178,44 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
   const wrapSessionMethod = (name: string, method: (r: never) => Promise<unknown>, fields?: readonly string[]) => async (request: never) => {
     if ((fields !== undefined || SESSION_GUARDED.has(name)) && !(await guard(request as never, fields))) return forbidden(request as never)
     return await method(request)
+  }
+
+  // ---- workspace ownership ----
+  // A workspace is treated as "owned" by the user when at least one of the
+  // sessions it holds is owned by them (the same criterion workspace.list uses
+  // to surface it). Derived by probing the real (unwrapped) workspace.list and
+  // intersecting each workspace's sessionIds with the owned-session set.
+  const ownedWorkspaceIds = async (): Promise<Set<string>> => {
+    const owned = await ownedSessionIds(api, user, ownership)
+    const res = await api.workspace.list({ rpcId: WORKSPACE_RPC, payload: {} })
+    if (!res.result.ok) return new Set()
+    const items = (res.result.value as { items: Array<{ workspaceId: string; sessionIds: string[] }> }).items
+    const ids = new Set<string>()
+    for (const w of items) {
+      if (w.sessionIds.some(sid => owned.has(sid))) ids.add(w.workspaceId)
+    }
+    return ids
+  }
+  const guardWid = async (wid: string): Promise<boolean> => (await ownedWorkspaceIds()).has(wid)
+
+  // Workspace-scoped mutations (rename/delete/reorder) are gated on the target
+  // workspace holding at least one of the caller's own sessions.
+  const wrapWorkspaceId = (name: string, method: (r: never) => Promise<unknown>) => async (request: never) => {
+    if (user.isAdmin) return await method(request)
+    const wid = (request as RpcRequest<{ workspaceId?: string }>).payload?.workspaceId
+    if (wid === undefined || !(await guardWid(wid))) return forbidden(request as never)
+    return await method(request)
+  }
+
+  // workspace.create for ordinary users is confined to their own sandbox
+  // directory; without a configured workspaceRoot it fails closed.
+  const createWorkspace = async (request: never) => {
+    if (user.isAdmin) return await (api.workspace.create as (r: never) => Promise<unknown>)(request)
+    const path = (request as RpcRequest<{ path?: string }>).payload?.path
+    if (typeof path !== 'string' || workspaceRoot === undefined || !isWithinSandbox(path, workspaceRoot, user.username)) {
+      return forbidden(request as never)
+    }
+    return await (api.workspace.create as (r: never) => Promise<unknown>)(request)
   }
 
   const proxy: ApiProxy = {
@@ -238,16 +298,23 @@ export function createUserProxy(api: ApiProxy, user: AuthUser, ownership: Owners
           .filter(w => w.sessionIds.length > 0)
         return { ...res, result: { ok: true, value: { ...value, items, archivedSessionIds: value.archivedSessionIds.filter(id => owned.has(id)) } } }
       },
+      // Workspace-scoped mutations are ownership-guarded by workspaceId: a
+      // non-admin may only rename/delete/reorder a workspace that holds one of
+      // their own sessions (the same owned-session criterion workspace.list
+      // uses), and may only create a workspace inside their own sandbox.
+      create: createWorkspace,
+      rename: wrapWorkspaceId('rename',
+        (api.workspace as Record<string, (r: never) => Promise<unknown>>).rename),
+      delete: wrapWorkspaceId('delete',
+        (api.workspace as Record<string, (r: never) => Promise<unknown>>).delete),
+      insertBefore: wrapWorkspaceId('insertBefore',
+        (api.workspace as Record<string, (r: never) => Promise<unknown>>).insertBefore),
       // Session-addressed mutations: every sessionId-bearing payload field is
       // guarded (insertSessionBefore's optional beforeSessionId anchor included).
       archiveSession: wrapSessionMethod('archiveSession',
         (api.workspace as Record<string, (r: never) => Promise<unknown>>).archiveSession, ['sessionId']),
       insertSessionBefore: wrapSessionMethod('insertSessionBefore',
         (api.workspace as Record<string, (r: never) => Promise<unknown>>).insertSessionBefore, ['sessionId', 'beforeSessionId']),
-      // insertBefore reorders workspaces by workspaceId, not session: it stays
-      // passthrough. Accepted residual: reordering a workspace is low-harm
-      // metadata (any ordinary user of the deployment can shuffle the manual
-      // order); workspace-ownership derivation is deliberately out of scope.
     } as ApiProxy['workspace'],
     goals: {
       ...api.goals,

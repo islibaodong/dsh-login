@@ -90,7 +90,7 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
         const key = user.isAdmin ? `admin:${user.username}` : user.username
         let entry = proxyCache.get(key)
         if (entry === undefined) {
-          entry = { fetch: undefined as never, downlinks: createUserProxy(api, user, deps.ownership) }
+          entry = { fetch: undefined as never, downlinks: createUserProxy(api, user, deps.ownership, { workspaceRoot: deps.defaultWorkspaceRoot }) }
           entry.fetch = deps.fetchForTest !== undefined
             ? deps.fetchForTest(entry.downlinks, user).fetch
             : toFetchHandler(entry.downlinks).fetch
