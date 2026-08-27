@@ -125,4 +125,27 @@ describe('DefaultWorkspaceProvisioner', () => {
     await p.ensure(alice)
     expect(fail).toHaveBeenCalledTimes(2)
   })
+
+  it('skips provisioning while the live toggle is off, then provisions after re-enabling', async () => {
+    const root = testRoot()
+    const { registry, created } = fakeRegistry()
+    const { api, attachRequests } = fakeApi()
+    const ownership = new OwnershipIndex(join(root, 'ownership.json'))
+    let enabled = false
+    const p = new DefaultWorkspaceProvisioner({ workspaceRoot: root, getApi: () => api, ownership, workspaceRegistry: registry, enabled: () => enabled })
+
+    await p.ensure(alice)
+    expect(created).toHaveLength(0)
+    expect(attachRequests).toHaveLength(0)
+
+    // Re-enable: the same user is now provisioned (once).
+    enabled = true
+    await p.ensure(alice)
+    expect(created).toHaveLength(1)
+    expect(attachRequests).toHaveLength(1)
+
+    // Stayed on: not double-provisioned.
+    await p.ensure(alice)
+    expect(created).toHaveLength(1)
+  })
 })

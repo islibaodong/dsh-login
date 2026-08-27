@@ -30,10 +30,12 @@ export interface Config {
   autoTrustHosts: boolean
   /** Provision a per-user default workspace for non-admin users on their
    * first /api access, so they get a usable workspace without the privileged
-   * host.pickDirectory dialog. Default false (opt-in). Admin is unaffected.
-   * Each user's sandbox lives under workspaceRoot/<username>; a blank starter
-   * session is seeded there so the workspace is immediately visible in
-   * workspace.list (which only shows workspaces holding that user's sessions). */
+   * host.pickDirectory dialog. Enabled by default; an admin can toggle it at
+   * runtime from the 设置-用户管理 panel (persisted separately, see
+   * src/workspace-setting.ts). Each user's sandbox lives under
+   * workspaceRoot/<username>; a blank starter session is seeded there so the
+   * workspace is immediately visible in workspace.list (which only shows
+   * workspaces holding that user's sessions). */
   defaultWorkspace: boolean
   /** Filesystem root that holds each user's default-workspace sandbox. Empty
    * resolves to `<dshHome>/workspaces`. Only used when defaultWorkspace is on. */
@@ -49,6 +51,6 @@ export const Config: z<Config> = z.object({
   takeOverWebRuntime: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),
   autoTrustHosts: z.boolean().default(true),
-  defaultWorkspace: z.boolean().default(false),
+  defaultWorkspace: z.boolean().default(true),
   workspaceRoot: z.string().default(''),
 })

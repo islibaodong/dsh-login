@@ -77,7 +77,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
         sessionTtl: 604800             # 会话有效期，7 天（默认）
         autoTrustHosts: true          # 将任何成功登录的请求 Host 学习进 /api 白名单
         enabled: true                 # 设为 false 可临时禁用
-        defaultWorkspace: false       # 为每个普通用户首次 /api 访问自动供给默认工作区
+        defaultWorkspace: true        # 为每个普通用户首次 /api 访问自动供给默认工作区（默认开，可在设置-用户管理实时开关）
         workspaceRoot: ''             # 默认工作区沙箱根，留空解析为 <DSH_HOME>/workspaces
 
 # 重要：dsh-login 接管 fallback 席位，必须禁用 web-runtime 行
@@ -138,7 +138,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   - 同样禁止：`llm.discoverModels` 以及特权 `host.*` 目录对话框（`pickDirectory`、`listDirectory`、`createDirectory`、`openPath`）
   - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
-- **默认工作区（可选，`defaultWorkspace`）：** 非管理员首次经 `/api` 访问时，自动为其供给一个按用户名隔离的默认工作区——`mkdir` 其沙箱目录（`workspaceRoot/<username>`，默认 `<DSH_HOME>/workspaces/<username>`）→ 注册进 durable workspace registry → 附加一个会话（`sessions.create({ workspaceId })`，群组归属）并记入所有权索引，使工作区立即在 `workspace.list` 对用户可见、可直接开聊。这解决了普通用户在公网部署下因 `host.pickDirectory` 被禁而"无法添加工作区"的问题：**无需放开特权目录选择器**（安全不回退）。管理员不受影响；供给幂等（每用户每进程一次）、best-effort（失败不阻断请求）。默认关闭，开启后用 `defaultWorkspace: true` 与可选的 `workspaceRoot` 配置根目录。
+- **默认用户工作空间（`defaultWorkspace`，默认开启）：** 非管理员首次经 `/api` 访问时，自动为其供给一个按用户名隔离的默认工作区——`mkdir` 其沙箱目录（`workspaceRoot/<username>`，默认 `<DSH_HOME>/workspaces/<username>`）→ 注册进 durable workspace registry → 附加一个会话（`sessions.create({ workspaceId })`，群组归属）并记入所有权索引，使工作区立即在 `workspace.list` 对用户可见、可直接开聊。这解决了普通用户在公网部署下因 `host.pickDirectory` 被禁而"无法添加工作区"的问题：**无需放开特权目录选择器**（安全不回退）。管理员可在「设置 → 用户管理」通过「默认用户工作空间」开关实时开/关（持久化于 `<dataDir>/settings.json`，即时生效，无需重启）；关闭不影响已存在的工作区。供给幂等（每用户每进程一次）、best-effort（失败不阻断请求）。
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
 - **登出：** 设置面板的「用户管理/账户」分区为每个用户提供登出入口（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用。
 - **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。其中有一张「访问白名单 / Trusted Hosts」卡片列出 `/api` 白名单（自动学习 + 手动添加），支持增删；删除立即生效。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
@@ -150,6 +150,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 | 用户账号（scrypt 哈希） | DSH 凭据系统，引用 `${password}_USERS`（默认 `DSH_LOGIN_PASSWORD_USERS`） |
 | 会话→用户所有权索引 | `<DSH_HOME>/.dsh-login/ownership.json`（可用 `dataDir` 配置；`DSH_HOME` 环境变量或 `~/.dsh`） |
 | 自动学习 / 管理员白名单 | `<DSH_HOME>/.dsh-login/trusted-hosts.json`（可用 `dataDir` 配置） |
+| 默认用户工作空间开关 | `<DSH_HOME>/.dsh-login/settings.json`（可用 `dataDir` 配置） |
 | 登录会话 | 仅内存（DSH 重启后需重新登录） |
 
 ## `/api` 通道接管与客户端 bundle

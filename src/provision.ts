@@ -50,6 +50,12 @@ export interface ProvisionDeps {
   ownership: OwnershipIndex
   /** The durable workspace registry service (optional; provisioning skips without it). */
   workspaceRegistry?: WorkspaceRegistryLike
+  /**
+   * Live enabled accessor (the "默认用户工作空间" toggle). When provided and
+   * false, provisioning is skipped so an admin toggle takes effect without a
+   * restart. When omitted, the feature is always active for the configured root.
+   */
+  enabled?: () => boolean
   /** Display title for the per-user workspace (falls back to the username). */
   title?: string
 }
@@ -86,6 +92,12 @@ export class DefaultWorkspaceProvisioner {
    */
   async ensure(user: { username: string; isAdmin: boolean }): Promise<void> {
     if (user.isAdmin) return
+    // Live toggle: when the admin has turned provisioning off, skip. Note we
+    // clear the done-set entry so re-enabling later lets the user be provisioned.
+    if (this.deps.enabled !== undefined && !this.deps.enabled()) {
+      this.done.delete(user.username)
+      return
+    }
     if (this.done.has(user.username)) return
     const registry = this.deps.workspaceRegistry
     if (registry === undefined) return

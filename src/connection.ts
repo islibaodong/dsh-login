@@ -44,6 +44,13 @@ export interface TakeoverDeps {
    * request can lazily ensure a per-user sandbox+starter session.
    */
   defaultWorkspaceRoot?: string
+  /**
+   * Live enabled-flag accessor for the "默认用户工作空间" toggle (from the
+   * persisted DefaultWorkspaceSetting). Consulted per request so an admin
+   * toggle takes effect immediately; defaults to the presence of
+   * defaultWorkspaceRoot.
+   */
+  isDefaultWorkspaceEnabled?: () => boolean
   maxRequestBodyBytes?: number
   /**
    * Test seam: when provided, replaces `toFetchHandler(downlinks)` as the
@@ -111,6 +118,7 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
             get workspaceRegistry(): WorkspaceRegistryLike | undefined {
               return ctx.get('workspaceRegistry') as WorkspaceRegistryLike | undefined
             },
+            enabled: deps.isDefaultWorkspaceEnabled,
           })
       const ensureProvisioned = async (user: AuthUser): Promise<void> => {
         if (provisioner !== undefined) await provisioner.ensure(user)

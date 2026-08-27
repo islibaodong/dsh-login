@@ -88,6 +88,20 @@ function (require) {
 .dshlu-hostlist { display: flex; flex-direction: column; gap: 8px; }
 .dshlu-hostrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; }
 .dshlu-hostrow code { font-size: 13px; line-height: 18px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.dshlu-switchrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dshlu-switchtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dshlu-switchlabel { font-size: 14px; line-height: 22px; font-weight: 500; color: var(--dsw-alias-label-primary); }
+.dshlu-switchdesc { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.dshlu-switch { position: relative; display: inline-flex; flex: none; width: 40px; height: 24px; margin-top: 0; cursor: pointer; }
+.dshlu-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.dshlu-switch-track { position: absolute; inset: 0; border-radius: 12px; background: var(--dsw-alias-fill-tsp-secondary); border: 1px solid var(--dsw-alias-border-l3); transition: background 120ms ease; }
+.dshlu-switch-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--dsw-alias-label-secondary); transition: transform 120ms ease, background 120ms ease; }
+.dshlu-switch input:checked + .dshlu-switch-track { background: var(--dsw-alias-state-success-primary); border-color: transparent; }
+.dshlu-switch input:checked + .dshlu-switch-track + .dshlu-switch-knob,
+.dshlu-switch input:checked ~ .dshlu-switch-knob { transform: translateX(16px); }
+.dshlu-switch input:focus-visible + .dshlu-switch-track { outline: 2px solid var(--dsw-alias-border-interactive); outline-offset: 1px; }
+.dshlu-switch input:disabled + .dshlu-switch-track { opacity: 0.5; }
+.dshlu-switch-status { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
 `
 
   // ---- locale dictionaries ----
@@ -141,6 +155,11 @@ function (require) {
     'hosts.added': '已添加',
     'hosts.addFailed': '添加失败',
     'hosts.removeFailed': '移除失败',
+    'ws.title': '默认用户工作空间',
+    'ws.intro': '开启后，每个普通用户首次访问时自动得到专属工作空间（含一个起步会话），无需手动选择宿主目录。关闭不影响已存在的用户工作空间。',
+    'ws.on': '已开启',
+    'ws.off': '已关闭',
+    'ws.toggleFailed': '切换失败',
   }
   var en = {
     'users.nav': 'Users',
@@ -191,6 +210,11 @@ function (require) {
     'hosts.added': 'Added',
     'hosts.addFailed': 'Failed to add',
     'hosts.removeFailed': 'Failed to remove',
+    'ws.title': 'Default user workspace',
+    'ws.intro': 'When enabled, every non-admin user gets an automatic private workspace (with a starter session) on first access, without manually choosing a host directory. Turning it off does not affect existing user workspaces.',
+    'ws.on': 'Enabled',
+    'ws.off': 'Disabled',
+    'ws.toggleFailed': 'Failed to toggle',
   }
 
   // ---- same-origin admin API helpers ----
@@ -309,6 +333,13 @@ function (require) {
     var hostInput = hostInputState[0]
     var setHostInput = hostInputState[1]
 
+    var wsState = useState({ status: 'loading', enabled: true, error: '' })
+    var ws = wsState[0]
+    var setWs = wsState[1]
+    var wsBusyState = useState(false)
+    var wsBusy = wsBusyState[0]
+    var setWsBusy = wsBusyState[1]
+
     var refresh = useCallback(async function () {
       try {
         var data = await api('/api/auth/admin/users', 'GET')
@@ -333,6 +364,29 @@ function (require) {
       }
     }, [])
     useEffect(function () { void refreshHosts() }, [refreshHosts])
+
+    var refreshWs = useCallback(async function () {
+      try {
+        var data = await api('/api/auth/admin/settings/default-workspace', 'GET')
+        setWs({ status: 'ready', enabled: data !== null && data.enabled === true, error: '' })
+      } catch (err) {
+        setWs({ status: 'error', enabled: true, error: err instanceof Error ? err.message : String(err) })
+      }
+    }, [])
+    useEffect(function () { void refreshWs() }, [refreshWs])
+
+    var toggleWs = async function (enabled) {
+      setWsBusy(true)
+      try {
+        var data = await api('/api/auth/admin/settings/default-workspace', 'POST', { enabled: enabled })
+        setWs({ status: 'ready', enabled: data !== null && data.enabled === true, error: '' })
+        setNotice({ kind: 'success', text: enabled ? t('ws.on') : t('ws.off') })
+      } catch (err) {
+        setWs({ status: 'error', enabled: enabled, error: err instanceof Error ? err.message : String(err) })
+        setNotice({ kind: 'error', text: t('ws.toggleFailed') + ': ' + (err instanceof Error ? err.message : String(err)) })
+      }
+      setWsBusy(false)
+    }
 
     var run = async function (action, successKey) {
       try {
@@ -490,12 +544,29 @@ function (require) {
       } },
         h(Input, { placeholder: t('hosts.placeholder'), value: hostInput, autoComplete: 'off', onChange: function (e) { setHostInput(e.target.value) } }),
         h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: hostInput.length === 0 }, t('hosts.add'))))
+
+    var wsEnabled = ws.status === 'ready' ? ws.enabled : true
+    var wsCard = h('div', { className: 'dshlu-card' },
+      h('div', { className: 'dshlu-switchrow' },
+        h('div', { className: 'dshlu-switchtext' },
+          h('div', { className: 'dshlu-switchlabel' }, t('ws.title')),
+          h('p', { className: 'dshlu-switchdesc' }, ws.status === 'error' ? t('ws.toggleFailed') + ': ' + ws.error : t('ws.intro'))),
+        h('label', { className: 'dshlu-switch', title: wsEnabled ? t('ws.on') : t('ws.off') },
+          h('input', {
+            type: 'checkbox',
+            checked: wsEnabled,
+            disabled: wsBusy || ws.status === 'loading',
+            onChange: function (e) { void toggleWs(e.target.checked) },
+          }),
+          h('span', { className: 'dshlu-switch-track' }),
+          h('span', { className: 'dshlu-switch-knob' }))))
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('users.title')),
       h('p', { className: 'dshlu-intro' }, t('users.intro')),
       notice.text.length > 0 ? h('p', { className: 'dshlu-notice dshlu-notice--' + notice.kind }, notice.text) : null,
       table,
       createCard,
+      wsCard,
       hostsCard,
       AccountBar(t, me),
       resetDialog,

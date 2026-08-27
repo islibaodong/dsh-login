@@ -8,6 +8,7 @@ import { SessionStore } from './session.ts'
 import { UserStore } from './users.ts'
 import { OwnershipIndex } from './ownership.ts'
 import { TrustedHosts } from './hosts.ts'
+import { DefaultWorkspaceSetting } from './workspace-setting.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
@@ -49,11 +50,14 @@ export function apply(ctx: Context, config: Config): void {
   const dataDir = config.dataDir === '' ? join(resolveDshHome(), '.dsh-login') : config.dataDir
   const ownership = new OwnershipIndex(join(dataDir, 'ownership.json'))
   const hosts = new TrustedHosts(join(dataDir, 'trusted-hosts.json'))
-  // Absolute root for per-user default-workspace sandboxes when
-  // config.defaultWorkspace is on: explicit workspaceRoot or `<dshHome>/workspaces`.
-  const defaultWorkspaceRoot = config.defaultWorkspace
-    ? (config.workspaceRoot === '' ? join(resolveDshHome(), 'workspaces') : config.workspaceRoot)
-    : undefined
+  // Live + persisted "默认用户工作空间" toggle: starts from config.defaultWorkspace
+  // (default on) and can be flipped by an admin at runtime from the settings
+  // panel. The provisioner reads it per request, so the toggle binds immediately.
+  const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join(dataDir, 'settings.json'), config.defaultWorkspace)
+  // Absolute root for per-user default-workspace sandboxes when the feature is
+  // enabled (config.defaultWorkspace is the boot default; the runtime toggle is
+  // defaultWorkspaceSetting): explicit workspaceRoot or `<dshHome>/workspaces`.
+  const defaultWorkspaceRoot = config.workspaceRoot === '' ? join(resolveDshHome(), 'workspaces') : config.workspaceRoot
   const distIndex = config.distIndex === '' ? resolveDistIndex() : config.distIndex
   const gatewayConfig = { ...config, distIndex }
   const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts }
@@ -108,7 +112,7 @@ export function apply(ctx: Context, config: Config): void {
     path: '/logout',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
-  for (const route of createAdminRoutes({ users, store, hosts })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }
   // The gateway claims the fallback seat (not prefix /) because the
@@ -125,6 +129,7 @@ export function apply(ctx: Context, config: Config): void {
       trustedHosts: config.trustedHosts,
       effectiveTrustedHosts,
       defaultWorkspaceRoot,
+      isDefaultWorkspaceEnabled: () => defaultWorkspaceSetting.get(),
     }))
     return () => { void child.stop?.() }
   }, 'dsh-login: connection takeover')
@@ -132,5 +137,5 @@ export function apply(ctx: Context, config: Config): void {
   // Teardown: flush any pending ownership-index / trusted-hosts writes to
   // disk. Returning the Promise lets Cordis await it on stop so a freshly
   // learned host (debounce still pending) is not dropped (review #3).
-  ctx.effect(() => () => Promise.all([ownership.flush(), hosts.flush()]), 'dsh-login: ownership + hosts flush')
+  ctx.effect(() => () => Promise.all([ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush()]), 'dsh-login: ownership + hosts + settings flush')
 }

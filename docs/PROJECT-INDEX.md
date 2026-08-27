@@ -16,8 +16,9 @@
 | 文件 | 职责 |
 |---|---|
 | `index.ts` | 插件入口 `apply()`：注册 `/login` 页面路由、`/api/auth/setup`、`/api/auth/login`、`/api/auth/logout` 三条 API 路由（均经 `ctx.effect` 托管销毁），并以 `registerFallback` 占据 fallback 席位挂认证网关 |
-| `config.ts` | Config schema：`password`(必填，凭据引用名)、`distIndex`(空=自动解析)、`sessionTtl`(默认 604800s=7天)、`enabled`、`takeOverWebRuntime`(默认 true)、`trustedHosts`、`autoTrustHosts`(默认 true)、`defaultWorkspace`(默认 false)、`workspaceRoot`(空=<DSH_HOME>/workspaces) |
-| `provision.ts` | `DefaultWorkspaceProvisioner`：非管理员首次 /api 访问时供给默认工作区（mkdir 沙箱目录 → workspaceRegistry.create → sessions.create({workspaceId}) 附加并记所有权；`sandboxSegment` 用户名安全化）；幂等、best-effort |
+| `config.ts` | Config schema：`password`(必填，凭据引用名)、`distIndex`(空=自动解析)、`sessionTtl`(默认 604800s=7天)、`enabled`、`takeOverWebRuntime`(默认 true)、`trustedHosts`、`autoTrustHosts`(默认 true)、`defaultWorkspace`(默认 **true**)、`workspaceRoot`(空=<DSH_HOME>/workspaces) |
+| `workspace-setting.ts` | `DefaultWorkspaceSetting`：持久化的「默认用户工作空间」开关（`{enabled}`，落盘 `<dataDir>/settings.json`，debounce 写入）；`get()` 被 provision 实时读取，`set()` 由 admin 路由经设置面板开关调用 |
+| `provision.ts` | `DefaultWorkspaceProvisioner`：非管理员首次 /api 访问时（需 `defaultWorkspaceSetting.get()` 为真）供给默认工作区（mkdir 沙箱目录 → workspaceRegistry.create → sessions.create({workspaceId}) 附加并记所有权；`sandboxSegment` 用户名安全化）；幂等、best-effort |
 | `gateway.ts` | 网关 fallback handler：非 GET/HEAD → 405；无有效会话 → 302 `/login`；已登录经 `serveStatic` 服务前端 dist（index.html 经 `applyIndexTaps`） |
 | `session.ts` | `SessionStore`：内存 Map，`randomBytes(32)` hex token，TTL 过期 + 机会式 cleanup；进程重启即失（单机/边缘部署可接受） |
 | `auth.ts` | cookie `dsh_session`（HttpOnly; SameSite=Strict; Path=/）；`timingSafeEqual` 常时密码比较；cookie 构建/清除/解析 |
