@@ -48,5 +48,18 @@
     "esbuild-wasm": "^0.28.2",
     "tsx": "^4.23.12",
     "vitest": "^2.1.9"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/islibaodong/dsh-login.git"
+  },
+  "files": [
+    "src",
+    "dist",
+    "cordis.patch.yml",
+    "screenshots.json",
+    "LICENSE",
+    "README.md",
+    "README.zh.md"
+  ]
 }
