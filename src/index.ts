@@ -49,6 +49,11 @@ export function apply(ctx: Context, config: Config): void {
   const dataDir = config.dataDir === '' ? join(resolveDshHome(), '.dsh-login') : config.dataDir
   const ownership = new OwnershipIndex(join(dataDir, 'ownership.json'))
   const hosts = new TrustedHosts(join(dataDir, 'trusted-hosts.json'))
+  // Absolute root for per-user default-workspace sandboxes when
+  // config.defaultWorkspace is on: explicit workspaceRoot or `<dshHome>/workspaces`.
+  const defaultWorkspaceRoot = config.defaultWorkspace
+    ? (config.workspaceRoot === '' ? join(resolveDshHome(), 'workspaces') : config.workspaceRoot)
+    : undefined
   const distIndex = config.distIndex === '' ? resolveDistIndex() : config.distIndex
   const gatewayConfig = { ...config, distIndex }
   const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts }
@@ -119,6 +124,7 @@ export function apply(ctx: Context, config: Config): void {
       ownership,
       trustedHosts: config.trustedHosts,
       effectiveTrustedHosts,
+      defaultWorkspaceRoot,
     }))
     return () => { void child.stop?.() }
   }, 'dsh-login: connection takeover')

@@ -1,6 +1,9 @@
 /** Connection takeover plugin: /api carrier with cookie auth + per-user dispatch. */
 import { EventEmitter, once } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
+import { join } from 'node:path'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -64,7 +67,10 @@ interface Setup {
   dispose: () => Promise<void>
 }
 
-async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
+async function setup(
+  effectiveTrustedHosts?: () => string[],
+  provision?: { defaultWorkspaceRoot: string; created: Array<{ path: string }> },
+): Promise<Setup> {
   const routes: WebRoute[] = []
   const upgrades: WebUpgradeRoute[] = []
   const ctx = new Context()
@@ -75,6 +81,10 @@ async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
       list: async (r: { rpcId: string }) => {
         calls.push('session.list')
         return { rpcId: r.rpcId, result: { ok: true, value: { items: [] } } }
+      },
+      create: async (r: { rpcId: string }) => {
+        calls.push('session.create')
+        return { rpcId: r.rpcId, result: { ok: true, value: { sessionId: 'prov-' + calls.length } } }
       },
     },
     subagents: {
@@ -124,6 +134,14 @@ async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
     },
   } as unknown as ApiProxy
   ctx.provide('apiProxy', api)
+  if (provision !== undefined) {
+    ctx.provide('workspaceRegistry', {
+      create: async (path: string) => {
+        provision.created.push({ path })
+        return { id: 'ws-prov', path }
+      },
+    } as never)
+  }
   const store = new SessionStore(60)
   const alice = store.create('alice', false)
   const admin = store.create('root', true)
@@ -134,7 +152,14 @@ async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
     seen.push(user.username)
     return toFetchHandler(downlinks)
   }
-  const fiber = ctx.plugin(createConnectionPlugin({ store, ownership, trustedHosts: [], effectiveTrustedHosts, fetchForTest }))
+  const fiber = ctx.plugin(createConnectionPlugin({
+    store,
+    ownership,
+    trustedHosts: [],
+    effectiveTrustedHosts,
+    defaultWorkspaceRoot: provision?.defaultWorkspaceRoot,
+    fetchForTest,
+  }))
   await fiber.await()
   return {
     routes, upgrades, store, alice, admin, ownership, calls, seen, ctx,
@@ -145,6 +170,14 @@ async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
 const envelope = (method: string, rpcId = 't1'): unknown => ({
   type: 'client-request', rpcId, method, payload: method === 'credentials.set' ? { ref: 'X', value: 'y' } : {},
 })
+
+/** Provisioning-enabled setup: injects a defaultWorkspaceRoot + workspaceRegistry. */
+async function provisionSetup(): Promise<Setup & { created: Array<{ path: string }> }> {
+  const created: Array<{ path: string }> = []
+  const workspaceRoot = join(mkdtempSync(join(tmpdir(), 'dsh-login-prov-e2e-')), 'ws')
+  const base = await setup(() => [], { defaultWorkspaceRoot: workspaceRoot, created })
+  return { ...base, created }
+}
 
 describe('dsh-login-connection', () => {
   it('registers the /api prefix route plus both event upgrades and removes them with the fiber', async () => {
@@ -379,6 +412,45 @@ describe('dsh-login-connection', () => {
     )
     expect(state).toMatchObject({ status: 404, body: 'not found' })
     expect(seen).toEqual([])
+    await dispose()
+  })
+})
+
+describe('dsh-login-connection default-workspace provisioning', () => {
+  it('provisions a non-admin user\u2019s default workspace on first /api access, once', async () => {
+    const { routes, alice, admin, created, dispose } = await provisionSetup()
+    const first = fakeResponse(); const second = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.list', envelope('session.list', 'rpc-prov-1')), first.response)
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.list', envelope('session.list', 'rpc-prov-1b')), second.response)
+    expect(first.state.status).toBe(200)
+    expect(second.state.status).toBe(200)
+    // Exactly one per-user workspace was provisioned (idempotent across requests).
+    expect(created).toHaveLength(1)
+    expect(join(created[0]!.path)).toContain(join('ws', 'alice'))
+
+    // Admin is never provisioned.
+    const adminReq = fakePost({ ...LOOPBACK, cookie: `dsh_session=${admin.token}` }, '/api/session.list', envelope('session.list', 'rpc-prov-admin'))
+    const adminRes = fakeResponse()
+    await routes[0]!.handler(adminReq, adminRes.response)
+    expect(adminRes.state.status).toBe(200)
+    expect(created).toHaveLength(1)
+    await dispose()
+  })
+
+  it('provisions each non-admin user independently', async () => {
+    const { routes, alice, store, created, dispose } = await provisionSetup()
+    const bob = store.create('bob', false)
+    const a = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.list', envelope('session.list', 'rpc-a')), a.response)
+    expect(a.state.status).toBe(200)
+    expect(created).toHaveLength(1)
+    const b = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${bob.token}` }, '/api/session.list', envelope('session.list', 'rpc-b')), b.response)
+    expect(b.state.status).toBe(200)
+    // alice + bob each get their own workspace sandbox.
+    expect(created).toHaveLength(2)
+    expect(created.some(w => w.path.endsWith(join('ws', 'alice')))).toBe(true)
+    expect(created.some(w => w.path.endsWith(join('ws', 'bob')))).toBe(true)
     await dispose()
   })
 })

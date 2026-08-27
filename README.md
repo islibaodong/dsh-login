@@ -20,6 +20,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 - 🛠 **User management** — 设置 → 用户管理: last-login time, online session count, reset password, disable, remove; disabling/removing/password-changes **immediately revoke** that user's live sessions
 - 👑 **Admin exception** — the admin is not isolated: all sessions visible, full configuration access
 - 🚪 **Logout** — every user gets a logout entry in their settings panel
+- 🌐 **Remote access friendly** — reach the GUI through frp/隧道/tunnels or a LAN IP without hand-editing `trustedHosts`: the `/api` host-trust fence uses a live set (LAN literals + `trustedHosts` + auto-learned hosts), and any successful login learns its Host into a persisted whitelist you can manage in 设置 → 用户管理
 
 ## Quick start
 
@@ -74,7 +75,10 @@ If you prefer managing the patch file yourself, add these rows to your profile's
         distIndex: ''                  # empty resolves the frontend dist automatically
         dataDir: ''                    # empty resolves to <DSH_HOME>/.dsh-login (ownership index)
         sessionTtl: 604800             # 7 days (default)
+        autoTrustHosts: true          # learn the Host of any successful login into the /api whitelist
         enabled: true                 # set false to disable without uninstalling
+        defaultWorkspace: false       # auto-provision a per-user default workspace on first /api access
+        workspaceRoot: ''             # default-workspace sandbox root; empty => <DSH_HOME>/workspaces
 
 # IMPORTANT: dsh-login takes over the fallback seat, so the web-runtime row
 # (which mounts frontend-static) must be disabled. dsh-login re-provides the
@@ -138,7 +142,7 @@ Request -> WebServer
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
 - **Logout:** the settings panel's 用户管理/账户 section carries a logout entry for every user (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link.
-- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
+- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. Inside it, the **Allowed Hosts / Trusted Hosts** card lists the `/api` whitelist (learned + manually added) with add/remove — removing takes effect immediately. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
 
 ## Data locations
 
@@ -146,11 +150,14 @@ Request -> WebServer
 |------|----------|
 | User accounts (scrypt hashes) | DSH credentials system, ref `${password}_USERS` (default `DSH_LOGIN_PASSWORD_USERS`) |
 | Session→user ownership sidecar | `<DSH_HOME>/.dsh-login/ownership.json` (configurable via `dataDir`; `DSH_HOME` env or `~/.dsh`) |
+| Auto-learned / admin Host whitelist | `<DSH_HOME>/.dsh-login/trusted-hosts.json` (configurable via `dataDir`) |
 | Login sessions | In-memory only (re-login after a DSH restart) |
 
 ## `/api` carrier takeover & the client bundle
 
 This plugin replaces the shipped `/api` connection row: `cordis.patch.yml` disables it (the WebServer rejects duplicate `/api` prefix registrations, so the shipped row must stay off) and `dsh-login` mounts its own identity-aware carrier (`src/connection.ts`) as a child plugin — same host-trust fence, but every request is resolved from the session cookie and dispatched per user.
+
+**Host trust is evaluated live per request.** Instead of a static list, the fence checks a deduped effective set — LAN literals from the web runtime + `trustedHosts` + the persisted whitelist (`src/hosts.ts`). A successful login/setup auto-learns the request Host (gated by `autoTrustHosts`, default true), so a public host reached through frp/隧道/tunnels is trusted after one login; learned hosts bind immediately and removals apply without a restart.
 
 The browser half is untouched protocol-wise, but the GUI's wire client must keep coming from this package: the client-modules scanner drops browser halves of disabled rows from the boot graph. dsh-login therefore declares its own `dsh.client` and ships the bundle `dist/client.js` — a re-stamped copy of the shipped connection client (`src/connection.client.ts` re-exports it verbatim) **plus a second module registration**: the settings-panel wrapper (`src/settings-panel.client.js`) that applies the wire client verbatim and registers the 设置 → 用户管理/账户 settings section (styled via the framework's `--dsw-alias-*` theme tokens; stylesheet pre-tagged `data-plugin`/`data-plugin-css` the way the framework's own bundle preset does). The `dsh.client.inject` field follows the ecosystem convention — it lists the PACKAGE ids behind the services the browser half needs (`@deepseek-ai/dsh-client-ui-settings`, `@deepseek-ai/dsh-client-locale`), not service names; the runtime fiber's exported `inject` stays authoritative. React and the UI primitives resolve through the platform module-table seeds every bundle may require. Regenerate it with:
 
@@ -179,7 +186,7 @@ npm run build:client   # node scripts/build-client.mjs; uses node_modules or $DS
 
 ### Recommendations for public exposure
 
-1. Set `trustedHosts` to only the specific hosts that should access the API.
+1. With `autoTrustHosts` on (default), any successful login learns its Host into the whitelist (`/api/auth/admin/hosts`, manageable in 设置 → 用户管理), so an frp/tunnel host is trusted after one login — no `trustedHosts` editing needed. Keep it on unless you want only loopback + an explicit `trustedHosts` set to be accepted.
 2. Use a reverse proxy (nginx/caddy) with TLS termination in front of DSH.
 3. The gateway cookie is `SameSite=Strict`, protecting against CSRF on the login/logout endpoints.
 
@@ -192,12 +199,12 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (134 tests; requires the DSH checkout for package
+# Canonical full suite (150 tests; requires the DSH checkout for package
 # resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
 npx vitest run
 ```
 
-The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`, `settings-panel`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
+The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `hosts`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`, `settings-panel`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
 
 ## Project structure
 
@@ -208,6 +215,7 @@ src/
 ├── users.ts          # UserStore: user records, scrypt hashing, credentials-backed persistence
 ├── session.ts        # SessionStore: in-memory sessions (user + admin flag) with TTL expiry
 ├── ownership.ts      # OwnershipIndex: sessionId → username sidecar (debounced JSON file)
+├── hosts.ts          # TrustedHosts: /api host-trust whitelist (live set + debounced JSON persistence)
 ├── api-filter.ts     # per-user ApiProxy decorator: allow-list, ownership guards, frame filtering
 ├── connection.ts     # dsh-login-connection: /api carrier takeover + WS downlinks (child plugin)
 ├── connection.client.ts  # browser half: re-exports the shipped connection client verbatim

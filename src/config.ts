@@ -28,6 +28,16 @@ export interface Config {
    * true; set false to keep only loopback + trustedHosts (+ the LAN literals
    * when takeOverWebRuntime is on). */
   autoTrustHosts: boolean
+  /** Provision a per-user default workspace for non-admin users on their
+   * first /api access, so they get a usable workspace without the privileged
+   * host.pickDirectory dialog. Default false (opt-in). Admin is unaffected.
+   * Each user's sandbox lives under workspaceRoot/<username>; a blank starter
+   * session is seeded there so the workspace is immediately visible in
+   * workspace.list (which only shows workspaces holding that user's sessions). */
+  defaultWorkspace: boolean
+  /** Filesystem root that holds each user's default-workspace sandbox. Empty
+   * resolves to `<dshHome>/workspaces`. Only used when defaultWorkspace is on. */
+  workspaceRoot: string
 }
 
 export const Config: z<Config> = z.object({
@@ -39,4 +49,6 @@ export const Config: z<Config> = z.object({
   takeOverWebRuntime: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),
   autoTrustHosts: z.boolean().default(true),
+  defaultWorkspace: z.boolean().default(false),
+  workspaceRoot: z.string().default(''),
 })

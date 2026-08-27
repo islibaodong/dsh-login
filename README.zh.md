@@ -20,6 +20,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 - 🛠 **用户管理** —— 设置 → 用户管理：最后登录时间、在线会话数、重置密码、禁用、删除；禁用/删除/改密会**立即吊销**该用户的现有会话
 - 👑 **管理员例外** —— 管理员不受隔离限制，可见全部会话，可配置宿主
 - 🚪 **登出** —— 每个用户的设置面板里都有登出入口
+- 🌐 **远程访问友好** —— 通过 frp/隧道或局域网 IP 访问 GUI 无需手改 `trustedHosts`：`/api` 主机信任围栏使用「实时有效集」（LAN 字面量 + `trustedHosts` + 已学习主机），且任何成功登录都会把请求 Host 学进持久化白名单，可在「设置 → 用户管理」里增删管理
 
 ## 快速开始
 
@@ -74,7 +75,10 @@ dsh plugin --profile web remove @islibaodong/dsh-login
         distIndex: ''                  # 留空则自动解析前端 dist
         dataDir: ''                    # 留空则解析为 <DSH_HOME>/.dsh-login（所有权索引）
         sessionTtl: 604800             # 会话有效期，7 天（默认）
+        autoTrustHosts: true          # 将任何成功登录的请求 Host 学习进 /api 白名单
         enabled: true                 # 设为 false 可临时禁用
+        defaultWorkspace: false       # 为每个普通用户首次 /api 访问自动供给默认工作区
+        workspaceRoot: ''             # 默认工作区沙箱根，留空解析为 <DSH_HOME>/workspaces
 
 # 重要：dsh-login 接管 fallback 席位，必须禁用 web-runtime 行
 # （dsh-web-app 通过该行挂载 frontend-static；dsh-login 会重新提供 webRuntime 服务）
@@ -134,9 +138,10 @@ dsh plugin --profile web remove @islibaodong/dsh-login
   - 同样禁止：`llm.discoverModels` 以及特权 `host.*` 目录对话框（`pickDirectory`、`listDirectory`、`createDirectory`、`openPath`）
   - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 事件流（mux/host WebSocket 帧）按所有权过滤，其他用户的流量不会到达浏览器
+- **默认工作区（可选，`defaultWorkspace`）：** 非管理员首次经 `/api` 访问时，自动为其供给一个按用户名隔离的默认工作区——`mkdir` 其沙箱目录（`workspaceRoot/<username>`，默认 `<DSH_HOME>/workspaces/<username>`）→ 注册进 durable workspace registry → 附加一个会话（`sessions.create({ workspaceId })`，群组归属）并记入所有权索引，使工作区立即在 `workspace.list` 对用户可见、可直接开聊。这解决了普通用户在公网部署下因 `host.pickDirectory` 被禁而"无法添加工作区"的问题：**无需放开特权目录选择器**（安全不回退）。管理员不受影响；供给幂等（每用户每进程一次）、best-effort（失败不阻断请求）。默认关闭，开启后用 `defaultWorkspace: true` 与可选的 `workspaceRoot` 配置根目录。
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
 - **登出：** 设置面板的「用户管理/账户」分区为每个用户提供登出入口（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用。
-- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
+- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。其中有一张「访问白名单 / Trusted Hosts」卡片列出 `/api` 白名单（自动学习 + 手动添加），支持增删；删除立即生效。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
 
 ## 数据位置
 
@@ -144,11 +149,14 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 |------|------|
 | 用户账号（scrypt 哈希） | DSH 凭据系统，引用 `${password}_USERS`（默认 `DSH_LOGIN_PASSWORD_USERS`） |
 | 会话→用户所有权索引 | `<DSH_HOME>/.dsh-login/ownership.json`（可用 `dataDir` 配置；`DSH_HOME` 环境变量或 `~/.dsh`） |
+| 自动学习 / 管理员白名单 | `<DSH_HOME>/.dsh-login/trusted-hosts.json`（可用 `dataDir` 配置） |
 | 登录会话 | 仅内存（DSH 重启后需重新登录） |
 
 ## `/api` 通道接管与客户端 bundle
 
 本插件替换自带的 `/api` connection 行：`cordis.patch.yml` 将其禁用（WebServer 拒绝重复的 `/api` 前缀注册，因此自带行必须保持关闭），`dsh-login` 以子插件形式挂载自己的身份感知通道（`src/connection.ts`）——同样的主机信任围栏，但每个请求都从会话 Cookie 解析身份并按用户分发。
+
+**主机信任按请求实时求值。** 围栏不再用静态列表，而是一组去重后的「有效集」——web runtime 的 LAN 字面量 + `trustedHosts` + 持久化白名单（`src/hosts.ts`）。每次成功登录/setup 都会自动学习请求 Host（受 `autoTrustHosts` 控制，默认开启），因此经 frp/隧道访问的公网主机**登录一次即被信任**；已学习的主机立即生效、删除后无需重启即失效。
 
 浏览器端的协议不变，但 GUI 的线上客户端必须继续由本包提供：client-modules 扫描器会把被禁用行的浏览器半边从启动图中剔除。因此 dsh-login 声明了自身的 `dsh.client` 并随包发布 bundle `dist/client.js`——它是自带 connection 客户端的重新打标副本（`src/connection.client.ts` 原样转发导出），**外加第二个模块注册**：设置面板包装器（`src/settings-panel.client.js`），它原样应用线上客户端并注册「设置 → 用户管理/账户」设置分区（样式走框架 `--dsw-alias-*` 主题令牌；样式表按框架 bundle 预置的形状预打 `data-plugin`/`data-plugin-css` 标签）。`dsh.client.inject` 字段遵循生态惯例——填浏览器半边所需服务背后的**包 id**（`@deepseek-ai/dsh-client-ui-settings`、`@deepseek-ai/dsh-client-locale`），而非服务名；运行时纤维自身导出的 `inject` 才是权威依赖。React 与 UI 原语经平台模块表种子解析，任何 bundle 都可合法 require。重新生成：
 
@@ -177,7 +185,7 @@ npm run build:client   # node scripts/build-client.mjs；使用 node_modules 或
 
 ### 公网暴露建议
 
-1. 将 `trustedHosts` 设置为仅允许需要访问 API 的特定主机
+1. 开启 `autoTrustHosts`（默认）时，任何成功登录都会把请求 Host 学进白名单（`/api/auth/admin/hosts`，可在「设置 → 用户管理」管理），于是 frp/隧道主机登录一次即被信任，无需手改 `trustedHosts`。如需只接受回环 + 显式 `trustedHosts`，把它设为 `false`
 2. 在 DSH 前部署反向代理（nginx/caddy）进行 TLS 终结
 3. 网关 Cookie 为 `SameSite=Strict`，可防止针对登录/登出端点的 CSRF 攻击
 
@@ -190,12 +198,12 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（134 项；需要 DSH 源码做包解析——
+# 标准全量测试（150 项；需要 DSH 源码做包解析——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
 
-`.spec.ts` 文件是标准的 vitest 测试定义，含多用户套件（`users`、`ownership`、`api-filter`、`connection`、`admin-api`、`multiuser-e2e`、`client-bundle`、`settings-panel`）。`tests/runner.mjs` 和 `tests/integration-runner.mjs` 是针对原单密码核心的沙箱兼容运行器，未随多用户功能扩展。
+`.spec.ts` 文件是标准的 vitest 测试定义，含多用户套件（`users`、`ownership`、`hosts`、`api-filter`、`connection`、`admin-api`、`multiuser-e2e`、`client-bundle`、`settings-panel`）。`tests/runner.mjs` 和 `tests/integration-runner.mjs` 是针对原单密码核心的沙箱兼容运行器，未随多用户功能扩展。
 
 ## 项目结构
 
@@ -206,6 +214,7 @@ src/
 ├── users.ts          # UserStore：用户记录、scrypt 哈希、凭据系统持久化
 ├── session.ts        # SessionStore：内存会话（用户 + 管理员标记）+ TTL 过期
 ├── ownership.ts      # OwnershipIndex: sessionId → 用户名索引（去抖写 JSON 文件）
+├── hosts.ts          # TrustedHosts: /api 主机信任白名单（实时有效集 + 去抖 JSON 持久化）
 ├── api-filter.ts     # 按用户的 ApiProxy 装饰器：允许清单、所有权守卫、帧过滤
 ├── connection.ts     # dsh-login-connection：/api 通道接管 + WS 下联（子插件）
 ├── connection.client.ts  # 浏览器半边：原样转发自带 connection 客户端
