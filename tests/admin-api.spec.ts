@@ -14,6 +14,7 @@ import { UserStore } from '../src/users.ts'
 import { createLoginHandler } from '../src/login-api.ts'
 import { createAdminRoutes } from '../src/admin-api.ts'
 import { TrustedHosts } from '../src/hosts.ts'
+import { DefaultWorkspaceSetting } from '../src/workspace-setting.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -35,6 +36,7 @@ async function boot(seed?: { rootPassword?: string }): Promise<{
   users: UserStore
   store: SessionStore
   hosts: TrustedHosts
+  setting: DefaultWorkspaceSetting
 }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-login-admin-'))
   const configPath = join(root, 'cordis.yml')
@@ -63,18 +65,19 @@ async function boot(seed?: { rootPassword?: string }): Promise<{
   const users = new UserStore(context.credentials, credentialRef('DSH_LOGIN_PASSWORD_USERS'))
   const store = new SessionStore(3600)
   const hosts = new TrustedHosts(join(root, 'trusted-hosts.json'))
+  const setting = new DefaultWorkspaceSetting(join(root, 'settings.json'), true)
   if (seed?.rootPassword !== undefined) await users.create('root', seed.rootPassword, true)
   await users.create('bob', 'bobpw', false)
-  ctx_routes(context, users, store, hosts)
-  return { ctx: context, port: context.webServer.port, users, store, hosts }
+  ctx_routes(context, users, store, hosts, setting)
+  return { ctx: context, port: context.webServer.port, users, store, hosts, setting }
 }
 
-function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts): void {
+function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/login',
     handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
   }), 'login')
-  for (const route of createAdminRoutes(hosts !== undefined ? { users, store, hosts } : { users, store })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting })) {
     ctx.effect(() => ctx.webServer.register(route), `admin: ${route.path}`)
   }
 }
@@ -354,6 +357,35 @@ describe('/api/auth/admin/hosts', () => {
     expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: 'a.example.com' }, bobCookie)).status).toBe(403)
     // anonymous → 401
     expect((await req(port, 'GET', '/api/auth/admin/hosts')).status).toBe(401)
+  })
+})
+
+describe('/api/auth/admin/settings/default-workspace', () => {
+  it('reads the persisted flag (default on) and toggles it live for an admin', { timeout: 60_000 }, async () => {
+    const { port, setting } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    // Default on (config default true).
+    expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace', undefined, cookie)).json).toEqual({ enabled: true })
+    // Turn off.
+    const off = await req(port, 'POST', '/api/auth/admin/settings/default-workspace', { enabled: false }, cookie)
+    expect(off.status).toBe(200)
+    expect(off.json).toEqual({ ok: true, enabled: false })
+    expect(setting.get()).toBe(false)
+    expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace', undefined, cookie)).json).toEqual({ enabled: false })
+    // Turn back on.
+    expect((await req(port, 'POST', '/api/auth/admin/settings/default-workspace', { enabled: true }, cookie)).json).toEqual({ ok: true, enabled: true })
+    await setting.flush()
+  })
+
+  it('rejects bad input, is admin-gated (403), and anonymous (401)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/settings/default-workspace', { enabled: 'yes' }, rootCookie)).status).toBe(400)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/default-workspace', {}, rootCookie)).status).toBe(400)
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace', undefined, bobCookie)).status).toBe(403)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/default-workspace', { enabled: true }, bobCookie)).status).toBe(403)
+    expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace')).status).toBe(401)
   })
 })
 

@@ -16,6 +16,7 @@ import { MAX_HOST_LENGTH, isBareAuthority } from './hosts.ts'
 import type { TrustedHosts } from './hosts.ts'
 import { readBody, sendJson } from './http-json.ts'
 import { extractSessionToken } from './auth.ts'
+import type { DefaultWorkspaceSetting } from './workspace-setting.ts'
 
 /** Shared dependencies for the admin routes. */
 export interface AdminDeps {
@@ -23,6 +24,8 @@ export interface AdminDeps {
   store: SessionStore
   /** TrustedHosts registry surfaced to admins for listing/manual management. Optional for back-compat. */
   hosts?: TrustedHosts
+  /** Live + persisted "默认用户工作空间" toggle. Optional for back-compat. */
+  defaultWorkspaceSetting?: DefaultWorkspaceSetting
 }
 
 /** Resolve the live session from the request cookie, if any. */
@@ -195,5 +198,21 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true })
   } }
 
-  return hostsRoute !== undefined ? [me, usersRoute, userPassword, userRemove, userDisable, hostsRoute] : [me, usersRoute, userPassword, userRemove, userDisable]
+  // Live + persisted "默认用户工作空间" toggle. The /api provisioner reads it
+  // per request, so a toggle takes effect immediately (no restart needed).
+  const setting = deps.defaultWorkspaceSetting
+  const settingRoute: WebRoute | undefined = setting === undefined ? undefined : { kind: 'exact', path: '/api/auth/admin/settings/default-workspace', handler: async (req, res) => {
+    if (requireAdmin(deps, req, res) === undefined) return
+    if (req.method === 'GET') return sendJson(res, 200, { enabled: setting.get() })
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+    const body = await readJsonObject(req)
+    if (body === null || typeof body.enabled !== 'boolean') return sendJson(res, 400, { error: 'bad request' })
+    setting.set(body.enabled)
+    return sendJson(res, 200, { ok: true, enabled: setting.get() })
+  } }
+
+  const routes: WebRoute[] = [me, usersRoute, userPassword, userRemove, userDisable]
+  if (hostsRoute !== undefined) routes.push(hostsRoute)
+  if (settingRoute !== undefined) routes.push(settingRoute)
+  return routes
 }

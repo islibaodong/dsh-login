@@ -23,6 +23,7 @@ import { createUserProxy, isUserAllowed, ownedSessionIds } from './api-filter.ts
 import type { AuthUser } from './api-filter.ts'
 import type { OwnershipIndex } from './ownership.ts'
 import type { SessionStore } from './session.ts'
+import { DefaultWorkspaceProvisioner, type WorkspaceRegistryLike } from './provision.ts'
 
 /** Factory dependencies: live instances owned by the dsh-login plugin. */
 export interface TakeoverDeps {
@@ -36,6 +37,20 @@ export interface TakeoverDeps {
    * Defaults to the static trustedHosts list.
    */
   effectiveTrustedHosts?: () => string[]
+  /**
+   * When defaultWorkspace is on: the root that holds each non-admin user's
+   * automatic default workspace (see config.workspaceRoot, resolved to an
+   * absolute path by index.ts). Propied to the provisioner so every /api
+   * request can lazily ensure a per-user sandbox+starter session.
+   */
+  defaultWorkspaceRoot?: string
+  /**
+   * Live enabled-flag accessor for the "默认用户工作空间" toggle (from the
+   * persisted DefaultWorkspaceSetting). Consulted per request so an admin
+   * toggle takes effect immediately; defaults to the presence of
+   * defaultWorkspaceRoot.
+   */
+  isDefaultWorkspaceEnabled?: () => boolean
   maxRequestBodyBytes?: number
   /**
    * Test seam: when provided, replaces `toFetchHandler(downlinks)` as the
@@ -89,6 +104,26 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
         return proxyCache.get(key)!.fetch
       }
 
+      // Lazy default-workspace provisioner: built once, resolves the durable
+      // workspace registry from the fiber on first use so a missing service
+      // disables it without failing boot. Provisioning should never block or
+      // fail the request that triggered it — DefaultWorkspaceProvisioner.ensure
+      // is idempotent and swallows its own errors.
+      const provisioner = deps.defaultWorkspaceRoot === undefined
+        ? undefined
+        : new DefaultWorkspaceProvisioner({
+            workspaceRoot: deps.defaultWorkspaceRoot,
+            getApi: () => ctx.get('apiProxy')!,
+            ownership: deps.ownership,
+            get workspaceRegistry(): WorkspaceRegistryLike | undefined {
+              return ctx.get('workspaceRegistry') as WorkspaceRegistryLike | undefined
+            },
+            enabled: deps.isDefaultWorkspaceEnabled,
+          })
+      const ensureProvisioned = async (user: AuthUser): Promise<void> => {
+        if (provisioner !== undefined) await provisioner.ensure(user)
+      }
+
       const sharedFetch = (api: ApiProxy): { fetch: typeof fetch } => ({
         fetch: async (request: Request): Promise<Response> => {
           const url = new URL(request.url)
@@ -96,6 +131,9 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
           const session = token === undefined ? undefined : deps.store.verify(token)
           if (session === undefined) return new Response('authentication required', { status: 401 })
           const user: AuthUser = { username: session.user, isAdmin: session.isAdmin }
+          // Lazy per-user default-workspace provisioning (non-admin first
+          // access). Best-effort + idempotent; must not fail the request.
+          await ensureProvisioned(user)
           // Plain GET on the two event paths answers 426 verbatim from the
           // upstream carrier (upgrades never reach this handler; the GET shape
           // is the SSE fallback browsers must not use over the web transport).
