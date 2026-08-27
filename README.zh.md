@@ -190,6 +190,14 @@ npm run build:client   # node scripts/build-client.mjs；使用 node_modules 或
 2. 在 DSH 前部署反向代理（nginx/caddy）进行 TLS 终结
 3. 网关 Cookie 为 `SameSite=Strict`，可防止针对登录/登出端点的 CSRF 攻击
 
+**排障：公网普通用户"无法添加工作区"？**
+
+定位经验（供快速排查）：这类问题几乎**不是** Host 白名单（`autoTrustHosts` 已自动学习、登录也能通），而是普通用户被卡在**建工作区的特权目录选择器** `host.pickDirectory` 上——`api-filter.ts` 刻意对普通用户 403（连同 `listDirectory`/`createDirectory`/`openPath`）。前端"添加工作区"必须先调 `pickDirectory` 选宿主目录，普通用户被拒后永远建不成工作区，错误形如 `transport failure for /api/host.pickDirectory: HTTP 403`。
+
+- 这不是部署坏，是**隔离安全设计**。**不要**为修它放开 `host.pickDirectory`（会让普通用户能浏览/选择宿主任意目录、破坏多用户隔离）。
+- 正确解法是启用本插件的**默认用户工作空间**（`defaultWorkspace`，默认开）：非管理员首次 `/api` 访问即自动供给按其用户名隔离的沙箱工作区（含一个起步会话，`workspace.list` 立即可见可用），完全**绕开**被禁的目录选择器。管理员可在「设置 → 用户管理」用「默认用户工作空间」开关实时开/关。
+- 若 `autoTrustHosts` 已开、公网登录也通、仍 403，几乎可锁定为上述 `pickDirectory` 方法级权限，而非信任栅栏。
+
 ## 架构说明：fallback vs prefix /
 
 网关使用 `registerFallback()` 而非 `register({ kind: 'prefix', path: '/' })`，因为 DSH WebServer 的前缀匹配逻辑检查 `pathname.startsWith(prefix + '/')`。当 prefix 为 `/` 时，拼接结果为 `//`，而正常路径不会以 `//` 开头——所以 `prefix /` 路由只能精确匹配 `/` 这一个路径。fallback 处理器能捕获所有未被命名路由匹配的请求，这才是认证网关所需的 catch-all 行为。

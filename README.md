@@ -192,6 +192,14 @@ npm run build:client   # node scripts/build-client.mjs; uses node_modules or $DS
 2. Use a reverse proxy (nginx/caddy) with TLS termination in front of DSH.
 3. The gateway cookie is `SameSite=Strict`, protecting against CSRF on the login/logout endpoints.
 
+**Troubleshooting: a non-admin user "cannot add a workspace" over a public tunnel?**
+
+Diagnosis quick reference: this is almost never the host whitelist (autoTrustHosts already learns the public host and login succeeds). The real blocker is that ordinary users are denied the **privileged directory picker** `host.pickDirectory` by design (`api-filter.ts` deliberately 403s it for non-admin users, together with `listDirectory`/`createDirectory`/`openPath`). The frontend's add-workspace flow must call `pickDirectory` to choose a host directory, so non-admins get stuck — e.g. `transport failure for /api/host.pickDirectory: HTTP 403`.
+
+- This is isolation-by-design, not a broken deployment. **Do not** "fix" it by allowing `host.pickDirectory` for ordinary users (that would let them browse/choose arbitrary host directories and break multi-user isolation).
+- The correct fix is this plugin's **default user workspace** (`defaultWorkspace`, on by default): a non-admin's first `/api` access auto-provisions a per-username-isolated sandbox workspace (with a starter session, immediately visible in `workspace.list` and usable), entirely bypassing the blocked picker. Admins toggle it live from the 设置 → 用户管理 panel's 默认用户工作空间 switch.
+- If autoTrustHosts is on, public login works, yet /api still 403s, it is almost certainly this pickDirectory method-level permission rather than the trust fence.
+
 ## Architecture note: fallback vs prefix /
 
 The gateway uses `registerFallback()` (not `register({ kind: 'prefix', path: '/' })`) because the DSH WebServer's prefix matching checks `pathname.startsWith(prefix + '/')`. For prefix `/`, this becomes `//`, which no normal path starts with -- a `prefix /` route only matches the exact path `/`. The fallback handler catches everything no named route claims, which is the correct catch-all behavior for the authentication gateway.
