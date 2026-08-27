@@ -11,6 +11,7 @@ import type { AuthUser } from '../src/api-filter.ts'
 import { createConnectionPlugin, type TakeoverDeps } from '../src/connection.ts'
 import { SessionStore } from '../src/session.ts'
 import { OwnershipIndex } from '../src/ownership.ts'
+import { TrustedHosts } from '../src/hosts.ts'
 import { fakeHttpServer, tmpFile } from './helpers.ts'
 
 /** Bodyless GET carrying the given headers (enough for the trust fence + bridge). */
@@ -63,7 +64,7 @@ interface Setup {
   dispose: () => Promise<void>
 }
 
-async function setup(): Promise<Setup> {
+async function setup(effectiveTrustedHosts?: () => string[]): Promise<Setup> {
   const routes: WebRoute[] = []
   const upgrades: WebUpgradeRoute[] = []
   const ctx = new Context()
@@ -133,7 +134,7 @@ async function setup(): Promise<Setup> {
     seen.push(user.username)
     return toFetchHandler(downlinks)
   }
-  const fiber = ctx.plugin(createConnectionPlugin({ store, ownership, trustedHosts: [], fetchForTest }))
+  const fiber = ctx.plugin(createConnectionPlugin({ store, ownership, trustedHosts: [], effectiveTrustedHosts, fetchForTest }))
   await fiber.await()
   return {
     routes, upgrades, store, alice, admin, ownership, calls, seen, ctx,
@@ -164,6 +165,40 @@ describe('dsh-login-connection', () => {
       response,
     )
     expect(state).toMatchObject({ status: 403, body: 'forbidden' })
+    await dispose()
+  })
+
+  it('accepts a public Host listed in effectiveTrustedHosts once a session cookie is present', async () => {
+    const { routes, alice, calls, seen, dispose } = await setup(() => ['pub.example.com'])
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ host: 'pub.example.com', origin: 'http://pub.example.com', 'sec-fetch-site': 'same-origin', cookie: `dsh_session=${alice.token}` }, '/api/session.list', envelope('session.list', 'rpc-pub')),
+      response,
+    )
+    expect(state.status).toBe(200)
+    expect(JSON.parse(String(state.body))).toMatchObject({ type: 'server-response', rpcId: 'rpc-pub' })
+    expect(calls).toContain('session.list')
+    expect(seen).toEqual(['alice'])
+    await dispose()
+  })
+
+  it('a host learned via canonicalAuthority satisfies the real isTrustedApiRequest fence', async () => {
+    // Prove the persistence + canonicalization round-trip: a literal learned
+    // by TrustedHosts.learn (as a real login would) must be accepted by the
+    // actual fence, even when the request Host has different casing.
+    const hosts = new TrustedHosts(tmpFile())
+    hosts.learn('Pub.Example.com')
+    expect(hosts.list()).toEqual(['pub.example.com'])
+    const { routes, alice, calls, seen, dispose } = await setup(() => hosts.list())
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ host: 'PUB.example.com', origin: 'http://pub.example.com', 'sec-fetch-site': 'same-origin', cookie: `dsh_session=${alice.token}` }, '/api/session.list', envelope('session.list', 'rpc-learned')),
+      response,
+    )
+    expect(state.status).toBe(200)
+    expect(JSON.parse(String(state.body))).toMatchObject({ type: 'server-response', rpcId: 'rpc-learned' })
+    expect(calls).toContain('session.list')
+    await hosts.flush()
     await dispose()
   })
 

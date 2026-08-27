@@ -7,6 +7,7 @@ import { Config as ConfigSchema } from './config.ts'
 import { SessionStore } from './session.ts'
 import { UserStore } from './users.ts'
 import { OwnershipIndex } from './ownership.ts'
+import { TrustedHosts } from './hosts.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
@@ -47,11 +48,24 @@ export function apply(ctx: Context, config: Config): void {
   const users = new UserStore(ctx.credentials, credentialRef(`${config.password}_USERS`))
   const dataDir = config.dataDir === '' ? join(resolveDshHome(), '.dsh-login') : config.dataDir
   const ownership = new OwnershipIndex(join(dataDir, 'ownership.json'))
+  const hosts = new TrustedHosts(join(dataDir, 'trusted-hosts.json'))
   const distIndex = config.distIndex === '' ? resolveDistIndex() : config.distIndex
   const gatewayConfig = { ...config, distIndex }
-  const loginDeps = { users, store, sessionTtl: config.sessionTtl }
+  const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts }
 
-  if (config.takeOverWebRuntime) provideWebRuntime(ctx, config.trustedHosts)
+  // Capture the webRuntime LAN literals so the /api takeover trusts the
+  // bound LAN addresses automatically (the shipped connection row read them
+  // from webRuntime too; dsh-login's own fence used to see only the static
+  // config list, which is why LAN IPs and frp public hosts needed hand-listing).
+  const runtime = config.takeOverWebRuntime ? provideWebRuntime(ctx, config.trustedHosts) : undefined
+  const lanAuthorities = runtime?.lanAddresses ?? []
+  // Live effective set: LAN literals + config.trustedHosts + learned/manager
+  // hosts (deduped). The fence reads it per request so learned hosts bind
+  // immediately and removals take effect without a restart.
+  const effectiveTrustedHosts = (): string[] => {
+    const learned = config.autoTrustHosts ? hosts.list() : []
+    return [...new Set([...lanAuthorities, ...config.trustedHosts, ...learned])]
+  }
 
   const loginPageRoute: WebRoute = {
     kind: 'exact',
@@ -89,7 +103,7 @@ export function apply(ctx: Context, config: Config): void {
     path: '/logout',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
-  for (const route of createAdminRoutes({ users, store })) {
+  for (const route of createAdminRoutes({ users, store, hosts })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }
   // The gateway claims the fallback seat (not prefix /) because the
@@ -104,10 +118,13 @@ export function apply(ctx: Context, config: Config): void {
       store,
       ownership,
       trustedHosts: config.trustedHosts,
+      effectiveTrustedHosts,
     }))
     return () => { void child.stop?.() }
   }, 'dsh-login: connection takeover')
 
-  // Teardown: flush any pending ownership-index writes to disk.
-  ctx.effect(() => () => { void ownership.flush() }, 'dsh-login: ownership flush')
+  // Teardown: flush any pending ownership-index / trusted-hosts writes to
+  // disk. Returning the Promise lets Cordis await it on stop so a freshly
+  // learned host (debounce still pending) is not dropped (review #3).
+  ctx.effect(() => () => Promise.all([ownership.flush(), hosts.flush()]), 'dsh-login: ownership + hosts flush')
 }

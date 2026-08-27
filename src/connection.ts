@@ -28,7 +28,14 @@ import type { SessionStore } from './session.ts'
 export interface TakeoverDeps {
   store: SessionStore
   ownership: OwnershipIndex
+  /** config.trustedHosts — asserted at boot and used as the static base. */
   trustedHosts: string[]
+  /**
+   * Live effective trusted-authorities evaluator for the /api fence
+   * (LAN literals + config.trustedHosts + auto-learned/manager hosts).
+   * Defaults to the static trustedHosts list.
+   */
+  effectiveTrustedHosts?: () => string[]
   maxRequestBodyBytes?: number
   /**
    * Test seam: when provided, replaces `toFetchHandler(downlinks)` as the
@@ -134,7 +141,7 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
         kind: 'prefix',
         path: API_PATH,
         handler: async (req, res) => {
-          if (!isTrustedApiRequest(req, deps.trustedHosts)) {
+          if (!isTrustedApiRequest(req, deps.effectiveTrustedHosts?.() ?? deps.trustedHosts)) {
             res.writeHead(403)
             res.end('forbidden')
             return
@@ -155,7 +162,7 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
         ctx.effect(() => ctx.webServer.registerUpgrade({
           path,
           handler: (req, socket, head) => {
-            if (!isTrustedApiRequest(req, deps.trustedHosts)) {
+            if (!isTrustedApiRequest(req, deps.effectiveTrustedHosts?.() ?? deps.trustedHosts)) {
               rejectWebSocketUpgrade(socket)
               return
             }

@@ -1,3 +1,4 @@
+import { request as httpRequest } from 'node:http'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +14,7 @@ import { SessionStore } from '../src/session.ts'
 import { UserStore } from '../src/users.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from '../src/login-api.ts'
 import { COOKIE_NAME, extractSessionToken } from '../src/auth.ts'
+import { TrustedHosts } from '../src/hosts.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -69,11 +71,27 @@ async function postJson(port: number, path: string, body: unknown, cookie?: stri
   return { status: res.status, json, headers: res.headers }
 }
 
+/** POST a JSON body to path with an explicit Host header (node http, not fetch). */
+async function postJsonWithHost(port: number, host: string, path: string, body: unknown): Promise<{ status: number }> {
+  const payload = JSON.stringify(body)
+  return await new Promise((resolve, reject) => {
+    const req0 = httpRequest({
+      host: '127.0.0.1', port, path, method: 'POST',
+      headers: { Host: host, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, (res) => {
+      res.resume()
+      resolve({ status: res.statusCode ?? 0 })
+    })
+    req0.on('error', reject)
+    req0.end(payload)
+  })
+}
+
 /** Register login/logout/setup/admin-free routes exactly like src/index.ts does. */
-async function registerAuthRoutes(ctx: Context, users: UserStore, store: SessionStore): Promise<void> {
+async function registerAuthRoutes(ctx: Context, users: UserStore, store: SessionStore, opts?: { hosts?: TrustedHosts; autoTrust?: boolean }): Promise<void> {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/login',
-    handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
+    handler: createLoginHandler({ users, store, sessionTtl: 3600, hosts: opts?.hosts, autoTrust: opts?.autoTrust }),
   }), 'login')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/logout',
@@ -218,6 +236,45 @@ describe('POST /api/auth/logout', () => {
     await registerAuthRoutes(ctx, users, new SessionStore(3600))
     const res = await postJson(port, '/api/auth/logout', {})
     expect(res.status).toBe(200)
+  })
+})
+
+describe('auto-learned Host on successful login', () => {
+  it('learns the request Host into the TrustedHosts registry after a successful login', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    const hosts = new TrustedHosts(join(root!, 'learned-hosts.json'))
+    await registerAuthRoutes(ctx, users, new SessionStore(3600), { hosts, autoTrust: true })
+    // A login arriving with a public Host header learns that authority.
+    const res = await postJsonWithHost(port, 'pub.example.com', '/api/auth/login', { username: 'alice', password: 's3cret' })
+    expect(res.status).toBe(200)
+    expect(hosts.has('pub.example.com')).toBe(true)
+    await hosts.flush()
+  })
+
+  it('does not learn the Host when autoTrust is disabled', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    const hosts = new TrustedHosts(join(root!, 'learned-disabled.json'))
+    await registerAuthRoutes(ctx, users, new SessionStore(3600), { hosts, autoTrust: false })
+    const res = await postJsonWithHost(port, 'pub.example.com', '/api/auth/login', { username: 'alice', password: 's3cret' })
+    expect(res.status).toBe(200)
+    expect(hosts.has('pub.example.com')).toBe(false)
+    await hosts.flush()
+  })
+
+  it('does not learn the Host when credentials are invalid', { timeout: 60_000 }, async () => {
+    const { ctx, port, users } = await bootWithCreds()
+    await users.create('alice', 's3cret', true)
+    const hosts = new TrustedHosts(join(root!, 'learned-badcreds.json'))
+    await registerAuthRoutes(ctx, users, new SessionStore(3600), { hosts, autoTrust: true })
+    // A failed login (wrong password) must never touch the registry, even
+    // though the Host header is attacker-controlled (review #1/#6).
+    const res = await postJsonWithHost(port, 'evil.example.com', '/api/auth/login', { username: 'alice', password: 'WRONG' })
+    expect(res.status).toBe(401)
+    expect(hosts.has('evil.example.com')).toBe(false)
+    expect(hosts.list()).toEqual([])
+    await hosts.flush()
   })
 })
 

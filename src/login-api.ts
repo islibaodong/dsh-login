@@ -13,6 +13,7 @@ import type { ServerResponse, IncomingMessage } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { SessionStore } from './session.ts'
 import type { UserStore } from './users.ts'
+import type { TrustedHosts } from './hosts.ts'
 import { readBody, sendJson } from './http-json.ts'
 import { buildCookieHeader, buildClearCookieHeader, extractSessionToken } from './auth.ts'
 
@@ -22,6 +23,10 @@ export interface LoginDeps {
   store: SessionStore
   /** Session lifetime in seconds; stamped onto the Set-Cookie Max-Age. */
   sessionTtl: number
+  /** TrustedHosts registry; a successful login/setup auto-learns the Host. Optional for back-compat; learning is skipped when absent. */
+  hosts?: TrustedHosts
+  /** Whether auto-learning a successful login's Host is enabled (config.autoTrustHosts). */
+  autoTrust?: boolean
 }
 
 /** Parse and validate a `{username, password}` JSON body; null on bad input. */
@@ -40,6 +45,12 @@ async function parseCredentials(req: IncomingMessage): Promise<{ username: strin
   }
   if (typeof parsed.username !== 'string' || typeof parsed.password !== 'string') return null
   return { username: parsed.username, password: parsed.password }
+}
+
+/** Best-effort: learn the request Host into the trusted registry. */
+function learnRequestHost(req: IncomingMessage, hosts: TrustedHosts): void {
+  const host = req.headers.host
+  if (typeof host === 'string' && host.length > 0) hosts.learn(host)
 }
 
 /**
@@ -67,6 +78,7 @@ export function createLoginHandler(deps: LoginDeps): WebRoute['handler'] {
     // verified login over it.
     await deps.users.touchLastLogin(record.username).catch(() => {})
     const session = deps.store.create(record.username, record.isAdmin)
+    if (deps.autoTrust === true && deps.hosts !== undefined) learnRequestHost(req, deps.hosts)
     res.setHeader('Set-Cookie', buildCookieHeader(session.token, deps.sessionTtl))
     sendJson(res, 200, { ok: true })
   }
@@ -130,6 +142,7 @@ export function createSetupHandler(deps: LoginDeps): WebRoute['handler'] {
     // in, so its last-login stamp starts at creation.
     await deps.users.touchLastLogin(record.username).catch(() => {})
     const session = deps.store.create(record.username, record.isAdmin)
+    if (deps.autoTrust === true && deps.hosts !== undefined) learnRequestHost(req, deps.hosts)
     res.setHeader('Set-Cookie', buildCookieHeader(session.token, deps.sessionTtl))
     sendJson(res, 200, { ok: true })
   }

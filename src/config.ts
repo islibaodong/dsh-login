@@ -23,6 +23,11 @@ export interface Config {
   /** Explicit trusted authorities (from --trusted-host), appended after the
    * LAN literals, exactly like dsh-web-app's resolveLanTrust. */
   trustedHosts: string[]
+  /** Automatically learn the Host of any successful login and trust it for
+   * the /api fence (persisted under <dataDir>/trusted-hosts.json). Default
+   * true; set false to keep only loopback + trustedHosts (+ the LAN literals
+   * when takeOverWebRuntime is on). */
+  autoTrustHosts: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -33,4 +38,5 @@ export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true),
   takeOverWebRuntime: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),
+  autoTrustHosts: z.boolean().default(true),
 })

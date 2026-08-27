@@ -10409,6 +10409,9 @@ function (require) {
 .dshlu-loading { padding: 8px 14px; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-tertiary); }
 .dshlu-dialog-fields { display: flex; flex-direction: column; gap: 10px; }
 .dshlu-dialog-desc { margin: 0; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-secondary); }
+.dshlu-hostlist { display: flex; flex-direction: column; gap: 8px; }
+.dshlu-hostrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; }
+.dshlu-hostrow code { font-size: 13px; line-height: 18px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
 `
 
   // ---- locale dictionaries ----
@@ -10452,6 +10455,16 @@ function (require) {
     'dialog.confirm': '确认',
     'dialog.cancel': '取消',
     'error.loadFailed': '加载用户列表失败',
+    'hosts.title': '访问白名单 / Trusted Hosts',
+    'hosts.intro': '允许访问 /api 的主机（除本机回环）。公网通过 frp/隧道登录成功后会自动加入；可在此手动添加或移除。删除后立即生效。',
+    'hosts.empty': '暂无信任的主机',
+    'hosts.placeholder': 'host 或 host:port',
+    'hosts.add': '添加',
+    'hosts.remove': '移除',
+    'hosts.removed': '已移除',
+    'hosts.added': '已添加',
+    'hosts.addFailed': '添加失败',
+    'hosts.removeFailed': '移除失败',
   }
   var en = {
     'users.nav': 'Users',
@@ -10492,6 +10505,16 @@ function (require) {
     'dialog.confirm': 'Confirm',
     'dialog.cancel': 'Cancel',
     'error.loadFailed': 'Failed to load users',
+    'hosts.title': 'Allowed hosts / Trusted Hosts',
+    'hosts.intro': 'Hosts allowed to reach /api (besides loopback). Public hosts learned after a successful login via frp/tunnel appear here automatically; manage them manually here. Removals take effect immediately.',
+    'hosts.empty': 'No trusted hosts yet',
+    'hosts.placeholder': 'host or host:port',
+    'hosts.add': 'Add',
+    'hosts.remove': 'Remove',
+    'hosts.removed': 'Removed',
+    'hosts.added': 'Added',
+    'hosts.addFailed': 'Failed to add',
+    'hosts.removeFailed': 'Failed to remove',
   }
 
   // ---- same-origin admin API helpers ----
@@ -10603,6 +10626,13 @@ function (require) {
     var createAdmin = createAdminState[0]
     var setCreateAdmin = createAdminState[1]
 
+    var hostsState = useState({ status: 'loading', hosts: [], error: '' })
+    var hosts = hostsState[0]
+    var setHosts = hostsState[1]
+    var hostInputState = useState('')
+    var hostInput = hostInputState[0]
+    var setHostInput = hostInputState[1]
+
     var refresh = useCallback(async function () {
       try {
         var data = await api('/api/auth/admin/users', 'GET')
@@ -10617,6 +10647,16 @@ function (require) {
       var timer = setInterval(function () { void refresh() }, 20000)
       return function () { clearInterval(timer) }
     }, [refresh])
+
+    var refreshHosts = useCallback(async function () {
+      try {
+        var data = await api('/api/auth/admin/hosts', 'GET')
+        setHosts({ status: 'ready', hosts: Array.isArray(data.hosts) ? data.hosts : [], error: '' })
+      } catch (err) {
+        setHosts({ status: 'error', hosts: [], error: err instanceof Error ? err.message : String(err) })
+      }
+    }, [])
+    useEffect(function () { void refreshHosts() }, [refreshHosts])
 
     var run = async function (action, successKey) {
       try {
@@ -10742,12 +10782,45 @@ function (require) {
       },
     })
 
+    var hostsCard = h('div', { className: 'dshlu-card' },
+      h('h3', null, t('hosts.title')),
+      h('p', { className: 'dshlu-intro' }, t('hosts.intro')),
+      hosts.status === 'loading'
+        ? h('div', { className: 'dshlu-loading' }, '…')
+        : hosts.status === 'error'
+          ? h('div', { className: 'dshlu-empty' }, hosts.error)
+          : hosts.hosts.length === 0
+            ? h('div', { className: 'dshlu-empty' }, t('hosts.empty'))
+            : h('div', { className: 'dshlu-hostlist' }, hosts.hosts.map(function (hst) {
+                return h('div', { key: hst, className: 'dshlu-hostrow' },
+                  h('code', null, hst),
+                  h(Button, { variant: 'ghost', size: 'sm', className: 'dshlu-danger', onClick: function () {
+                    void (async function () {
+                      try { await api('/api/auth/admin/hosts', 'DELETE', { host: hst }); setNotice({ kind: 'success', text: t('hosts.removed') }) }
+                      catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.removeFailed') + ')' }) }
+                      void refreshHosts()
+                    })()
+                  } }, t('hosts.remove')))
+              })),
+      h('form', { className: 'dshlu-fields', onSubmit: function (e) {
+        e.preventDefault()
+        if (hostInput.length === 0) return
+        var value = hostInput
+        void (async function () {
+          try { await api('/api/auth/admin/hosts', 'POST', { host: value }); setHostInput(''); setNotice({ kind: 'success', text: t('hosts.added') }) }
+          catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.addFailed') + ')' }) }
+          void refreshHosts()
+        })()
+      } },
+        h(Input, { placeholder: t('hosts.placeholder'), value: hostInput, autoComplete: 'off', onChange: function (e) { setHostInput(e.target.value) } }),
+        h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: hostInput.length === 0 }, t('hosts.add'))))
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('users.title')),
       h('p', { className: 'dshlu-intro' }, t('users.intro')),
       notice.text.length > 0 ? h('p', { className: 'dshlu-notice dshlu-notice--' + notice.kind }, notice.text) : null,
       table,
       createCard,
+      hostsCard,
       AccountBar(t, me),
       resetDialog,
       disableDialog,

@@ -13,6 +13,7 @@ import { SessionStore } from '../src/session.ts'
 import { UserStore } from '../src/users.ts'
 import { createLoginHandler } from '../src/login-api.ts'
 import { createAdminRoutes } from '../src/admin-api.ts'
+import { TrustedHosts } from '../src/hosts.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -33,6 +34,7 @@ async function boot(seed?: { rootPassword?: string }): Promise<{
   port: number
   users: UserStore
   store: SessionStore
+  hosts: TrustedHosts
 }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-login-admin-'))
   const configPath = join(root, 'cordis.yml')
@@ -60,18 +62,19 @@ async function boot(seed?: { rootPassword?: string }): Promise<{
   await context.plugin(MemoryCredentials)
   const users = new UserStore(context.credentials, credentialRef('DSH_LOGIN_PASSWORD_USERS'))
   const store = new SessionStore(3600)
+  const hosts = new TrustedHosts(join(root, 'trusted-hosts.json'))
   if (seed?.rootPassword !== undefined) await users.create('root', seed.rootPassword, true)
   await users.create('bob', 'bobpw', false)
-  ctx_routes(context, users, store)
-  return { ctx: context, port: context.webServer.port, users, store }
+  ctx_routes(context, users, store, hosts)
+  return { ctx: context, port: context.webServer.port, users, store, hosts }
 }
 
-function ctx_routes(ctx: Context, users: UserStore, store: SessionStore): void {
+function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/login',
     handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
   }), 'login')
-  for (const route of createAdminRoutes({ users, store })) {
+  for (const route of createAdminRoutes(hosts !== undefined ? { users, store, hosts } : { users, store })) {
     ctx.effect(() => ctx.webServer.register(route), `admin: ${route.path}`)
   }
 }
@@ -311,6 +314,46 @@ describe('POST /api/auth/admin/users/disable', () => {
     expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: 'yes' }, rootCookie)).status).toBe(400)
     const bobCookie = await loginCookie(port, 'bob', 'bobpw')
     expect((await req(port, 'POST', '/api/auth/admin/users/disable', { username: 'bob', disabled: true }, bobCookie)).status).toBe(403)
+  })
+})
+
+describe('/api/auth/admin/hosts', () => {
+  it('lists, adds, and removes hosts for an admin and persists them', { timeout: 60_000 }, async () => {
+    const { port, hosts } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    // empty initially
+    expect((await req(port, 'GET', '/api/auth/admin/hosts', undefined, cookie)).json).toEqual({ hosts: [] })
+    // add
+    const add = await req(port, 'POST', '/api/auth/admin/hosts', { host: 'PUB.example.com' }, cookie)
+    expect(add.status).toBe(201)
+    // list reflects the canonical form
+    expect((await req(port, 'GET', '/api/auth/admin/hosts', undefined, cookie)).json).toEqual({ hosts: ['pub.example.com'] })
+    // hosts instance is updated live
+    expect(hosts.has('pub.example.com')).toBe(true)
+    // re-adding an existing host is idempotent (200, not 201 or 400)
+    expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: 'PUB.example.com' }, cookie)).status).toBe(200)
+    // loopback is always already trusted → reflected as ok, never stored
+    expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: '127.0.0.1' }, cookie)).status).toBe(200)
+    expect(hosts.has('127.0.0.1')).toBe(false)
+    expect((await req(port, 'GET', '/api/auth/admin/hosts', undefined, cookie)).json).toEqual({ hosts: ['pub.example.com'] })
+    // remove
+    const del = await req(port, 'DELETE', '/api/auth/admin/hosts', { host: 'pub.example.com' }, cookie)
+    expect(del.status).toBe(200)
+    expect((await req(port, 'GET', '/api/auth/admin/hosts', undefined, cookie)).json).toEqual({ hosts: [] })
+    await hosts.flush()
+  })
+
+  it('rejects invalid hosts (400) and is admin-gated (403/401)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: 'not a host with spaces!' }, rootCookie)).status).toBe(400)
+    expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: '' }, rootCookie)).status).toBe(400)
+    // ordinary user → 403
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/admin/hosts', undefined, bobCookie)).status).toBe(403)
+    expect((await req(port, 'POST', '/api/auth/admin/hosts', { host: 'a.example.com' }, bobCookie)).status).toBe(403)
+    // anonymous → 401
+    expect((await req(port, 'GET', '/api/auth/admin/hosts')).status).toBe(401)
   })
 })
 

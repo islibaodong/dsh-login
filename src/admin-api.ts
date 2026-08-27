@@ -12,6 +12,8 @@ import type { ServerResponse, IncomingMessage } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { Session, SessionStore } from './session.ts'
 import type { UserStore } from './users.ts'
+import { MAX_HOST_LENGTH, isBareAuthority } from './hosts.ts'
+import type { TrustedHosts } from './hosts.ts'
 import { readBody, sendJson } from './http-json.ts'
 import { extractSessionToken } from './auth.ts'
 
@@ -19,6 +21,8 @@ import { extractSessionToken } from './auth.ts'
 export interface AdminDeps {
   users: UserStore
   store: SessionStore
+  /** TrustedHosts registry surfaced to admins for listing/manual management. Optional for back-compat. */
+  hosts?: TrustedHosts
 }
 
 /** Resolve the live session from the request cookie, if any. */
@@ -138,6 +142,39 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true })
   } }
 
+  const hosts = deps.hosts
+  const hostsRoute: WebRoute | undefined = hosts === undefined ? undefined : { kind: 'exact', path: '/api/auth/admin/hosts', handler: async (req, res) => {
+    if (req.method === 'GET') {
+      if (requireAdmin(deps, req, res) === undefined) return
+      return sendJson(res, 200, { hosts: hosts.list() })
+    }
+    if (req.method !== 'POST' && req.method !== 'DELETE') {
+      if (requireAdmin(deps, req, res) === undefined) return
+      return sendJson(res, 405, { error: 'method not allowed' })
+    }
+    if (requireAdmin(deps, req, res) === undefined) return
+    const body = await readJsonObject(req)
+    if (body === null || typeof body.host !== 'string' || body.host.length === 0) {
+      return sendJson(res, 400, { error: 'bad request' })
+    }
+    // Reject non-bare inputs (path/userinfo/query would be silently rewritten
+    // by canonicalAuthority) and oversized strings up front — mirroring
+    // config's assertTrustedAuthority strictness (review #2/#5).
+    const raw = body.host
+    if (raw.length > MAX_HOST_LENGTH || !isBareAuthority(raw)) {
+      return sendJson(res, 400, { error: 'invalid host' })
+    }
+    const canonical = hosts.canonicalize(raw)!
+    if (req.method === 'POST') {
+      // add() re-validates: rejects loopback/redundant entries; true = newly
+      // added (201), false = already present / already-trusted (200).
+      const added = hosts.add(raw)
+      return sendJson(res, added ? 201 : 200, { ok: true, host: canonical })
+    }
+    hosts.remove(canonical)
+    return sendJson(res, 200, { ok: true, host: canonical })
+  } }
+
   const userDisable: WebRoute = { kind: 'exact', path: '/api/auth/admin/users/disable', handler: async (req, res) => {
     if (requireAdmin(deps, req, res) === undefined) return
     const body = await readJsonObject(req)
@@ -158,5 +195,5 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true })
   } }
 
-  return [me, usersRoute, userPassword, userRemove, userDisable]
+  return hostsRoute !== undefined ? [me, usersRoute, userPassword, userRemove, userDisable, hostsRoute] : [me, usersRoute, userPassword, userRemove, userDisable]
 }
