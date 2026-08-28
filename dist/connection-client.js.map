@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/connection.client.ts"],
+  "sourcesContent": ["// Re-export the shipped browser client verbatim: the takeover changes only\n// the host-side carrier (auth resolution + per-user dispatch). The browser\n// speaks the same /api protocol; the session cookie rides along transparently.\nexport * from '@deepseek-ai/dsh-client-connection/client'\nexport { default } from '@deepseek-ai/dsh-client-connection/client'\n"],
+  "mappings": ";AAGA,cAAc;AACd,SAAS,WAAAA,gBAAe;",
+  "names": ["default"]
+}
