@@ -15,6 +15,7 @@ import { createLoginHandler } from '../src/login-api.ts'
 import { createAdminRoutes } from '../src/admin-api.ts'
 import { TrustedHosts } from '../src/hosts.ts'
 import { DefaultWorkspaceSetting } from '../src/workspace-setting.ts'
+import { BooleanSetting } from '../src/boolean-setting.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -30,13 +31,14 @@ afterEach(async () => {
  * Boot a real webserver plus login + all admin routes wired against ONE
  * UserStore/SessionStore pair (the shape src/index.ts composes).
  */
-async function boot(seed?: { rootPassword?: string }): Promise<{
+async function boot(seed?: { rootPassword?: string; compat?: { onApply?: (enabled: boolean) => Promise<string> } }): Promise<{
   ctx: Context
   port: number
   users: UserStore
   store: SessionStore
   hosts: TrustedHosts
   setting: DefaultWorkspaceSetting
+  compatSetting: BooleanSetting
 }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-login-admin-'))
   const configPath = join(root, 'cordis.yml')
@@ -66,18 +68,19 @@ async function boot(seed?: { rootPassword?: string }): Promise<{
   const store = new SessionStore(3600)
   const hosts = new TrustedHosts(join(root, 'trusted-hosts.json'))
   const setting = new DefaultWorkspaceSetting(join(root, 'settings.json'), true)
+  const compatSetting = new BooleanSetting(join(root, 'settings-remote-web-ui.json'), true)
   if (seed?.rootPassword !== undefined) await users.create('root', seed.rootPassword, true)
   await users.create('bob', 'bobpw', false)
-  ctx_routes(context, users, store, hosts, setting)
-  return { ctx: context, port: context.webServer.port, users, store, hosts, setting }
+  ctx_routes(context, users, store, hosts, setting, compatSetting, seed?.compat?.onApply)
+  return { ctx: context, port: context.webServer.port, users, store, hosts, setting, compatSetting }
 }
 
-function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting): void {
+function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting, compatSetting?: BooleanSetting, onRemoteWebUiApply?: (enabled: boolean) => Promise<string>): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/login',
     handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
   }), 'login')
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting, remoteWebUiSetting: compatSetting, onRemoteWebUiApply })) {
     ctx.effect(() => ctx.webServer.register(route), `admin: ${route.path}`)
   }
 }
@@ -386,6 +389,42 @@ describe('/api/auth/admin/settings/default-workspace', () => {
     expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace', undefined, bobCookie)).status).toBe(403)
     expect((await req(port, 'POST', '/api/auth/admin/settings/default-workspace', { enabled: true }, bobCookie)).status).toBe(403)
     expect((await req(port, 'GET', '/api/auth/admin/settings/default-workspace')).status).toBe(401)
+  })
+})
+
+describe('/api/auth/admin/settings/remote-web-ui-compat', () => {
+  it('reads the persisted flag (default on) and toggles it live, reporting the applier outcome', { timeout: 60_000 }, async () => {
+    const applied: boolean[] = []
+    const { port, compatSetting } = await boot({ rootPassword: 'rootpw', compat: { onApply: async (enabled) => { applied.push(enabled); return 'ok' } } })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    // Default on (config default true).
+    expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat', undefined, cookie)).json).toEqual({ enabled: true })
+    // Turn off → requirePairingForLan false; the applier is invoked and reports ok.
+    const off = await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: false }, cookie)
+    expect(off.status).toBe(200)
+    expect(off.json).toEqual({ ok: true, enabled: false, applied: 'ok' })
+    expect(compatSetting.get()).toBe(false)
+    expect(applied).toEqual([false])
+    expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat', undefined, cookie)).json).toEqual({ enabled: false })
+    // Turn back on.
+    expect((await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: true }, cookie)).json).toEqual({ ok: true, enabled: true, applied: 'ok' })
+    await compatSetting.flush()
+  })
+
+  it('reports unregistered when no applier side is available and is admin-gated (403)/anonymous (401)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    // No onApply wired → skipped.
+    const off = await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: false }, rootCookie)
+    expect(off.status).toBe(200)
+    expect(off.json).toEqual({ ok: true, enabled: false, applied: 'skipped' })
+    // Bad input.
+    expect((await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: 'yes' }, rootCookie)).status).toBe(400)
+    // Admin gated + anonymous.
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat', undefined, bobCookie)).status).toBe(403)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: true }, bobCookie)).status).toBe(403)
+    expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat')).status).toBe(401)
   })
 })
 

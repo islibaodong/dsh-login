@@ -142,9 +142,10 @@ Request -> WebServer
   - the physical `session.export` channel (target in the query string, outside the envelope) is ownership-guarded at the carrier
   - event streams (mux/host WebSocket frames) are filtered by ownership, so other users' traffic never reaches the browser
 - **Default user workspace (`defaultWorkspace`, on by default):** non-admin users get a per-user isolated default workspace on first `/api` access — `mkdir` their sandbox (`workspaceRoot/<username>`, default `<DSH_HOME>/workspaces/<username>`) → register it in the durable workspace registry → attach one session (`sessions.create({ workspaceId })`, the grouping shape) and record its ownership, so the workspace is immediately visible in the user's `workspace.list` and ready to use. This solves ordinary users being unable to add a workspace on public/FRP deployments (the frontend flow needs the privileged, non-admin-forbidden `host.pickDirectory`) **without loosening that security boundary**. Admins can toggle it live from the 设置 → 用户管理 panel's 默认用户工作空间 switch (persisted to `<dataDir>/settings.json`, effective immediately, no restart); turning it off does not remove existing workspaces. Provisioning is idempotent (once per user per process) and best-effort (failures never fail the triggering request).
+- **Remote access compat (`remoteWebUiCompat`, on by default):** accommodates `@linxin666/dsh-remote-web-ui` unchanged. That popular plugin's `/remote` device-pairing gate 401s non-loopback (public FRP) desktop traffic — the model dialog, history, composer — independently of dsh-login's /api auth. When this flag is on, dsh-login writes remote-web-ui's `requirePairingForLan` to `false` (a **live, settings-backed** flag re-read per request), so non-loopback traffic rides dsh-login's `/api` channel gated by the `dsh_session` cookie instead. No-op when remote-web-ui is not installed; admins toggle it live from the 设置 → 用户管理 panel's 远程访问兼容 switch (persisted, effective immediately). Note: with `remoteWebUiCompat` defaulting to on, the pairing barrier is off for every dsh-login + remote-web-ui deployment — intended, since dsh-login's own /api auth still sits in front.
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
 - **Logout:** the settings panel's 用户管理/账户 section carries a logout entry for every user (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link.
-- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. Inside it, the **Allowed Hosts / Trusted Hosts** card lists the `/api` whitelist (learned + manually added) with add/remove — removing takes effect immediately. A **默认用户工作空间** switch toggles the per-user default-workspace provisioning live (persisted, no restart). The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
+- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. Inside it, the **Allowed Hosts / Trusted Hosts** card lists the `/api` whitelist (learned + manually added) with add/remove — removing takes effect immediately. A **默认用户工作空间** switch toggles the per-user default-workspace provisioning live (persisted, no restart), and a **远程访问兼容** switch toggles the remote-web-ui `requirePairingForLan` bypass. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
 
 ## Data locations
 
@@ -154,6 +155,7 @@ Request -> WebServer
 | Session→user ownership sidecar | `<DSH_HOME>/.dsh-login/ownership.json` (configurable via `dataDir`; `DSH_HOME` env or `~/.dsh`) |
 | Auto-learned / admin Host whitelist | `<DSH_HOME>/.dsh-login/trusted-hosts.json` (configurable via `dataDir`) |
 | Default-user-workspace toggle | `<DSH_HOME>/.dsh-login/settings.json` (configurable via `dataDir`) |
+| Remote-web-ui compat toggle | `<DSH_HOME>/.dsh-login/settings-remote-web-ui.json` (configurable via `dataDir`) |
 | Login sessions | `<DSH_HOME>/.dsh-login/sessions.json` (0o600; persisted across restarts, TTL drops stale) |
 
 ## `/api` carrier takeover & the client bundle
@@ -210,12 +212,12 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (150 tests; requires the DSH checkout for package
+# Canonical full suite (185 tests; requires the DSH checkout for package
 # resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
 npx vitest run
 ```
 
-The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `hosts`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`, `settings-panel`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
+The `.spec.ts` files are the canonical vitest definitions, including the multi-user suites (`users`, `ownership`, `hosts`, `api-filter`, `connection`, `admin-api`, `multiuser-e2e`, `client-bundle`, `settings-panel`, `remote-web-ui-compat`). `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature.
 
 ## Project structure
 
@@ -231,6 +233,9 @@ src/
 ├── connection.ts     # dsh-login-connection: /api carrier takeover + WS downlinks (child plugin)
 ├── connection.client.ts  # browser half: re-exports the shipped connection client verbatim
 ├── settings-panel.client.js  # settings-panel browser half (plain JS): 用户管理/账户 section, theme-token styled
+├── workspace-setting.ts  # 默认用户工作空间 runtime toggle (extends BooleanSetting)
+├── boolean-setting.ts  # live + persisted {enabled} runtime flag shared by admin switches
+├── remote-web-ui-compat.ts  # writes remote-web-ui's requirePairingForLan (settings-backed, live) to bypass its pairing gate
 ├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON routes (settings-panel backend)
 ├── auth.ts           # Cookie management + constant-time compare helpers
 ├── gateway.ts        # Auth gateway handler (fallback + serveStatic)

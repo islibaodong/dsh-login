@@ -40,6 +40,16 @@ export interface Config {
   /** Filesystem root that holds each user's default-workspace sandbox. Empty
    * resolves to `<dshHome>/workspaces`. Only used when defaultWorkspace is on. */
   workspaceRoot: string
+  /**
+   * Compatibility with `@linxin666/dsh-remote-web-ui` (default true). When on,
+   * dsh-login writes that plugin's `requirePairingForLan` setting to `false`
+   * (live + persisted), so non-loopback desktop traffic — e.g. a public FRP
+   * host — rides the ordinary /api channel dsh-login gates by the dsh_session
+   * cookie, instead of remote-web-ui's device-pairing gate (which otherwise
+   * 401s a model-dialog / history request). No-op when remote-web-ui is not
+   * installed. An admin can toggle it live from 设置-用户管理.
+   */
+  remoteWebUiCompat: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -53,4 +63,5 @@ export const Config: z<Config> = z.object({
   autoTrustHosts: z.boolean().default(true),
   defaultWorkspace: z.boolean().default(true),
   workspaceRoot: z.string().default(''),
+  remoteWebUiCompat: z.boolean().default(true),
 })

@@ -10484,6 +10484,13 @@ function (require) {
     'ws.on': '已开启',
     'ws.off': '已关闭',
     'ws.toggleFailed': '切换失败',
+    'rwu.title': '远程访问兼容（remote-web-ui）',
+    'rwu.intro': '开启后，通过公网 frp/隧道访问的桌面端（模型对话框、历史、写作区）走 dsh-login 的 /api 通道，由 dsh_session 登录态鉴权，绕过 remote-web-ui 的设备配对门槛。未安装该插件时此项无效果。',
+    'rwu.on': '已开启',
+    'rwu.off': '已关闭',
+    'rwu.applied': '已生效于 remote-web-ui',
+    'rwu.unregistered': '未检测到 remote-web-ui',
+    'rwu.toggleFailed': '切换失败',
   }
   var en = {
     'users.nav': 'Users',
@@ -10539,6 +10546,13 @@ function (require) {
     'ws.on': 'Enabled',
     'ws.off': 'Disabled',
     'ws.toggleFailed': 'Failed to toggle',
+    'rwu.title': 'Remote access compat (remote-web-ui)',
+    'rwu.intro': 'When enabled, desktop clients reaching via public frp/tunnel (model dialog, history, composer) ride dsh-login\'s /api channel gated by the dsh_session login cookie, bypassing remote-web-ui\'s device-pairing gate. No effect when remote-web-ui is not installed.',
+    'rwu.on': 'Enabled',
+    'rwu.off': 'Disabled',
+    'rwu.applied': 'Applied to remote-web-ui',
+    'rwu.unregistered': 'remote-web-ui not detected',
+    'rwu.toggleFailed': 'Failed to toggle',
   }
 
   // ---- same-origin admin API helpers ----
@@ -10664,6 +10678,13 @@ function (require) {
     var wsBusy = wsBusyState[0]
     var setWsBusy = wsBusyState[1]
 
+    var rwuState = useState({ status: 'loading', enabled: true, error: '' })
+    var rwu = rwuState[0]
+    var setRwu = rwuState[1]
+    var rwuBusyState = useState(false)
+    var rwuBusy = rwuBusyState[0]
+    var setRwuBusy = rwuBusyState[1]
+
     var refresh = useCallback(async function () {
       try {
         var data = await api('/api/auth/admin/users', 'GET')
@@ -10710,6 +10731,31 @@ function (require) {
         setNotice({ kind: 'error', text: t('ws.toggleFailed') + ': ' + (err instanceof Error ? err.message : String(err)) })
       }
       setWsBusy(false)
+    }
+
+    var refreshRwu = useCallback(async function () {
+      try {
+        var data = await api('/api/auth/admin/settings/remote-web-ui-compat', 'GET')
+        setRwu({ status: 'ready', enabled: data !== null && data.enabled === true, error: '' })
+      } catch (err) {
+        setRwu({ status: 'error', enabled: true, error: err instanceof Error ? err.message : String(err) })
+      }
+    }, [])
+    useEffect(function () { void refreshRwu() }, [refreshRwu])
+
+    var toggleRwu = async function (enabled) {
+      setRwuBusy(true)
+      try {
+        var data = await api('/api/auth/admin/settings/remote-web-ui-compat', 'POST', { enabled: enabled })
+        setRwu({ status: 'ready', enabled: data !== null && data.enabled === true, error: '' })
+        if (data !== null && data.applied === 'ok') setNotice({ kind: 'success', text: enabled ? t('rwu.on') + ' · ' + t('rwu.applied') : t('rwu.off') + ' · ' + t('rwu.applied') })
+        else if (data !== null && data.applied === 'unregistered') setNotice({ kind: 'success', text: enabled ? t('rwu.on') + ' · ' + t('rwu.unregistered') : t('rwu.off') + ' · ' + t('rwu.unregistered') })
+        else setNotice({ kind: 'success', text: enabled ? t('rwu.on') : t('rwu.off') })
+      } catch (err) {
+        setRwu({ status: 'error', enabled: enabled, error: err instanceof Error ? err.message : String(err) })
+        setNotice({ kind: 'error', text: t('rwu.toggleFailed') + ': ' + (err instanceof Error ? err.message : String(err)) })
+      }
+      setRwuBusy(false)
     }
 
     var run = async function (action, successKey) {
@@ -10884,6 +10930,22 @@ function (require) {
           }),
           h('span', { className: 'dshlu-switch-track' }),
           h('span', { className: 'dshlu-switch-knob' }))))
+
+    var rwuEnabled = rwu.status === 'ready' ? rwu.enabled : true
+    var rwuCard = h('div', { className: 'dshlu-card' },
+      h('div', { className: 'dshlu-switchrow' },
+        h('div', { className: 'dshlu-switchtext' },
+          h('div', { className: 'dshlu-switchlabel' }, t('rwu.title')),
+          h('p', { className: 'dshlu-switchdesc' }, rwu.status === 'error' ? t('rwu.toggleFailed') + ': ' + rwu.error : t('rwu.intro'))),
+        h('label', { className: 'dshlu-switch', title: rwuEnabled ? t('rwu.on') : t('rwu.off') },
+          h('input', {
+            type: 'checkbox',
+            checked: rwuEnabled,
+            disabled: rwuBusy || rwu.status === 'loading',
+            onChange: function (e) { void toggleRwu(e.target.checked) },
+          }),
+          h('span', { className: 'dshlu-switch-track' }),
+          h('span', { className: 'dshlu-switch-knob' }))))
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('users.title')),
       h('p', { className: 'dshlu-intro' }, t('users.intro')),
@@ -10891,6 +10953,7 @@ function (require) {
       table,
       createCard,
       wsCard,
+      rwuCard,
       hostsCard,
       AccountBar(t, me),
       resetDialog,

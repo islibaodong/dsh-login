@@ -9,6 +9,10 @@ const apiproxy = join(checkout, 'packages/host/apiproxy')
 // Same treatment for the client connection carrier (bridge, trust fence,
 // WebSocket downlinks): not linked into this checkout's node_modules.
 const connection = join(checkout, 'packages/client/connection')
+// The settings seam is not linked into this checkout's node_modules either
+// (it is a DSH workspace package); resolve it to the checkout sources so the
+// remote-web-ui compat module's settingsNamespace import resolves.
+const settings = join(checkout, 'packages/settings/settings')
 // Webserver + frontend-static ARE linked into node_modules, but the link
 // resolves through package exports to their built lib/ - which can lag the
 // checkout's sources after a git pull (e.g. 0.1.1-rc.1 sources with
@@ -36,6 +40,7 @@ export default defineConfig({
       { find: /^@deepseek-ai\/dsh-client-connection\/src\/(.+)$/, replacement: join(connection, 'src') + '/$1' },
       { find: /^@deepseek-ai\/dsh-host-webserver$/, replacement: join(webserver, 'src/index.ts') },
       { find: /^@deepseek-ai\/dsh-host-frontend-static$/, replacement: join(frontendStatic, 'src/index.ts') },
+      { find: /^@deepseek-ai\/dsh-settings$/, replacement: join(settings, 'src/index.ts') },
     ],
   },
 })

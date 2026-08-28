@@ -27,6 +27,7 @@
       "@deepseek-ai/dsh-host-webserver": ["E:/code/deepseek-harness/packages/host/webserver/src"],
       "@deepseek-ai/dsh-host-frontend-static": ["E:/code/deepseek-harness/packages/host/frontend-static/src"],
       "@deepseek-ai/dsh-credentials": ["E:/code/deepseek-harness/packages/credentials/credentials/src"],
+      "@deepseek-ai/dsh-settings": ["E:/code/deepseek-harness/packages/settings/settings/src"],
       "@deepseek-ai/dsh-invariants": ["E:/code/deepseek-harness/packages/runtime-diagnostics/invariants/src"]
     }
   },

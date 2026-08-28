@@ -17,6 +17,8 @@ import type { TrustedHosts } from './hosts.ts'
 import { readBody, sendJson } from './http-json.ts'
 import { extractSessionToken } from './auth.ts'
 import type { DefaultWorkspaceSetting } from './workspace-setting.ts'
+import type { BooleanSetting } from './boolean-setting.ts'
+import type { CompatApplyResult } from './remote-web-ui-compat.ts'
 
 /** Shared dependencies for the admin routes. */
 export interface AdminDeps {
@@ -26,6 +28,10 @@ export interface AdminDeps {
   hosts?: TrustedHosts
   /** Live + persisted "默认用户工作空间" toggle. Optional for back-compat. */
   defaultWorkspaceSetting?: DefaultWorkspaceSetting
+  /** Live + persisted "remote-web-ui 兼容" toggle. Optional for back-compat. */
+  remoteWebUiSetting?: BooleanSetting
+  /** Runtime applier of the compat flag to remote-web-ui (returns the outcome). */
+  onRemoteWebUiApply?: (enabled: boolean) => Promise<CompatApplyResult>
 }
 
 /** Resolve the live session from the request cookie, if any. */
@@ -211,8 +217,28 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true, enabled: setting.get() })
   } }
 
+  // Live + persisted "remote-web-ui 兼容" toggle. When enabled, dsh-login writes
+  // @linxin666/dsh-remote-web-ui's requirePairingForLan to false so non-loopback
+  // (public FRP) desktop traffic rides dsh-login's /api channel instead of
+  // remote-web-ui's device-pairing gate. onRemoteWebUiApply reports the runtime
+  // outcome (ok/skipped/unregistered) so the panel can tell the admin whether
+  // the flag actually reached remote-web-ui.
+  const remoteSetting = deps.remoteWebUiSetting
+  const remoteSettingRoute: WebRoute | undefined = remoteSetting === undefined ? undefined : { kind: 'exact', path: '/api/auth/admin/settings/remote-web-ui-compat', handler: async (req, res) => {
+    if (requireAdmin(deps, req, res) === undefined) return
+    if (req.method === 'GET') return sendJson(res, 200, { enabled: remoteSetting.get() })
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+    const body = await readJsonObject(req)
+    if (body === null || typeof body.enabled !== 'boolean') return sendJson(res, 400, { error: 'bad request' })
+    remoteSetting.set(body.enabled)
+    let applied: CompatApplyResult = 'skipped'
+    if (deps.onRemoteWebUiApply !== undefined) applied = await deps.onRemoteWebUiApply(body.enabled)
+    return sendJson(res, 200, { ok: true, enabled: remoteSetting.get(), applied })
+  } }
+
   const routes: WebRoute[] = [me, usersRoute, userPassword, userRemove, userDisable]
   if (hostsRoute !== undefined) routes.push(hostsRoute)
   if (settingRoute !== undefined) routes.push(settingRoute)
+  if (remoteSettingRoute !== undefined) routes.push(remoteSettingRoute)
   return routes
 }

@@ -9,6 +9,8 @@ import { UserStore } from './users.ts'
 import { OwnershipIndex } from './ownership.ts'
 import { TrustedHosts } from './hosts.ts'
 import { DefaultWorkspaceSetting } from './workspace-setting.ts'
+import { BooleanSetting } from './boolean-setting.ts'
+import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
@@ -62,6 +64,16 @@ export function apply(ctx: Context, config: Config): void {
   // enabled (config.defaultWorkspace is the boot default; the runtime toggle is
   // defaultWorkspaceSetting): explicit workspaceRoot or `<dshHome>/workspaces`.
   const defaultWorkspaceRoot = config.workspaceRoot === '' ? join(resolveDshHome(), 'workspaces') : config.workspaceRoot
+  // Live + persisted "remote-web-ui 兼容" toggle: when on (default), dsh-login
+  // writes @linxin666/dsh-remote-web-ui's requirePairingForLan to false so
+  // non-loopback (public FRP) desktop traffic rides dsh-login's /api channel
+  // instead of remote-web-ui's device-pairing gate. No-op if remote-web-ui is
+  // not installed. The toggle is settings-backed + hot-reloaded by that plugin,
+  // so flipping it at runtime takes effect immediately and persists.
+  const remoteWebUiSetting = new BooleanSetting(join(dataDir, 'settings-remote-web-ui.json'), config.remoteWebUiCompat)
+  const remoteWebUiCompat = new RemoteWebUiCompat({
+    getSettings: () => ctx.get('settings') as unknown as ReturnType<RemoteWebUiCompatDeps['getSettings']>,
+  })
   const distIndex = config.distIndex === '' ? resolveDistIndex() : config.distIndex
   const gatewayConfig = { ...config, distIndex }
   const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts }
@@ -116,9 +128,14 @@ export function apply(ctx: Context, config: Config): void {
     path: '/logout',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, 3, 50) })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }
+  // Boot-time application of the remote-web-ui compatibility toggle. Deferred
+  // so it never blocks startup; applyWithRetry keeps retrying a few hundred ms
+  // in case remote-web-ui's settings namespace registers after dsh-login does.
+  const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get())
+  void bootCompat
   // The gateway claims the fallback seat (not prefix /) because the
   // WebServer's prefix match only catches the exact path '/' for a '/'
   // prefix. The fallback catches everything no named route claims.
@@ -141,5 +158,5 @@ export function apply(ctx: Context, config: Config): void {
   // Teardown: flush any pending ownership-index / trusted-hosts writes to
   // disk. Returning the Promise lets Cordis await it on stop so a freshly
   // learned host (debounce still pending) is not dropped (review #3).
-  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
+  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
 }

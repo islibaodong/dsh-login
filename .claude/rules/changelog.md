@@ -1,5 +1,26 @@
 # Memory Changelog
 
+## 2026-08-22 — feature: remote-web-ui pairing gate bypass (requirePairingForLan toggle)
+- Accommodates `@linxin666/dsh-remote-web-ui` unchanged (the popular community
+  plugin whose `/remote` device-pairing gate 401s non-loopback desktop traffic
+  from a public FRP host, independently of dsh-login's working /api auth).
+- new `src/remote-web-ui-compat.ts`: `RemoteWebUiCompat.apply(enabled)` writes
+  `requirePairingForLan: !enabled` into remote-web-ui's
+  `settingsNamespace('remote-web-ui')` (live + hot-reloaded by that plugin);
+  `ok | skipped (no settings svc) | unregistered (namespace missing)`; plus
+  `applyWithRetry` for the boot race where remote-web-ui registers its namespace
+  after dsh-login applies. No-op whenever remote-web-ui is not installed.
+- new `src/boolean-setting.ts`: shared live+persisted `{enabled}` flag backing
+  the runtime toggles; `DefaultWorkspaceSetting` now extends it (back-compat).
+- config: `remoteWebUiCompat: boolean` (default **true**). index.ts wires a
+  `BooleanSetting`, a deferred boot `applyWithRetry`, passes it into
+  `createAdminRoutes`, flushes it on teardown.
+- admin route `GET/POST /api/auth/admin/settings/remote-web-ui-compat` returns
+  `{enabled}` (+ `applied: ok|skipped|unregistered`); 设置-用户管理 gains a
+  switch card (zh/en).
+- Build/tests: vitest + tsconfig alias `@deepseek-ai/dsh-settings` → harness
+  `packages/settings/settings`; peerDependency added. 185 tests pass.
+
 ## 2026-08-21 — README restructure: showcase first, tech later
 - Both READMEs rewritten front-to-back: one-liner → side-by-side
   screenshots (images/login.png, images/users.png — new, committed) →
