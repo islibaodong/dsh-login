@@ -1,5 +1,26 @@
 # Memory Changelog
 
+## 2026-08-28 — two-segment grace: admin-only `/api/<domain>/<member>` probes go quiet (204)
+- The capability feature fixed single-segment probes, but two-segment Typert
+  endpoints (`/api/pet/pets`, `/api/plugin-manager/…`, …) were still 403-ing:
+  `connection.ts` forwarded every two-segment path straight to the harness
+  interceptor, bypassing the 204 quiet-denial. Ordinary-user browsers kept
+  printing forbidden walls (e.g. `GET /api/pet/pets`).
+- Fix: `connection.ts` now denies a non-admin request to an admin-only
+  **two-segment domain** with the same read-quiet / write-loud shape
+  (`isReadProbe(member) || GET/HEAD → 204`, else `403`, gated by `quietDenials`).
+- New `capabilities.ts`: `ADMIN_ONLY_TWO_SEGMENT_DOMAINS` (config/secrets,
+  pair/update/remote loopback, admin+decoration UI-plugin domains) +
+  `isUserDeniedTwoSegment(domain)`. It is a **deny-list by design** to avoid the
+  allow-list regression of user-facing two-segment domains (`ssh`, `skill`,
+  `settings`, …) — SSH host management (`/api/ssh/*`) is a real ordinary-user
+  feature and must keep dispatching. Denying only admin domains strictly
+  converts 403→204 with zero user-feature regression.
+- Tests: connection.spec.ts (two-segment GET 204 / POST 403 / off→403 / admin
+  forwards / allowed-domain two-segment still dispatched 404), capabilities.spec.ts
+  (deny-list admits pet/credentials/pair…, never ssh/skill/settings/session/api,
+  no overlap with ordinary domain surface). Full suite 209 pass.
+
 ## 2026-08-28 — capability discovery + quiet denial of read probes (graceful auth)
 - Returning to the plugin's design purpose: an ordinary-user browser session was
   splashing "forbidden" walls + potential retries because installed

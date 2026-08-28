@@ -38,6 +38,40 @@ export function userAllowedMethods(): string[] {
 }
 
 /**
+ * Two-segment `/api/<domain>/<member>` domains that are admin-only: ordinary
+ * users are denied them at the physical layer (quiet 204 for read shapes, 403
+ * for writes) instead of being forwarded to the harness — which answers a loud
+ * 403 and floods the browser console on startup probes like `GET /api/pet/pets`.
+ *
+ * The surface is a *deny-list*, not an allow-list: everything else (including
+ * user-facing two-segment domains such as `ssh`, `skill`, `settings`) is
+ * dispatched exactly as before, so this never regresses a genuinely
+ * user-reachable feature. Domains here are the config/secrets, pairing/update
+ * (loopback) and admin/decoration UI-plugin domains an ordinary user must not
+ * reach.
+ */
+export const ADMIN_ONLY_TWO_SEGMENT_DOMAINS: ReadonlySet<string> = new Set([
+  // config + secrets (admin)
+  'credentials', 'agentPresets', 'agentPreset',
+  // pairing / update / remote-channel (loopback-only)
+  'pair', 'update', 'dsh-desktop-launcher', 'dsh-web-ui-settings', 'web-ui-settings', 'dsh-ssh',
+  // admin / decoration UI-plugin domains
+  'pet', 'task-board', 'plugin-manager', 'doctor', 'perf', 'liangshen', 'aionui',
+  'market', 'git-graph', 'skill-explorer', 'skin-center', 'community-plugins',
+  // harness admin-agent domain
+  'agents',
+])
+
+/**
+ * Whether a two-segment domain is admin-only for an ordinary user (see
+ * {@link ADMIN_ONLY_TWO_SEGMENT_DOMAINS}). Denying it is safe and never touches
+ * user-facing domains, so the physical layer can answer it gracefully.
+ */
+export function isUserDeniedTwoSegment(domain: string): boolean {
+  return ADMIN_ONLY_TWO_SEGMENT_DOMAINS.has(domain)
+}
+
+/**
  * Whole two-segment domains the browser half of UI plugins poll that a normal
  * user may reach (those the decorated proxy exposes, ownership-scoped). These
  * are safe for the client to render for an ordinary user; admin-only domains

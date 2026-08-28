@@ -20,7 +20,7 @@ import { rejectWebSocketUpgrade, WebSocketDownlinks } from '@deepseek-ai/dsh-cli
 import { HostConnectionService } from '@deepseek-ai/dsh-client-connection/src/rpc-host.ts'
 import { extractSessionToken } from './auth.ts'
 import { createUserProxy, isUserAllowed, ownedSessionIds } from './api-filter.ts'
-import { isReadProbe } from './capabilities.ts'
+import { isReadProbe, isUserDeniedTwoSegment } from './capabilities.ts'
 import type { AuthUser } from './api-filter.ts'
 import type { OwnershipIndex } from './ownership.ts'
 import type { SessionStore } from './session.ts'
@@ -169,8 +169,21 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
           // Two-segment endpoints are UI-plugin territory: dispatch them
           // through the Typert interceptor (authentication above already
           // applies; admin-only legacy domains stay fenced by the single-
-          // segment allow-list below).
+          // segment allow-list below). An ordinary user is denied the
+          // admin-only two-segment domains here with the same quiet-read /
+          // loud-write shape as the single-segment layer, instead of being
+          // blindly forwarded to the harness — which answers 403 and floods
+          // the browser console on startup probes like `GET /api/pet/pets`.
+          // Authorization is unchanged: admin-only domains are never executed
+          // and never leak data (204 has no body); user-facing domains (ssh,
+          // skill, settings, …) are still dispatched exactly as before.
           if (method !== undefined && method.includes('/')) {
+            const domain = method.slice(0, method.indexOf('/'))
+            const member = method.slice(method.indexOf('/') + 1)
+            if (!user.isAdmin && isUserDeniedTwoSegment(domain)) {
+              const quiet = deps.quietDenials !== false && (reqReadOnlyContext(request) || isReadProbe(`${domain}.${member}`))
+              return new Response(quiet ? undefined : 'forbidden', { status: quiet ? 204 : 403 })
+            }
             return typertDispatch.fetch(request)
           }
           // Non-admin methods the decorator rejects are rejected at the

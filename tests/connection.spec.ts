@@ -482,15 +482,68 @@ describe('dsh-login-connection', () => {
     await dispose()
   })
 
-  it('answers 404 for an unclaimed two-segment endpoint instead of leaking into the RpcMethodMap handler', async () => {
+  it('answers 404 for an unclaimed two-segment endpoint inside an allowed domain (dispatched, not leaked)', async () => {
     const { routes, alice, seen, dispose } = await setup()
     const { response, state } = fakeResponse()
+    // `session` is an allowed domain for ordinary users → forwarded to the
+    // Typert interceptor, whose unclaimed fallback is "not found".
     await routes[0]!.handler(
-      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/nope/missing', envelope('nope/missing')),
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session/unknownThing', envelope('session/unknownThing')),
       response,
     )
     expect(state).toMatchObject({ status: 404, body: 'not found' })
     expect(seen).toEqual([])
+    await dispose()
+  })
+
+  it('quietly denies a two-segment GET probe in an out-of-surface domain (204)', async () => {
+    // The `pet` UI plugin GETs `/api/pet/pets` on startup. Ordinary users have
+    // no `pet` capability, so it is no longer forwarded to the harness (403);
+    // as a read context it is answered 204 — silent, no console error/retry.
+    const { routes, alice, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakeRequest({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/pet/pets'),
+      response,
+    )
+    expect(state.status).toBe(204)
+    await dispose()
+  })
+
+  it('denies a two-segment POST mutation in an out-of-surface domain (403)', async () => {
+    // A mutating call into a domain ordinary users cannot reach stays 403 even
+    // with quietDenials on: only read shapes are flushed silently.
+    const { routes, alice, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/pet/feed', envelope('pet/feed')),
+      response,
+    )
+    expect(state.status).toBe(403)
+    await dispose()
+  })
+
+  it('returns 403 for an out-of-surface two-segment read probe when quietDenials is off', async () => {
+    const { routes, alice, dispose } = await setup(undefined, undefined, false)
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakeRequest({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/pet/pets'),
+      response,
+    )
+    expect(state.status).toBe(403)
+    await dispose()
+  })
+
+  it('forwards two-segment requests for admins even outside the ordinary surface', async () => {
+    const { routes, admin, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    // Admin may reach `pet`; it is dispatched (here unclaimed → 404 from the
+    // interceptor) rather than denied.
+    await routes[0]!.handler(
+      fakeRequest({ ...LOOPBACK, cookie: `dsh_session=${admin.token}` }, '/api/pet/pets'),
+      response,
+    )
+    expect(state).toMatchObject({ status: 404, body: 'not found' })
     await dispose()
   })
 })

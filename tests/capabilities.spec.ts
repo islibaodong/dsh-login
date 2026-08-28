@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveCapabilities, isReadProbe, QUIET_DENY_METHODS, userAllowedMethods } from '../src/capabilities.ts'
+import { ADMIN_ONLY_TWO_SEGMENT_DOMAINS, deriveCapabilities, isReadProbe, isUserDeniedTwoSegment, QUIET_DENY_METHODS, userAllowedMethods } from '../src/capabilities.ts'
 import { USER_ALLOWED } from '../src/api-filter.ts'
 
 describe('capabilities', () => {
@@ -56,5 +56,29 @@ describe('isReadProbe', () => {
 
   it('is pure and deterministic', () => {
     expect(isReadProbe('agentPreset.list')).toBe(isReadProbe('agentPreset.list'))
+  })
+})
+
+describe('isUserDeniedTwoSegment', () => {
+  it('denies admin-only/decoration two-segment domains', () => {
+    for (const d of ['pet', 'credentials', 'agentPresets', 'plugin-manager', 'task-board', 'doctor', 'pair', 'update', 'dsh-web-ui-settings', 'agents']) {
+      expect(isUserDeniedTwoSegment(d)).toBe(true)
+    }
+  })
+
+  it('never denies user-facing domains (ssh, skill, settings, chat, api)', () => {
+    // The deny-list is conservative: any domain an ordinary user could reach
+    // (ssh, skill, settings, …) is dispatched as before — a wrong deny here
+    // would regress a real user feature, so these must stay open.
+    for (const d of ['ssh', 'skill', 'settings', 'session', 'workspace', 'api', 'chat']) {
+      expect(isUserDeniedTwoSegment(d)).toBe(false)
+    }
+  })
+
+  it('has no overlap with the ordinary-user domain surface', () => {
+    const user = deriveCapabilities({ username: 'alice', isAdmin: false })
+    for (const d of user.domains) expect(isUserDeniedTwoSegment(d)).toBe(false)
+    // And the admin-only list is non-trivial (guards against it silently emptying).
+    expect(ADMIN_ONLY_TWO_SEGMENT_DOMAINS.size).toBeGreaterThan(10)
   })
 })
