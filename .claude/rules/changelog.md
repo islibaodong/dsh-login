@@ -1,5 +1,20 @@
 # Memory Changelog
 
+## 2026-08-28 — remote-web-ui compat: mount host routes + trust public host
+- Root cause found for the public-FRP 405/403 wall: remote-web-ui registers its
+  host routes (`/remote`, `/api/pair/*`) ONLY when `enabled===true`; the earlier
+  compat write of `requirePairingForLan:false` alone could not help because
+  nothing was mounted. Fix: `RemoteWebUiCompat.apply` now writes
+  `{ enabled: true, requirePairingForLan: false }` (enabled:true mounts routes).
+- The `/api/pair/*` fence (`routes.ts` `lanFence`) is **Host-header based** —
+  a browser at a public FRP host sends `Host: <public>:<port>` which loopback/`lanAddresses`
+  don't match, so `/api/pair/status` 403s and the client still fail-closes to `/remote`.
+  Fix: new config `remoteWebUiPublicBaseUrl` (string) is threaded through `apply` and
+  written as remote-web-ui's `publicBaseUrl` (which its `sync()` hot-applies via
+  `service.setPublicBaseUrl`), so the fence trusts the public origin.
+- `applyWithRetry` signature now `(compat, enabled, publicBaseUrl?, attempts?, delayMs?)`.
+- Tests: `remote-web-ui-compat.spec.ts` 10 → 13 (publicBaseUrl written/omitted/off-only).
+
 ## 2026-08-22 — feature: remote-web-ui pairing gate bypass (requirePairingForLan toggle)
 - Accommodates `@linxin666/dsh-remote-web-ui` unchanged (the popular community
   plugin whose `/remote` device-pairing gate 401s non-loopback desktop traffic

@@ -44,13 +44,40 @@ describe('RemoteWebUiCompat.apply', () => {
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
     await expect(compat.apply(true)).rejects.toThrow('disk full')
   })
+
+  it('includes publicBaseUrl in the patch when compat ON and a valid http URL is given', async () => {
+    const { settings, calls } = fakeSettings()
+    const compat = new RemoteWebUiCompat({ getSettings: () => settings })
+    expect(await compat.apply(true, 'http://8.137.156.163:13080')).toBe('ok')
+    expect(calls).toEqual([{
+      ns: REMOTE_WEB_UI_NAMESPACE as unknown as string,
+      patch: { enabled: true, requirePairingForLan: false, publicBaseUrl: 'http://8.137.156.163:13080' },
+    }])
+  })
+
+  it('omits publicBaseUrl when compat ON but the value is empty or invalid', async () => {
+    const { settings, calls } = fakeSettings()
+    const compat = new RemoteWebUiCompat({ getSettings: () => settings })
+    await compat.apply(true, '')
+    await compat.apply(true, 'not-a-url')
+    const patches = calls.map(call => (call.patch as Record<string, unknown>).publicBaseUrl)
+    expect(patches).toEqual([undefined, undefined])
+    expect(calls[0].patch).toEqual({ enabled: true, requirePairingForLan: false })
+  })
+
+  it('never writes publicBaseUrl when compat is OFF (restore pairing only)', async () => {
+    const { settings, calls } = fakeSettings()
+    const compat = new RemoteWebUiCompat({ getSettings: () => settings })
+    await compat.apply(false, 'http://8.137.156.163:13080')
+    expect(calls[0].patch).toEqual({ requirePairingForLan: true })
+  })
 })
 
 describe('applyWithRetry', () => {
   it('returns ok on the first attempt when the namespace is registered', async () => {
     const { settings } = fakeSettings()
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
-    expect(await applyWithRetry(compat, true, 3, 1)).toBe('ok')
+    expect(await applyWithRetry(compat, true, '', 3, 1)).toBe('ok')
   })
 
   it('retries until the namespace registers within budget', async () => {
@@ -60,7 +87,7 @@ describe('applyWithRetry', () => {
       .mockImplementationOnce(() => { throw new Error('settings namespace not registered') })
       .mockImplementationOnce(() => { /* noop — registers on the third */ })
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
-    expect(await applyWithRetry(compat, true, 5, 1)).toBe('ok')
+    expect(await applyWithRetry(compat, true, '', 5, 1)).toBe('ok')
     expect(spy).toHaveBeenCalledTimes(3)
   })
 
@@ -69,7 +96,7 @@ describe('applyWithRetry', () => {
     const spy = vi.spyOn(settings, 'update')
     spy.mockImplementation(() => { throw new Error('settings namespace not registered') })
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
-    expect(await applyWithRetry(compat, true, 2, 1)).toBe('unregistered')
+    expect(await applyWithRetry(compat, true, '', 2, 1)).toBe('unregistered')
     expect(spy).toHaveBeenCalledTimes(2)
   })
 
@@ -81,12 +108,12 @@ describe('applyWithRetry', () => {
     const compat = new RemoteWebUiCompat({
       getSettings: () => { probes++; return probes >= 3 ? settings : undefined },
     })
-    expect(await applyWithRetry(compat, true, 6, 1)).toBe('ok')
+    expect(await applyWithRetry(compat, true, '', 6, 1)).toBe('ok')
     expect(probes).toBeGreaterThanOrEqual(3)
   })
 
   it('gives up with skipped when the settings service never appears', async () => {
     const compat = new RemoteWebUiCompat({ getSettings: () => undefined })
-    expect(await applyWithRetry(compat, true, 3, 1)).toBe('skipped')
+    expect(await applyWithRetry(compat, true, '', 3, 1)).toBe('skipped')
   })
 })

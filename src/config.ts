@@ -52,6 +52,12 @@ export interface Config {
    * An admin can toggle it live from 设置-用户管理.
    */
   remoteWebUiCompat: boolean
+  /** Public base URL of a tunnel / FRP host in front of this server (e.g.
+   * `http://your.host:13080`), written into remote-web-ui's `publicBaseUrl`
+   * so its `/api/pair/*` fence trusts that ordinary-user origin. Only applied
+   * when remoteWebUiCompat is on; empty disables it. No-op when remote-web-ui
+   * is not installed. */
+  remoteWebUiPublicBaseUrl: string
 }
 
 export const Config: z<Config> = z.object({
@@ -66,4 +72,5 @@ export const Config: z<Config> = z.object({
   defaultWorkspace: z.boolean().default(true),
   workspaceRoot: z.string().default(''),
   remoteWebUiCompat: z.boolean().default(true),
+  remoteWebUiPublicBaseUrl: z.string().default(''),
 })

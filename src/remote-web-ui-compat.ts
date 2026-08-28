@@ -9,7 +9,7 @@
  *
  * Instead of requiring that popular community plugin to change, dsh-login writes
  * one of its settings documents: when the compat toggle is on it sets
- * `{ enabled: true, requirePairingForLan: false }` under
+ * `{ enabled: true, requirePairingForLan: false, publicBaseUrl? }` under
  * `settingsNamespace('remote-web-ui')` (merged, live, re-read per request).
  * `enabled:true` is what actually makes remote-web-ui register its host routes
  * (`/remote` prefix, `/api/pair/*`) — without it the server answers nothing and
@@ -19,6 +19,12 @@
  * `dsh_session` cookie. So ordinary users can use the model dialog / history /
  * composer over a public tunnel without pairing, and with no change to the
  * remote-web-ui plugin.
+ *
+ * A public FRP / tunnel host also needs `publicBaseUrl` set in that plugin so
+ * its phone-facing `/api/pair/*` fence (Host-header based) trusts the public
+ * origin — otherwise the browser at that origin gets 403 on `/api/pair/status`
+ * and the client still fail-closes onto `/remote`. dsh-login writes it too when
+ * the admin configures `remoteWebUiPublicBaseUrl`.
  *
  * This module is a no-op whenever remote-web-ui is not installed (its settings
  * namespace is not registered) or the settings service is absent.
@@ -38,7 +44,7 @@ export interface RemoteWebUiCompatDeps {
 }
 
 /**
- * Force remote-web-ui's `requirePairingForLan` to the given value. Hot-applies
+ * Force remote-web-ui's pairing configuration to the given value. Hot-applies
  * (the plugin re-reads it per request) and persists through the settings
  * provider. Best-effort: absent settings or an unregistered namespace is a
  * graceful skip, never a boot failure.
@@ -46,8 +52,15 @@ export interface RemoteWebUiCompatDeps {
 export class RemoteWebUiCompat {
   constructor(private readonly deps: RemoteWebUiCompatDeps) {}
 
-  /** Write `requirePairingForLan` to `enabled` (i.e. `false` = keep /api open). */
-  async apply(compatEnabled: boolean): Promise<CompatApplyResult> {
+  /**
+   * Apply the compat document to remote-web-ui's settings namespace.
+   * @param compatEnabled - when true, mount the host routes and open the pairing
+   * gate; when false, restore the pairing requirement only.
+   * @param publicBaseUrl - optional public base URL (e.g. `http://host:port`) to
+   * write so remote-web-ui's `/api/pair/*` fence trusts the public origin. Only
+   * written when compat is on and the value is a non-empty http(s) URL.
+   */
+  async apply(compatEnabled: boolean, publicBaseUrl?: string): Promise<CompatApplyResult> {
     const settings = this.deps.getSettings()
     if (settings === undefined) return 'skipped'
     // remote-web-ui only registers its host routes (/remote, /api/pair/*) when
@@ -55,9 +68,13 @@ export class RemoteWebUiCompat {
     // the host AND open the pairing gate — otherwise the server answers nothing
     // and the client fail-closes onto a dead /remote (405 wall). Compat-OFF
     // restores the pairing requirement (route registration is not our concern).
-    const patch = compatEnabled
-      ? { enabled: true, requirePairingForLan: false }
-      : { requirePairingForLan: true }
+    let patch: Record<string, unknown>
+    if (compatEnabled) {
+      patch = { enabled: true, requirePairingForLan: false }
+      if (typeof publicBaseUrl === 'string' && isHttpUrl(publicBaseUrl)) patch.publicBaseUrl = publicBaseUrl
+    } else {
+      patch = { requirePairingForLan: true }
+    }
     try {
       // settings.update merges, so `enabled:true` layers over without clobbering
       // remote-web-ui's other settings.
@@ -71,6 +88,16 @@ export class RemoteWebUiCompat {
   }
 }
 
+/** Whether a string is a parseable http(s) URL with a host (mirror of remote-web-ui). */
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname !== ''
+  } catch {
+    return false
+  }
+}
+
 /**
  * Call `apply` now and, if the target is not yet writable — the settings
  * service may not be mounted yet (`skipped`) or remote-web-ui may apply after
@@ -78,10 +105,10 @@ export class RemoteWebUiCompat {
  * the budget is spent, so the boot-time default reaches remote-web-ui's
  * settings snapshot reliably. Returns the last non-`ok` outcome on exhaustion.
  */
-export async function applyWithRetry(compat: RemoteWebUiCompat, enabled: boolean, attempts = 60, delayMs = 250): Promise<CompatApplyResult> {
+export async function applyWithRetry(compat: RemoteWebUiCompat, enabled: boolean, publicBaseUrl?: string, attempts = 60, delayMs = 250): Promise<CompatApplyResult> {
   let last: CompatApplyResult = 'unregistered'
   for (let i = 0; i < attempts; i++) {
-    const result = await compat.apply(enabled)
+    const result = await compat.apply(enabled, publicBaseUrl)
     if (result === 'ok') return 'ok'
     last = result
     await new Promise<void>(resolve => setTimeout(resolve, delayMs))

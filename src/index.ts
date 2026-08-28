@@ -128,13 +128,13 @@ export function apply(ctx: Context, config: Config): void {
     path: '/logout',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, 3, 50) })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }
   // Boot-time application of the remote-web-ui compatibility toggle. Deferred
   // so it never blocks startup; applyWithRetry keeps retrying a few hundred ms
   // in case remote-web-ui's settings namespace registers after dsh-login does.
-  const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get())
+  const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get(), config.remoteWebUiPublicBaseUrl)
   void bootCompat
   // The gateway claims the fallback seat (not prefix /) because the
   // WebServer's prefix match only catches the exact path '/' for a '/'
