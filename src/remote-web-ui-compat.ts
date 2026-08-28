@@ -7,13 +7,16 @@
  * and an unpaired device gets `401 authentication required` — independent of
  * dsh-login's own multi-user `/api` auth (which is working).
  *
- * Instead of requiring that popular community plugin to change, dsh-login flips
- * one of its own settings values: `requirePairingForLan` is a **live,
- * settings-backed** config on remote-web-ui (`settingsNamespace('remote-web-ui')`),
- * re-read per request by its gate and `/remote` routes. Writing
- * `requirePairingForLan: false` makes non-loopback desktop traffic stay on the
- * ordinary `/api` channel — which dsh-login takes over and gates by the
- * `dsh_session` cookie — so ordinary users can use the model dialog / history /
+ * Instead of requiring that popular community plugin to change, dsh-login writes
+ * one of its settings documents: when the compat toggle is on it sets
+ * `{ enabled: true, requirePairingForLan: false }` under
+ * `settingsNamespace('remote-web-ui')` (merged, live, re-read per request).
+ * `enabled:true` is what actually makes remote-web-ui register its host routes
+ * (`/remote` prefix, `/api/pair/*`) — without it the server answers nothing and
+ * the client fail-closes onto a dead `/remote` (405 wall) — while
+ * `requirePairingForLan:false` keeps non-loopback desktop traffic on the
+ * ordinary `/api` channel that dsh-login takes over and gates by the
+ * `dsh_session` cookie. So ordinary users can use the model dialog / history /
  * composer over a public tunnel without pairing, and with no change to the
  * remote-web-ui plugin.
  *
@@ -44,11 +47,21 @@ export class RemoteWebUiCompat {
   constructor(private readonly deps: RemoteWebUiCompatDeps) {}
 
   /** Write `requirePairingForLan` to `enabled` (i.e. `false` = keep /api open). */
-  async apply(enabled: boolean): Promise<CompatApplyResult> {
+  async apply(compatEnabled: boolean): Promise<CompatApplyResult> {
     const settings = this.deps.getSettings()
     if (settings === undefined) return 'skipped'
+    // remote-web-ui only registers its host routes (/remote, /api/pair/*) when
+    // its own `enabled` is true; a compat-ON toggle must therefore BOTH mount
+    // the host AND open the pairing gate — otherwise the server answers nothing
+    // and the client fail-closes onto a dead /remote (405 wall). Compat-OFF
+    // restores the pairing requirement (route registration is not our concern).
+    const patch = compatEnabled
+      ? { enabled: true, requirePairingForLan: false }
+      : { requirePairingForLan: true }
     try {
-      await settings.update(REMOTE_WEB_UI_NAMESPACE, { requirePairingForLan: !enabled })
+      // settings.update merges, so `enabled:true` layers over without clobbering
+      // remote-web-ui's other settings.
+      await settings.update(REMOTE_WEB_UI_NAMESPACE, patch)
       return 'ok'
     } catch (error) {
       // The namespace exists only while remote-web-ui is installed and applied.

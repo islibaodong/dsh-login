@@ -14,14 +14,14 @@ function fakeSettings(updateImpl?: (ns: string, patch: unknown) => Promise<void>
 }
 
 describe('RemoteWebUiCompat.apply', () => {
-  it('writes requirePairingForLan:false for enabled=true into the remote-web-ui namespace', async () => {
+  it('writes enabled:true + requirePairingForLan:false for compat ON into the remote-web-ui namespace', async () => {
     const { settings, calls } = fakeSettings()
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
     expect(await compat.apply(true)).toBe('ok')
-    expect(calls).toEqual([{ ns: REMOTE_WEB_UI_NAMESPACE as unknown as string, patch: { requirePairingForLan: false } }])
+    expect(calls).toEqual([{ ns: REMOTE_WEB_UI_NAMESPACE as unknown as string, patch: { enabled: true, requirePairingForLan: false } }])
   })
 
-  it('writes requirePairingForLan:true for enabled=false', async () => {
+  it('writes requirePairingForLan:true (restore pairing) for compat OFF', async () => {
     const { settings, calls } = fakeSettings()
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })
     expect(await compat.apply(false)).toBe('ok')
