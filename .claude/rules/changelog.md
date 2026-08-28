@@ -1,11 +1,38 @@
 # Memory Changelog
 
+## 2026-08-28 — boundary note: plugin-self-registered `/api/*` exact routes are outside dsh-login
+- Regression found that UI plugins (e.g. `@linxin666/dsh-pet`) register their OWN
+  exact routes (`/api/pet/pets`, `/api/pet/state`, …) via `webServer.register`
+  and serve them with "no session dimension".
+- DSH route precedence is **exact beats prefix** and **duplicate exact throws**
+  (`packages/host/webserver/src/index.ts` `match()`), and the webserver exposes
+  no pre-routing request hook. So dsh-login's `prefix: '/api'` carrier **cannot
+  intercept** those plugin routes — they never reach dsh-login's auth layer.
+  `/api/pet/pets` returns whatever the plugin serves (200 + public pet-asset
+  metadata), not a dsh-login 403/204. Live: `GET /api/pet/pets` as ordinary user
+  `test` → 200 with data — the pet plugin's own behavior, not dsh-login's.
+- Client-side, plugin fetches fire at client activation (before any slot render);
+  `@deepseek-ai/dsh-client-ui-slots` has no capability registration filter; and
+  `@deepseek-ai/dsh-client-runtime` activates all bundles with no per-identity
+  gate. So for an **unchanged** third-party plugin, dsh-login cannot make it fire
+  zero requests.
+- dsh-login's OWN client surface is already capability-pruned: the settings panel
+  (`settings-panel.client.js`) does `fetchMe()` → renders UsersPanel (admin) or
+  AccountPanel (账户) by `me.isAdmin`; ordinary users call only `/api/auth/me`,
+  never the admin API. `/api/auth/capabilities` (live, session-authenticated)
+  backs any capability-aware client; `window.__DSH_SESSION__` carries a
+  conservative ordinary baseline at render.
+- Decision (user, Path A): keep capability discovery + the two-segment 204 deny;
+  do NOT change harness/webServer; accept that plugin-self-registered `/api/pet/*`
+  exact routes are the plugin's own behavior. Committed + deployed + 212 tests.
+
 ## 2026-08-28 — two-segment grace: admin-only `/api/<domain>/<member>` probes go quiet (204)
 - The capability feature fixed single-segment probes, but two-segment Typert
-  endpoints (`/api/pet/pets`, `/api/plugin-manager/…`, …) were still 403-ing:
-  `connection.ts` forwarded every two-segment path straight to the harness
-  interceptor, bypassing the 204 quiet-denial. Ordinary-user browsers kept
-  printing forbidden walls (e.g. `GET /api/pet/pets`).
+  endpoints that reach dsh-login's carrier (e.g. `/api/plugin-manager/…`) were
+  still 403-ing: `connection.ts` forwarded every two-segment path straight to the
+  harness interceptor, bypassing the 204 quiet-denial. Ordinary-user browsers
+  kept printing forbidden walls. (Plugin-exact `/api/pet/pets` is a separate
+  boundary — see the note above.)
 - Fix: `connection.ts` now denies a non-admin request to an admin-only
   **two-segment domain** with the same read-quiet / write-loud shape
   (`isReadProbe(member) || GET/HEAD → 204`, else `403`, gated by `quietDenials`).
@@ -19,7 +46,7 @@
 - Tests: connection.spec.ts (two-segment GET 204 / POST 403 / off→403 / admin
   forwards / allowed-domain two-segment still dispatched 404), capabilities.spec.ts
   (deny-list admits pet/credentials/pair…, never ssh/skill/settings/session/api,
-  no overlap with ordinary domain surface). Full suite 209 pass.
+  no overlap with ordinary domain surface). Full suite 212 pass.
 
 ## 2026-08-28 — capability discovery + quiet denial of read probes (graceful auth)
 - Returning to the plugin's design purpose: an ordinary-user browser session was
