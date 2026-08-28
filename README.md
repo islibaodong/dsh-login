@@ -8,6 +8,26 @@ Adds a **login page, user accounts, and per-user conversation isolation** to the
 |:---:|:---:|
 | ![Login page](images/login.png) | ![User management](images/users.png) |
 
+> **⚠️ Development on this repository is paused.** See [Current status →](#current-status--development-paused).
+
+---
+
+## Current status — development paused
+
+**Work here is paused.** What shipped — the login wall, multi-account user management, per-user conversation/workspace isolation, remote-web-ui compatibility, capability discovery, and quiet read-denials — is complete and in service. The one thing that could **not** be finished is **per-role control of third-party UI-plugin features** (hide the no-permission ones, don't render them, don't let them request), and that is **blocked on upstream DSH support**, not on something this package can fix alone.
+
+**Delivered and working**
+- Login wall + multi-account user management (设置 → 用户管理) + per-user conversation/workspace isolation.
+- Capability discovery (`GET /api/auth/capabilities`, session-authenticated) and quiet read-denials (`204` for a no-permission read probe, `403` for writes; toggle via `quietDenials`), so ordinary-user browsers stop getting "forbidden" walls and retry storms.
+- dsh-login's **own** settings contribution is **already per-user**: admins see 设置 → 用户管理, ordinary users see 账户 (identity + logout); ordinary users never call the admin API.
+
+**Known limitation — why per-role control of the whole UI could not ship**
+- DSH's settings panel renders a **single global section list** (`SettingsRoot` → `useSections`, a `HostObservable<readonly SettingsSectionRow[]>` with no identity dimension), so a plugin's settings section cannot be shown/hidden per user from inside `dsh-login`.
+- DSH's WebServer route priority is **exact-beats-prefix** and exposes **no pre-routing hook**, so a plugin that self-registers exact routes (e.g. `@linxin666/dsh-pet` serving `/api/pet/pets`, `/api/pet/state`, …) cannot be intercepted or silenced per user by `dsh-login`.
+- DSH's client runtime activates every bundled plugin with **no per-user activation gate**, so an unchanged third-party plugin still fires its mount-time probes for every user.
+
+**Waiting for:** upstream DSH to expose per-identity slot/section **filtering** or **conditional plugin activation** at the client and route layers. Once that exists, per-role feature control (hide without permission / don't render / don't request) can be implemented here on top of the already-shipped capability surface.
+
 ## The problem it solves
 
 The DSH Web GUI ships with **no login** — it assumes a single user on localhost. The moment you bind it to `0.0.0.0` (phone access, LAN sharing, a small team), **anyone on that network can open your GUI**: read every conversation, burn your configured model API keys, even change host settings.
