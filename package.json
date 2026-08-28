@@ -3,13 +3,13 @@
   "description": "Multi-user authentication gateway plugin for the DSH Web GUI",
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "exports": {
     ".": {
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     },
-    "./connection": "./src/connection.ts",
-    "./connection-client": "./src/connection.client.ts",
+    "./connection": "./dist/connection.js",
+    "./connection-client": "./dist/connection-client.js",
     "./client": "./dist/client.js",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -17,7 +17,13 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:client": "node scripts/build-client.mjs"
+    "build:host": "node scripts/build-host.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "build": "npm run build:host && npm run build:client",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "license": "MIT",
   "dsh": {
@@ -37,15 +43,31 @@
     "@deepseek-ai/cordis": "^4.0.1-rc.1",
     "@deepseek-ai/dsh-client-connection": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
-    "@deepseek-ai/dsh-settings": ">=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/dsh-host-apiproxy": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/dsh-host-frontend-static": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
+    "@deepseek-ai/dsh-settings": ">=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/dsh-web-frontend": ">=0.1.0-rc.1 <0.1.1 || >=0.1.1-rc.0 <0.2.0-0",
     "@deepseek-ai/schemastery": "^3.18.1-rc.1"
   },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis-plugin-include": "^1.0.6",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.2",
+    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-frontend-static": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-invariants": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-web-frontend": "^0.1.1-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^22.20.1",
+    "esbuild": "^0.28.2",
     "esbuild-wasm": "^0.28.2",
     "tsx": "^4.23.12",
     "vitest": "^2.1.9"
@@ -57,6 +79,7 @@
   "files": [
     "src",
     "dist",
+    "vendor",
     "cordis.patch.yml",
     "screenshots.json",
     "LICENSE",
