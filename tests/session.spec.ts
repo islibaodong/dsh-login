@@ -1,5 +1,7 @@
+import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SessionStore } from '../src/session.ts'
+import { tmpFile } from './helpers.ts'
 
 describe('SessionStore.onlineCounts', () => {
   it('counts live sessions per user and sweeps expired ones', () => {
@@ -118,5 +120,57 @@ describe('SessionStore', () => {
     expect(store.verify(b1.token)).toBeDefined()
     expect(store.revokeAllFor('alice')).toBe(0)
     expect(store.revokeAllFor('nobody')).toBe(0)
+  })
+})
+
+describe('SessionStore persistence', () => {
+  it('persists sessions and restores them in a fresh store (survives a restart)', async () => {
+    const path = tmpFile()
+    const first = new SessionStore(3600, path)
+    const session = first.create('alice', false)
+    await first.flush()
+
+    const second = new SessionStore(3600, path)
+    const restored = second.verify(session.token)
+    expect(restored).toBeDefined()
+    expect(restored?.user).toBe('alice')
+    expect(restored?.isAdmin).toBe(false)
+    expect(restored?.token).toBe(session.token)
+  })
+
+  it('persists admin flag across a restart', async () => {
+    const path = tmpFile()
+    const first = new SessionStore(3600, path)
+    const admin = first.create('root', true)
+    await first.flush()
+    const restored = new SessionStore(3600, path).verify(admin.token)
+    expect(restored?.isAdmin).toBe(true)
+  })
+
+  it('drops expired entries on load', async () => {
+    const path = tmpFile()
+    const expired = new SessionStore(0, path)
+    const dead = expired.create('alice', false)
+    await expired.flush()
+    await new Promise<void>(r => setTimeout(r, 10))
+    expect(new SessionStore(3600, path).verify(dead.token)).toBeUndefined()
+  })
+
+  it('persists revocation so a fresh store no longer verifies the token', async () => {
+    const path = tmpFile()
+    const first = new SessionStore(3600, path)
+    const session = first.create('alice', false)
+    first.revoke(session.token)
+    await first.flush()
+    expect(new SessionStore(3600, path).verify(session.token)).toBeUndefined()
+  })
+
+  it('falls back to an empty store on a corrupt file', async () => {
+    const path = tmpFile()
+    writeFileSync(path, '{ not json !!!', 'utf8')
+    const store = new SessionStore(3600, path)
+    expect(store.verify('anything')).toBeUndefined()
+    const s = store.create('alice', false)
+    expect(store.verify(s.token)).toBeDefined()
   })
 })

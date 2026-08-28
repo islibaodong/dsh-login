@@ -44,7 +44,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 
 ## FAQ
 
-- **Do I have to log in again after restarting DSH?** Yes — login sessions live in memory only and are lost on process restart (cookies otherwise last 7 days by default).
+- **Do I have to log in again after restarting DSH?** No — login sessions are persisted to `<dataDir>/sessions.json` (0o600), so an existing cookie keeps working across a process restart (the cookie otherwise lasts 7 days by default). Only an actual log-out, password change, user removal, or TTL expiry invalidates it.
 - **What can an ordinary user do?** Use the chat normally: create/open/continue their own sessions, run subagents, manage their own workspace content. Everything else (other people's sessions, credentials, plugins/presets/host settings, model-key management) is refused.
 - **Upgrading from the old single-password version?** The old single password no longer logs anyone in; the first visit after upgrading bootstraps a fresh administrator account (details in the migration note below).
 
@@ -129,7 +129,7 @@ Request -> WebServer
 ```
 
 - **Cookie:** `dsh_session`, HttpOnly, SameSite=Strict, Path=/
-- **Session:** 32-byte random token (256-bit), in-memory with TTL expiry; sessions carry the username and admin flag and are lost on process restart
+- **Session:** 32-byte random token (256-bit) with TTL expiry; sessions carry the username and admin flag and are persisted across restarts (<dataDir>/sessions.json, 0o600), so an in-flight SPA keeps working after a process reload instead of turning every /api call into a 401
 - **Password storage:** scrypt hashes (per-user salt) in the DSH credentials system under `${password}_USERS`
 
 ## Multi-user permission model
@@ -154,7 +154,7 @@ Request -> WebServer
 | Session→user ownership sidecar | `<DSH_HOME>/.dsh-login/ownership.json` (configurable via `dataDir`; `DSH_HOME` env or `~/.dsh`) |
 | Auto-learned / admin Host whitelist | `<DSH_HOME>/.dsh-login/trusted-hosts.json` (configurable via `dataDir`) |
 | Default-user-workspace toggle | `<DSH_HOME>/.dsh-login/settings.json` (configurable via `dataDir`) |
-| Login sessions | In-memory only (re-login after a DSH restart) |
+| Login sessions | `<DSH_HOME>/.dsh-login/sessions.json` (0o600; persisted across restarts, TTL drops stale) |
 
 ## `/api` carrier takeover & the client bundle
 
@@ -224,7 +224,7 @@ src/
 ├── index.ts          # Cordis plugin entry: registers routes, fallback, ownership + connection child plugin
 ├── config.ts         # schemastery config schema (password, distIndex, dataDir, sessionTtl, ...)
 ├── users.ts          # UserStore: user records, scrypt hashing, credentials-backed persistence
-├── session.ts        # SessionStore: in-memory sessions (user + admin flag) with TTL expiry
+├── session.ts        # SessionStore: sessions (user + admin flag) with TTL expiry, persisted across restarts
 ├── ownership.ts      # OwnershipIndex: sessionId → username sidecar (debounced JSON file)
 ├── hosts.ts          # TrustedHosts: /api host-trust whitelist (live set + debounced JSON persistence)
 ├── api-filter.ts     # per-user ApiProxy decorator: allow-list, ownership guards, frame filtering

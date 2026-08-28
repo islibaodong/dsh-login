@@ -45,9 +45,13 @@ export { ConfigSchema as Config }
  */
 export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
-  const store = new SessionStore(config.sessionTtl)
-  const users = new UserStore(ctx.credentials, credentialRef(`${config.password}_USERS`))
   const dataDir = config.dataDir === '' ? join(resolveDshHome(), '.dsh-login') : config.dataDir
+  // Persisted session store: sessions survive a process restart (so an already
+  // open SPA's /api calls are not suddenly 401'd — the in-memory-only store
+  // invalidated every cookie on reload). Tokens live in <dataDir>/sessions.json
+  // (0o600). Session TTL still applies on load, so stale records are dropped.
+  const store = new SessionStore(config.sessionTtl, join(dataDir, 'sessions.json'))
+  const users = new UserStore(ctx.credentials, credentialRef(`${config.password}_USERS`))
   const ownership = new OwnershipIndex(join(dataDir, 'ownership.json'))
   const hosts = new TrustedHosts(join(dataDir, 'trusted-hosts.json'))
   // Live + persisted "默认用户工作空间" toggle: starts from config.defaultWorkspace
@@ -137,5 +141,5 @@ export function apply(ctx: Context, config: Config): void {
   // Teardown: flush any pending ownership-index / trusted-hosts writes to
   // disk. Returning the Promise lets Cordis await it on stop so a freshly
   // learned host (debounce still pending) is not dropped (review #3).
-  ctx.effect(() => () => Promise.all([ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush()]), 'dsh-login: ownership + hosts + settings flush')
+  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
 }

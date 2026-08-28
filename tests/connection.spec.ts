@@ -86,6 +86,12 @@ async function setup(
         calls.push('session.create')
         return { rpcId: r.rpcId, result: { ok: true, value: { sessionId: 'prov-' + calls.length } } }
       },
+      models: async (r: { rpcId: string }) => ({
+        rpcId: r.rpcId, result: { ok: true, value: { current: { provider: 'p', model: 'm' }, routable: true, groups: [], failures: [] } },
+      }),
+      history: async (r: { rpcId: string }) => ({
+        rpcId: r.rpcId, result: { ok: true, value: { events: [], hasMore: false } },
+      }),
     },
     subagents: {
       list: async (r: { rpcId: string }) => ({ rpcId: r.rpcId, result: { ok: true, value: { parentAvailable: true, entries: [] } } }),
@@ -266,6 +272,26 @@ describe('dsh-login-connection', () => {
     expect(JSON.parse(String(state.body))).toMatchObject({ type: 'server-response', rpcId: 'rpc-alice' })
     expect(calls).toContain('session.list')
     expect(seen).toEqual(['alice'])
+    await dispose()
+  })
+
+  it('a non-admin can load session.models / session.history for an owned session; alien is forbidden', async () => {
+    const { routes, alice, calls, dispose } = await setup()
+    // The model dialog's `session.models` + conversation `session.history` for
+    // the caller's own session (ownership.json records 'own1' -> alice in setup).
+    const ownModels = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.models', { type: 'client-request', rpcId: 'rpc-models-own', method: 'session.models', payload: { sessionId: 'own1' } }), ownModels.response)
+    expect(ownModels.state.status).toBe(200)
+    expect(JSON.parse(String(ownModels.state.body))).toMatchObject({ rpcId: 'rpc-models-own', result: { ok: true } })
+    const ownHistory = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.history', { type: 'client-request', rpcId: 'rpc-hist-own', method: 'session.history', payload: { sessionId: 'own1' } }), ownHistory.response)
+    expect(ownHistory.state.status).toBe(200)
+    expect(JSON.parse(String(ownHistory.state.body))).toMatchObject({ rpcId: 'rpc-hist-own', result: { ok: true } })
+    // Alien session: guarded -> business forbidden (HTTP 200 + forbidden envelope).
+    const alien = fakeResponse()
+    await routes[0]!.handler(fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/session.models', { type: 'client-request', rpcId: 'rpc-models-alien', method: 'session.models', payload: { sessionId: 'alien' } }), alien.response)
+    expect(alien.state.status).toBe(200)
+    expect(JSON.parse(String(alien.state.body))).toMatchObject({ rpcId: 'rpc-models-alien', result: { ok: false, error: { code: 'forbidden' } } })
     await dispose()
   })
 

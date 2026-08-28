@@ -44,7 +44,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 
 ## 常见问题
 
-- **重启 DSH 后要重新登录？** 是——登录会话只存内存，进程重启即失效（正常运行下 Cookie 有效期默认 7 天）。
+- **重启 DSH 后要重新登录？** 不需要——登录会话会持久化到 `<dataDir>/sessions.json`（0o600），已登录的 Cookie 跨进程重启仍有效（Cookie 本身默认 7 天）。只有登出、改密、删用户或 TTL 过期才会使其失效。
 - **普通用户能做什么？** 正常使用对话：新建/打开/继续自己的会话、派生子代理、管理工作区里自己的内容。除此之外（他人会话、凭据、插件/预设/宿主设置、模型密钥管理）一律拒绝。
 - **从旧版（单密码）升级？** 旧的单密码凭据不再能登录任何人；升级后首次访问会引导创建新的管理员账号（细节见下方「迁移说明」）。
 
@@ -127,7 +127,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 ```
 
 - **Cookie 名称**：`dsh_session`，HttpOnly、SameSite=Strict、Path=/
-- **会话令牌**：32 字节随机值（256 位），内存存储，带 TTL 自动过期；会话携带用户名与管理员标记，进程重启后失效
+- **会话令牌**：32 字节随机值（256 位），带 TTL 自动过期；会话携带用户名与管理员标记，并持久化到 `<dataDir>/sessions.json`（0o600）跨重启存续，避免已加载的 SPA 在进程重载后 /api 全部 401
 - **密码存储**：scrypt 哈希（每用户独立盐），存于 DSH 凭据系统的 `${password}_USERS` 引用
 
 ## 多用户权限模型
@@ -152,7 +152,7 @@ dsh plugin --profile web remove @islibaodong/dsh-login
 | 会话→用户所有权索引 | `<DSH_HOME>/.dsh-login/ownership.json`（可用 `dataDir` 配置；`DSH_HOME` 环境变量或 `~/.dsh`） |
 | 自动学习 / 管理员白名单 | `<DSH_HOME>/.dsh-login/trusted-hosts.json`（可用 `dataDir` 配置） |
 | 默认用户工作空间开关 | `<DSH_HOME>/.dsh-login/settings.json`（可用 `dataDir` 配置） |
-| 登录会话 | 仅内存（DSH 重启后需重新登录） |
+| 登录会话 | `<DSH_HOME>/.dsh-login/sessions.json`（0o600；跨重启存续，TTL 过期的自动剔除） |
 
 ## `/api` 通道接管与客户端 bundle
 
@@ -222,7 +222,7 @@ src/
 ├── index.ts          # Cordis 插件入口：注册路由、fallback、所有权 + 通道子插件
 ├── config.ts         # schemastery 配置 schema（password、distIndex、dataDir、sessionTtl 等）
 ├── users.ts          # UserStore：用户记录、scrypt 哈希、凭据系统持久化
-├── session.ts        # SessionStore：内存会话（用户 + 管理员标记）+ TTL 过期
+├── session.ts        # SessionStore：会话（用户 + 管理员标记）+ TTL 过期，跨重启持久化
 ├── ownership.ts      # OwnershipIndex: sessionId → 用户名索引（去抖写 JSON 文件）
 ├── hosts.ts          # TrustedHosts: /api 主机信任白名单（实时有效集 + 去抖 JSON 持久化）
 ├── api-filter.ts     # 按用户的 ApiProxy 装饰器：允许清单、所有权守卫、帧过滤
