@@ -123,6 +123,39 @@ describe('GET /api/auth/me', () => {
   })
 })
 
+describe('GET /api/auth/capabilities', () => {
+  it('advertises the ordinary-user allow-list for a non-admin', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'bob', 'bobpw')
+    const res = await req(port, 'GET', '/api/auth/capabilities', undefined, cookie)
+    expect(res.status).toBe(200)
+    const body = res.json as { username: string; isAdmin: boolean; capabilities: { methods: string[]; domains: string[]; uiPlugins: string[] } }
+    expect(body.username).toBe('bob')
+    expect(body.isAdmin).toBe(false)
+    // Ordinary user: only the physical allow-list, no admin domains.
+    expect(body.capabilities.domains).not.toContain('credentials')
+    expect(body.capabilities.domains).not.toContain('settings')
+    expect(body.capabilities.methods.length).toBeGreaterThan(0)
+  })
+
+  it('returns the full surface for an admin', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    const res = await req(port, 'GET', '/api/auth/capabilities', undefined, cookie)
+    expect(res.status).toBe(200)
+    const body = res.json as { username: string; isAdmin: boolean; capabilities: { methods: string[]; domains: string[]; uiPlugins: string[] } }
+    expect(body.isAdmin).toBe(true)
+    expect(body.capabilities.domains).toContain('credentials')
+    expect(body.capabilities.domains).toContain('settings')
+  })
+
+  it('returns 401 anonymously', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const res = await req(port, 'GET', '/api/auth/capabilities')
+    expect(res.status).toBe(401)
+  })
+})
+
 describe('GET /api/auth/admin/users', () => {
   it('lists users for an admin, with last-login stamps', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })

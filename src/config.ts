@@ -58,6 +58,17 @@ export interface Config {
    * when remoteWebUiCompat is on; empty disables it. No-op when remote-web-ui
    * is not installed. */
   remoteWebUiPublicBaseUrl: string
+  /**
+   * Quietly deny side-effect-free discovery probes for ordinary users (default
+   * true). When on, the physical layer answers an unauthorized read probe
+   * (`list`/`status`/`describe`/… or a QUIET_DENY_METHODS method) with 204 No
+   * Content instead of 403, so UI-plugin startup enumeration does not splash
+   * errors into the browser console or trigger retries. Side-effecting writes
+   * always keep 403. When off, every unauthorized method returns 403 as before.
+   * This never loosens authorization — only the shape of the denial for
+   * side-effect-free calls.
+   */
+  quietDenials: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -73,4 +84,5 @@ export const Config: z<Config> = z.object({
   workspaceRoot: z.string().default(''),
   remoteWebUiCompat: z.boolean().default(true),
   remoteWebUiPublicBaseUrl: z.string().default(''),
+  quietDenials: z.boolean().default(true),
 })

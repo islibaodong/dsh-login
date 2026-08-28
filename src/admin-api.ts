@@ -19,6 +19,7 @@ import { extractSessionToken } from './auth.ts'
 import type { DefaultWorkspaceSetting } from './workspace-setting.ts'
 import type { BooleanSetting } from './boolean-setting.ts'
 import type { CompatApplyResult } from './remote-web-ui-compat.ts'
+import { deriveCapabilities } from './capabilities.ts'
 
 /** Shared dependencies for the admin routes. */
 export interface AdminDeps {
@@ -76,6 +77,19 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     const session = requireSession(deps, req)
     if (session === undefined) return sendJson(res, 401, { error: 'authentication required' })
     return sendJson(res, 200, { username: session.user, isAdmin: session.isAdmin })
+  } }
+
+  // Per-identity capability surface: tells a client what this identity may
+  // actually use, so it does not probe (and get denied on) everything else.
+  // Session-authenticated, not admin-gated — ordinary users need it most.
+  const capabilitiesRoute: WebRoute = { kind: 'exact', path: '/api/auth/capabilities', handler: async (req, res) => {
+    const session = requireSession(deps, req)
+    if (session === undefined) return sendJson(res, 401, { error: 'authentication required' })
+    return sendJson(res, 200, {
+      username: session.user,
+      isAdmin: session.isAdmin,
+      capabilities: deriveCapabilities({ username: session.user, isAdmin: session.isAdmin }),
+    })
   } }
 
   const usersRoute: WebRoute = { kind: 'exact', path: '/api/auth/admin/users', handler: async (req, res) => {
@@ -236,7 +250,7 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true, enabled: remoteSetting.get(), applied })
   } }
 
-  const routes: WebRoute[] = [me, usersRoute, userPassword, userRemove, userDisable]
+  const routes: WebRoute[] = [me, capabilitiesRoute, usersRoute, userPassword, userRemove, userDisable]
   if (hostsRoute !== undefined) routes.push(hostsRoute)
   if (settingRoute !== undefined) routes.push(settingRoute)
   if (remoteSettingRoute !== undefined) routes.push(remoteSettingRoute)

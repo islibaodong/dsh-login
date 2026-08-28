@@ -70,6 +70,7 @@ interface Setup {
 async function setup(
   effectiveTrustedHosts?: () => string[],
   provision?: { defaultWorkspaceRoot: string; created: Array<{ path: string }> },
+  quietDenials?: boolean,
 ): Promise<Setup> {
   const routes: WebRoute[] = []
   const upgrades: WebUpgradeRoute[] = []
@@ -164,6 +165,7 @@ async function setup(
     trustedHosts: [],
     effectiveTrustedHosts,
     defaultWorkspaceRoot: provision?.defaultWorkspaceRoot,
+    quietDenials,
     fetchForTest,
   }))
   await fiber.await()
@@ -305,6 +307,57 @@ describe('dsh-login-connection', () => {
     expect(state).toMatchObject({ status: 403, body: 'forbidden' })
     expect(calls).toEqual([])
     expect(seen).toEqual([])
+    await dispose()
+  })
+
+  it('quietly denies a side-effect-free read probe (204) when quietDenials is on', async () => {
+    // credentials.list is a read probe for an ordinary user (admin-only domain).
+    const { routes, alice, calls, seen, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/credentials.list', envelope('credentials.list')),
+      response,
+    )
+    expect(state.status).toBe(204)
+    expect(calls).toEqual([])
+    expect(seen).toEqual([])
+    await dispose()
+  })
+
+  it('quietly denies a GET discovery probe on a forbidden single-segment path (204)', async () => {
+    const { routes, alice, dispose } = await setup()
+    const { response, state } = fakeResponse()
+    // A browser UI plugin GETting /api/plugin-manager on startup: GET is a
+    // read context, so it is flushed quietly instead of 403ing.
+    await routes[0]!.handler(
+      fakeRequest({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/plugin-manager'),
+      response,
+    )
+    expect(state.status).toBe(204)
+    await dispose()
+  })
+
+  it('still 403s a write even when quietDenials is on', async () => {
+    const { routes, alice, dispose } = await setup()
+    for (const method of ['credentials.set', 'settings.update', 'agentPreset.write']) {
+      const { response, state } = fakeResponse()
+      await routes[0]!.handler(
+        fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, `/api/${method}`, envelope(method)),
+        response,
+      )
+      expect(state.status).toBe(403)
+    }
+    await dispose()
+  })
+
+  it('returns 403 for a read probe when quietDenials is off', async () => {
+    const { routes, alice, dispose } = await setup(undefined, undefined, false)
+    const { response, state } = fakeResponse()
+    await routes[0]!.handler(
+      fakePost({ ...LOOPBACK, cookie: `dsh_session=${alice.token}` }, '/api/credentials.list', envelope('credentials.list')),
+      response,
+    )
+    expect(state.status).toBe(403)
     await dispose()
   })
 

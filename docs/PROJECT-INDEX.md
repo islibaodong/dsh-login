@@ -16,7 +16,8 @@
 | 文件 | 职责 |
 |---|---|
 | `index.ts` | 插件入口 `apply()`：注册 `/login` 页面路由、`/api/auth/setup`、`/api/auth/login`、`/api/auth/logout` 三条 API 路由（均经 `ctx.effect` 托管销毁），并以 `registerFallback` 占据 fallback 席位挂认证网关 |
-| `config.ts` | Config schema：`password`(必填，凭据引用名)、`distIndex`(空=自动解析)、`sessionTtl`(默认 604800s=7天)、`enabled`、`takeOverWebRuntime`(默认 true)、`trustedHosts`、`autoTrustHosts`(默认 true)、`defaultWorkspace`(默认 **true**)、`workspaceRoot`(空=<DSH_HOME>/workspaces)、`remoteWebUiCompat`(默认 **true**)、`remoteWebUiPublicBaseUrl`(默认空串，公网 frp/隧道 Host) |
+| `config.ts` | Config schema：`password`(必填，凭据引用名)、`distIndex`(空=自动解析)、`sessionTtl`(默认 604800s=7天)、`enabled`、`takeOverWebRuntime`(默认 true)、`trustedHosts`、`autoTrustHosts`(默认 true)、`defaultWorkspace`(默认 **true**)、`workspaceRoot`(空=<DSH_HOME>/workspaces)、`remoteWebUiCompat`(默认 **true**)、`remoteWebUiPublicBaseUrl`(默认空串，公网 frp/隧道 Host)、`quietDenials`(默认 **true**，探测性读请求静默 204) |
+| `capabilities.ts` | 能力发现纯函数：`deriveCapabilities(isAdmin)`（从 USER_ALLOWED 派生普通用户可调 method/domain/uiPlugins，admin=完整超集含 credentials/settings/agentPresets + 管理专用 UI 插件）、`isReadProbe(method)`（读动词启发 + QUIET_DENY_METHODS 全集）、`userAllowedMethods()` |
 | `workspace-setting.ts` | `DefaultWorkspaceSetting`：持久化的「默认用户工作空间」开关（`{enabled}`，落盘 `<dataDir>/settings.json`，debounce 写入）；`get()` 被 provision 实时读取，`set()` 由 admin 路由经设置面板开关调用 |
 | `boolean-setting.ts` | 共享的 live + 持久化 `{enabled}` 运行时开关基类，`DefaultWorkspaceSetting` 与 remote-web-ui 兼容开关都继承它 |
 | `remote-web-ui-compat.ts` | `RemoteWebUiCompat.apply(enabled, publicBaseUrl?)` 写入 `@linxin666/dsh-remote-web-ui` 的 `settingsNamespace('remote-web-ui')`：`enabled:true`（挂载宿主路由）+`requirePairingForLan:false`（绕过配对门槛）+ 可选 `publicBaseUrl`（信任公网 Host，settings 驱动、实时生效）；返回 `ok|skipped|unregistered`；`applyWithRetry` 处理 remote-web-ui 命名空间晚注册的启动竞态 |

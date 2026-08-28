@@ -18,6 +18,7 @@ import { renderLoginPage, renderSetupPage } from './login-page.ts'
 import { provideWebRuntime, resolveDistIndex } from './web-runtime.ts'
 import { resolveDshHome } from './http-json.ts'
 import { createConnectionPlugin } from './connection.ts'
+import { deriveCapabilities } from './capabilities.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-login'
@@ -141,6 +142,19 @@ export function apply(ctx: Context, config: Config): void {
   // prefix. The fallback catches everything no named route claims.
   ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), 'dsh-login: gateway fallback')
 
+  // Per-identity capability baseline, injected at render time. index-inject
+  // fires before any specific user's request, so this declares the ordinary-
+  // user surface as a static, safe default (the common case for dsh-login);
+  // clients that need the exact identity (an admin, a special account) fetch
+  // GET /api/auth/capabilities, which is authoritative. UI-plugin boot code
+  // can read window.__DSH_SESSION__ to skip features the current user cannot
+  // use instead of probing (and being denied on) them.
+  const cap = deriveCapabilities({ username: '', isAdmin: false })
+  const sessionBaselineScript = `window.__DSH_SESSION__={username:null,isAdmin:false,capabilities:${JSON.stringify(cap)}};`
+  ctx.effect(() => ctx.on('webserver/index-inject', (table: Array<{ kind: string; placement: string; text: string }>) => {
+    table.push({ kind: 'script', placement: 'head', text: sessionBaselineScript })
+  }), 'dsh-login: capability baseline injection')
+
   // Identity-aware /api carrier takeover, mounted as a child plugin so its
   // SessionStore/OwnershipIndex instances live in this fiber.
   ctx.effect(() => {
@@ -151,6 +165,7 @@ export function apply(ctx: Context, config: Config): void {
       effectiveTrustedHosts,
       defaultWorkspaceRoot,
       isDefaultWorkspaceEnabled: () => defaultWorkspaceSetting.get(),
+      quietDenials: config.quietDenials,
     }))
     return () => { void child.stop?.() }
   }, 'dsh-login: connection takeover')

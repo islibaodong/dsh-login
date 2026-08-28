@@ -1,5 +1,33 @@
 # Memory Changelog
 
+## 2026-08-28 — capability discovery + quiet denial of read probes (graceful auth)
+- Returning to the plugin's design purpose: an ordinary-user browser session was
+  splashing "forbidden" walls + potential retries because installed
+  `@linxin666/dsh-client-ui-*` plugins (task-board, plugin-manager, agentPreset,
+  doctor, …) probe `/api/*` at startup even when the user has no access. Redesign
+  the permission experience from "passively reject with 403" to "the client knows
+  the boundary and quiet side." Authorization is NOT loosened — only the shape of a
+  denied read.
+- new `src/capabilities.ts`: `deriveCapabilities(isAdmin)` (methods from
+  USER_ALLOWED + USER_DOMAINS + uiPlugins; admin = full superset incl.
+  credentials/settings/agentPresets and admin-only UI plugins),
+  `isReadProbe(method)` (read-verb heuristic + `QUIET_DENY_METHODS` set),
+  `userAllowedMethods()`.
+- new route `GET /api/auth/capabilities` (admin-api.ts): returns per-identity
+  `{ username, isAdmin, capabilities }`; session-authenticated (not admin-gated).
+- index.ts: `webserver/index-inject` pushes a static non-admin baseline into
+  `window.__DSH_SESSION__` (render-time cannot know the identity; clients needing
+  the exact identity fetch the live endpoint).
+- connection.ts physical layer: for a non-admin, non-allowed single-segment
+  method, a **read probe** (read-verb name OR GET/HEAD on a forbidden path OR a
+  QUIET_DENY_METHODS verb) answers **204 No Content** when `quietDenials` is on;
+  side-effecting writes keep **403**. New config `quietDenials: boolean` (default
+  true) wired through TakeoverDeps; off restores plain 403 everywhere.
+- Tests: `capabilities.spec.ts` (derive + isReadProbe + parity with allow-list);
+  connection.spec.ts (+5: read probe→204, GET probe→204, write→403, quietDenials
+  off→403); admin-api.spec.ts (+3 capabilities endpoint: ordinary/admin/anonymous).
+  Full suite 205 pass.
+
 ## 2026-08-28 — remote-web-ui compat: mount host routes + trust public host
 - Root cause found for the public-FRP 405/403 wall: remote-web-ui registers its
   host routes (`/remote`, `/api/pair/*`) ONLY when `enabled===true`; the earlier

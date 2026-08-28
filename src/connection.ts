@@ -20,6 +20,7 @@ import { rejectWebSocketUpgrade, WebSocketDownlinks } from '@deepseek-ai/dsh-cli
 import { HostConnectionService } from '@deepseek-ai/dsh-client-connection/src/rpc-host.ts'
 import { extractSessionToken } from './auth.ts'
 import { createUserProxy, isUserAllowed, ownedSessionIds } from './api-filter.ts'
+import { isReadProbe } from './capabilities.ts'
 import type { AuthUser } from './api-filter.ts'
 import type { OwnershipIndex } from './ownership.ts'
 import type { SessionStore } from './session.ts'
@@ -52,6 +53,14 @@ export interface TakeoverDeps {
    */
   isDefaultWorkspaceEnabled?: () => boolean
   maxRequestBodyBytes?: number
+  /**
+   * Quietly deny side-effect-free discovery probes for ordinary users (from
+   * config.quietDenials, default true). When on, an unauthorized read probe is
+   * answered 204 No Content instead of 403 so UI-plugin startup enumeration
+   * does not error/retry in the browser; side-effecting writes keep 403. Never
+   * loosens authorization — only the denial's shape for read probes.
+   */
+  quietDenials?: boolean
   /**
    * Test seam: when provided, replaces `toFetchHandler(downlinks)` as the
    * per-user fetch construction, so tests can observe which user proxy
@@ -169,7 +178,12 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
           // the wrapped proxy remains the authority; both stay in sync via
           // isUserAllowed.
           if (!user.isAdmin && method !== undefined && !isUserAllowed(method)) {
-            return new Response('forbidden', { status: 403 })
+            // Side-effect-free discovery probes are denied quietly (204) when
+            // quietDenials is on: a read-verb method name (e.g. credentials.list
+            // POSTed as an RPC) or a plain GET/HEAD on a forbidden path are both
+            // inherently probes. Mutating writes always keep 403.
+            const quiet = deps.quietDenials !== false && (isReadProbe(method) || reqReadOnlyContext(request))
+            return new Response(quiet ? undefined : 'forbidden', { status: quiet ? 204 : 403 })
           }
           return userFetch(api, user)(request)
         },
@@ -236,4 +250,14 @@ export function createConnectionPlugin(deps: TakeoverDeps) {
       }, 'dsh-login-connection: downlinks close')
     },
   }
+}
+
+/**
+ * Whether an HTTP request is read-only from the transport's perspective,
+ * independent of the wire-method name. A GET/HEAD on a forbidden single-segment
+ * method is inherently a discovery probe (no side effects over HTTP GET), so it
+ * qualifies for a quiet 204 denial alongside read-verb method names.
+ */
+function reqReadOnlyContext(request: Request): boolean {
+  return request.method === 'GET' || request.method === 'HEAD'
 }
