@@ -72,4 +72,21 @@ describe('applyWithRetry', () => {
     expect(await applyWithRetry(compat, true, 2, 1)).toBe('unregistered')
     expect(spy).toHaveBeenCalledTimes(2)
   })
+
+  it('retries while the settings service is absent until it appears, then writes', async () => {
+    // Settings resolves only after the first two probes — the boot race where
+    // dsh-login applies before the settings provider mounts.
+    const { settings } = fakeSettings()
+    let probes = 0
+    const compat = new RemoteWebUiCompat({
+      getSettings: () => { probes++; return probes >= 3 ? settings : undefined },
+    })
+    expect(await applyWithRetry(compat, true, 6, 1)).toBe('ok')
+    expect(probes).toBeGreaterThanOrEqual(3)
+  })
+
+  it('gives up with skipped when the settings service never appears', async () => {
+    const compat = new RemoteWebUiCompat({ getSettings: () => undefined })
+    expect(await applyWithRetry(compat, true, 3, 1)).toBe('skipped')
+  })
 })

@@ -59,15 +59,19 @@ export class RemoteWebUiCompat {
 }
 
 /**
- * Call `apply` now, and if the namespace is not yet registered (remote-web-ui
- * may apply after dsh-login), retry on a short interval until it registers or
- * the budget is spent — so the boot-time default lands reliably.
+ * Call `apply` now and, if the target is not yet writable — the settings
+ * service may not be mounted yet (`skipped`) or remote-web-ui may apply after
+ * dsh-login (`unregistered`) — retry on a short interval until one lands or
+ * the budget is spent, so the boot-time default reaches remote-web-ui's
+ * settings snapshot reliably. Returns the last non-`ok` outcome on exhaustion.
  */
-export async function applyWithRetry(compat: RemoteWebUiCompat, enabled: boolean, attempts = 40, delayMs = 250): Promise<CompatApplyResult> {
+export async function applyWithRetry(compat: RemoteWebUiCompat, enabled: boolean, attempts = 60, delayMs = 250): Promise<CompatApplyResult> {
+  let last: CompatApplyResult = 'unregistered'
   for (let i = 0; i < attempts; i++) {
     const result = await compat.apply(enabled)
-    if (result !== 'unregistered') return result
+    if (result === 'ok') return 'ok'
+    last = result
     await new Promise<void>(resolve => setTimeout(resolve, delayMs))
   }
-  return 'unregistered'
+  return last
 }
