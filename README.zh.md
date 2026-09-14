@@ -8,13 +8,13 @@
 |:---:|:---:|
 | ![登录页](images/login.png) | ![用户管理](images/users.png) |
 
-> **⚠️ 本仓库开发已暂停；与 DSH ≥ 0.1.5-alpha.1 的适配（option A）进行中。** 上游重构了 `/api` 传输。宿主源码已移植到 0.1.5 上可加载，`connection` 行重新启用；**按用户的会话/工作区隔离尚未在新 Remote 层最终落地、需 boot 验证**。详见[当前状态 →](#当前状态--开发暂停)与 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。
+> **与 DSH ≥ 0.1.5-alpha.1 的适配（option A）已发布：`@islibaodong/dsh-login@0.2.0`，npm 已上线。** 上游重构了 `/api` 传输；dsh-login 不再接管 `/api`，`connection` 行重新启用。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 
 ---
 
-## 当前状态 —— 开发暂停
+## 当前状态 —— 已发布（option A）
 
-**本仓库的开发已暂停，DSH ≥ 0.1.5-alpha.1 的再适配（option A）进行中。** 上游 `dsh-v0.1.5-alpha.1`（2026-09-08）移除了本插件 `/api` 接管所依赖的 WebSocket 下联事件载体与 `dsh-host-apiproxy` 包。再适配**不再接管 `/api`**，而是改在原生 `connection` + `api-gateway` 之上组成按用户层。宿主源码已移植并通过运行时验证（在构建好的 0.1.5 harness 上 `verify-imports` exit 0、`vitest` 17 文件/189 用例全绿、`npm run build` 产出 `dist/index.js`+`dist/client.js`）；隔离守卫 `src/remote-guard.ts` 已实现并单测。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收。唯一的原始目标「**对第三方 UI 插件的功能按角色控制**」仍无法完成——这是**被上游 DSH 能力阻塞**（0.1.5 依旧没有按身份过滤 slot/section 或按角色的插件激活门）。
+**`@islibaodong/dsh-login@0.2.0` 已发布（npm + git 标签 `v0.2.0`）。** 上游 `dsh-v0.1.5-alpha.1`（2026-09-08）移除了本插件 `/api` 接管所依赖的 WebSocket 下联事件载体与 `dsh-host-apiproxy` 包。本次适配**不再接管 `/api`**，而是改在原生 `connection` + `api-gateway` 之上组成按用户层。宿主源码已移植并通过运行时验证（在构建好的 0.1.5 harness 上 `verify-imports` exit 0、`vitest` 17 文件/189 用例全绿、`npm run build` 产出 `dist/index.js`+`dist/client.js`）；隔离守卫 `src/remote-guard.ts` 已实现并单测。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收。唯一的原始目标「**对第三方 UI 插件的功能按角色控制**」仍无法完成——这是**被上游 DSH 能力阻塞**（0.1.5 依旧没有按身份过滤 slot/section 或按角色的插件激活门）。
 任务清单与验收矩阵见 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 
 **已完成并可用的**
@@ -223,7 +223,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（184 项；option A 下在 DSH 0.1.5-alpha.1 上全绿——
+# 标准全量测试（189 项；option A 下在 DSH 0.1.5-alpha.1 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
