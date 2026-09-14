@@ -22,6 +22,16 @@
   tarball (head-truncated notice output looks like it's missing — it isn't).
 - npm toolchain side-effect: `npm pack` created an empty `.env` in the repo root; unstaged and
   gitignored (`/.env`).
+- **Published 2026-09-11:** `@islibaodong/dsh-login@0.2.0` LIVE on npmjs (latest = 0.2.0,
+  tarball `dsh-login-0.2.0.tgz`). Publish path hit two auth walls of npm's evolving 2FA policy:
+  (1) the stale `//registry.npmjs.org/:_authToken` in `~/.npmrc` was dead (whoami E401, publish
+  PUT 404 — npmjs returns 404 for an underprivileged publish); (2) after a fresh web `npm login`,
+  direct `npm publish` gave E403 `E_STAGE_REQUIRED` — the account's granular token is
+  **staging-only** (npm tightening bypass-2FA direct publish; per gh.io/npm-gat-bypass2fa-deprecation),
+  so it published via `npm stage publish` → user approved on npmjs.com → 0.2.0 went live.
+  Hygiene: temp publish npmrc (in `%TEMP%`), the repos' `.env`, and `npm_recovery_codes.txt`
+  (created by `npm login`) were all deleted after publish; `/.env` + `/npm_recovery_codes.txt`
+  gitignored. Remind user to revoke the granular token on npmjs.com.
 
 ## 2026-09-08 — code-review fixes for the option-A guard (requesting-code-review round)
 - External code review of the option-A adaptation returned "with fixes". Applied the

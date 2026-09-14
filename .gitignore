@@ -29,3 +29,6 @@ test-ts.ts
 
 # env files (npm toolchain side-effect)
 /.env
+
+# npm artifacts
+/npm_recovery_codes.txt
