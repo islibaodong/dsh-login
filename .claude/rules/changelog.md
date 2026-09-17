@@ -560,3 +560,37 @@ a1db200 chore: ignore tooling config and scratch files
 a1db200 chore: ignore tooling config and scratch files
 8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
 ```
+
+### Session ended at 18:23
+
+**Git diff:**
+```
+ .claude/rules/changelog.md | 2 ++
+ 1 file changed, 2 insertions(+)
+```
+
+**Recent commits:**
+```
+762d3f7 feat(login-page): 重设计登录界面 —— 分屏布局与插件特色文案
+7d4e4ec feat: 适配 DSH 0.1.6-alpha.1（0.2.1，未发布）
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+```
+
+### Session ended at 18:24
+
+**Git diff:**
+```
+ .claude/rules/changelog.md | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+```
+
+**Recent commits:**
+```
+762d3f7 feat(login-page): 重设计登录界面 —— 分屏布局与插件特色文案
+7d4e4ec feat: 适配 DSH 0.1.6-alpha.1（0.2.1，未发布）
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+```
