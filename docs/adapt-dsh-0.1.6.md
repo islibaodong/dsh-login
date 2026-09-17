@@ -114,10 +114,35 @@ seat, `/api/auth/*` routes, and the patch rows are all still owned the same way)
   client tree; today that pruning can only be advisory (capability convention),
   not enforcing.
 
-## 7. Publish checklist (not executed here)
+## 7. Publish record (executed 2026-09-17)
 
-`npm publish` from this tree will run `prepack` (`npm run build`). Per the
-0.2.0 experience: the account's granular token is staging-only — publish via
-`npm stage publish` → approve on npmjs.com (2FA). Verify with
-`npm view @islibaodong/dsh-login versions` afterwards. Tag `v0.2.1` after
-publish.
+**Published: `@islibaodong/dsh-login@0.2.1` is LIVE on npmjs** (`latest = 0.2.1`),
+plus git tag `v0.2.1` and `master` pushed to GitHub (plugin install channel
+`dsh plugin add github:islibaodong/dsh-login`).
+
+The publish path followed the 0.2.0 runbook and hit the same 2FA walls:
+
+1. `npm whoami` without a registry flag hit the mirror (`registry=npmmirror.com`
+   is the machine default) → ENEEDAUTH; the `//registry.npmjs.org/:_authToken`
+   in `~/.npmrc` was **dead** (the 0.2.0 granular token was revoked after
+   publish, as reminded) → E401 on the official registry.
+2. Fresh **web login** against the official registry only
+   (`npm login --auth-type=web --registry=https://registry.npmjs.org`) — note
+   the default-registry login URL pointed at npmmirror, which cannot publish;
+   every publish-path command must carry the explicit `--registry` flag.
+   Shell-piping caveat: `Select-Object -First N` terminates the pipeline and
+   kills npm mid-login — stream without `First` for interactive commands.
+3. Direct `npm publish` → **E403-class `EOTP`** (2FA required; npm prints a
+   browser auth URL but redacts the authId to `***` in console AND debug logs —
+   unrecoverable from a non-TTY session).
+4. Published via the **staged channel** (npm 11.19): `npm stage publish`
+   → stage id `1a545a63-427c-482a-9010-2408f129fbc7` (tarball identical to the
+   local dry-run: 30 files / 136.6 kB, shasum `d0bfb0c7…`) → `npm stage approve`
+   run in an **interactive terminal window** (non-TTY gets the redacted-URL
+   EOTP error; interactive npm auto-opens the browser, polls, and completes) →
+   user approved the 2FA prompt in the browser → 0.2.1 live.
+5. Verified: `npm view @islibaodong/dsh-login dist-tags` → `{"latest":"0.2.1"}`.
+
+Hygiene note: `npm login` writes a fresh `//registry.npmjs.org/:_authToken`
+into `~/.npmrc`; consider revoking it on npmjs.com after this publish if the
+machine is shared.

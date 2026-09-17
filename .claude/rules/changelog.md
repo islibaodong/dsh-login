@@ -1,5 +1,39 @@
 # Memory Changelog
 
+## 2026-09-17 (later) — PUBLISHED 0.2.1 + login-page redesign ride-along
+- **`@islibaodong/dsh-login@0.2.1` is LIVE on npmjs** (`latest = 0.2.1`), git tag
+  `v0.2.1` + master pushed to GitHub (the plugin's other install channel). Full
+  publish-path record in `docs/adapt-dsh-0.1.6.md` §7.
+- Between sessions the adaptation had already been committed (`7d4e4ec`) and the
+  **login-page redesign** (entry below) landed on top (`762d3f7`, src/login-page.ts
+  ±661, no spec changes — suite still green 17 files / 192 at publish time). Its
+  dist was already rebuilt+committed pre-publish; a post-redesign rebuild was
+  byte-identical (deterministic esbuild output). The leftover uncommitted
+  changelog session-log was committed as `0279a16 chore(release): 0.2.1 —
+  rebuild dist (redesigned login page) + session log` — the release commit.
+- Publish runbook that worked (npm 11.19, mirror-default machine):
+  1. Machine default registry is **npmmirror** (`registry=npmmirror.com` in
+     ~/.npmrc) — whoami/login/publish ALL need explicit
+     `--registry=https://registry.npmjs.org`. A default `npm login` opens an
+     npmmirror login session, which cannot publish.
+  2. The stored npmjs token was dead (0.2.0's granular token had been revoked
+     as reminded) → fresh **web login** (`--auth-type=web`). Shell caveat:
+     piping npm through `Select-Object -First N` stops the pipeline and kills
+     the login mid-flow; stream without `First`.
+  3. Direct `npm publish` → **EOTP**; npm's browser-auth URL is redacted to
+     `***` in captured output AND the debug log — unrecoverable non-TTY.
+  4. Working path: `npm stage publish` (stage id
+     `1a545a63-427c-482a-9010-2408f129fbc7`; tarball identical to dry-run,
+     30 files / 136.6 kB, shasum d0bfb0c7…) → `npm stage approve` in an
+     **interactive terminal window** (Start-Process powershell; `pwsh` was not
+     on PATH for Start-Process) → npm auto-opens the browser, polls, completes
+     after the user's 2FA approval.
+  5. Verified `npm view @islibaodong/dsh-login dist-tags` → latest 0.2.1.
+- npm login left a FRESH `//registry.npmjs.org/:_authToken` in ~/.npmrc —
+  remind user to revoke it on npmjs.com if the machine is shared.
+- npmmirror mirrors the published tarball with propagation delay; verify
+  against the official registry, not the mirror.
+
 ## 2026-09-17 — login page visual redesign (万物皆插件 identity)
 - `src/login-page.ts` fully redesigned (frontend-design skill pass), both
   `renderLoginPage` and `renderSetupPage` now share one `renderPage` shell.
