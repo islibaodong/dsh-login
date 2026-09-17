@@ -1,5 +1,74 @@
 # Memory Changelog
 
+## 2026-09-17 — login page visual redesign (万物皆插件 identity)
+- `src/login-page.ts` fully redesigned (frontend-design skill pass), both
+  `renderLoginPage` and `renderSetupPage` now share one `renderPage` shell.
+- Visual identity: the "everything is a plugin" motif — the page is a plugin
+  board (faint 72px grid backdrop + 8–16 JS-placed plugin tiles snapped to the
+  grid, some "lit" with a slow breath glow; tiles hidden <420px), and the login
+  card IS the dsh-login plugin: a connector tab on the top edge
+  (`::before` with two pin dots), a plugin-row header (inline plug SVG +
+  `dsh-login` + pkg id + status dot 已加载), and the footer line
+  「万物皆插件，这道门也不例外。」. Setup page headline 初始化 DSH.
+- Palette (DSH deep-navy): bg `#0f1420`, panel `#151b2c`, inset `#0d1220`,
+  line `#262f47`, accent `#6f9bff`, ok `#46d19a`, danger `#ff7a7a`. System
+  font stack (no external assets — spec forbids `src="http`/`href="http`/
+  `<link`). Copy now zh-CN.
+- Motion budget: one orchestrated load (card rise 120ms-delayed + tiles
+  staggered in at 45ms), then only the lit tiles' 7s breath;
+  `prefers-reduced-motion` disables everything. Focus-visible rings on
+  inputs/button; error area keeps `role="alert"`.
+- Test compatibility preserved (login-page.spec guards `name="username"`,
+  autocomplete attrs, `id="confirm"`, endpoints, no external resources, dark
+  background); full suite green **17 files / 192 tests**.
+- Local check: node 24 type-strips the TS — a throwaway .mjs importing
+  `src/login-page.ts` rendered `preview-login.html` / `preview-setup.html`
+  (gitignored `/preview-*.html`), opened in the browser. Artifact preview was
+  unavailable (AUTH_TOKEN session, no claude.ai login).
+
+## 2026-09-17 — DSH 0.1.6-alpha.1 compatibility adaptation (0.2.1, unpublished)
+- **New DSH release detected**: `@deepseek-ai/dsh-*` `0.1.6-alpha.1` on npm under the
+  **`alpha`** dist-tag (`latest` is stale at 0.0.1-rc.x; `next` at 0.1.5-rc.2). Harness
+  tag `dsh-v0.1.6-alpha.1` (release commit `ea53423b60`, PR #4171); 800 commits since
+  `dsh-v0.1.5-rc.2`. Full analysis in `docs/adapt-dsh-0.1.6.md`.
+- **Compatibility surface**: host packages the plugin integrates with are source-unchanged
+  (webserver incl. `webserver/index-inject`, frontend-static 6-arg `serveStatic`, settings,
+  credentials). New/changed that matters: (1) new `dsh-api-terminal-controller` — typert
+  namespace `terminal`, 9 agent-scoped methods (environment/shells/list/create/follow/write/
+  resize/rename/close), new web-app rows `terminal-controller` + `ui-sidebar-terminal`;
+  (2) new `workspace.unarchiveSession` wire method; (3) web-app cordis rows −`code-runtime`,
+  `workflow-worker-thread`→`workflow-ptc`, +`ui-settings-unarchive-sessions`. The rows
+  dsh-login patches (`web-runtime` disable, `connection` keep-enabled) are untouched —
+  the shipped `cordis.patch.yml` applies to 0.1.6 as-is.
+- **Local-env incident**: the 09-14 `npm install` reset node_modules to the lockfile's
+  0.1.1-rc.2 builds (the previously hand-advanced bits were lost) — 0.1.1's 5-arg
+  `serveStatic` turned the plugin's `authorizeIndex` callback into the `renderIndex` slot
+  → 4 failures (gateway static/index specs + one full-composition boot). Fixed by pinning
+  devDeps to real `0.1.6-alpha.1` tarballs, which also made the suite exercise the new
+  release. `vitest` has NEVER aliased to the harness checkout at runtime — only tsconfig
+  `paths` do (types); runtime resolution is node_modules. The old gotcha claiming
+  checkout aliases was wrong/stale.
+- **Shipped in 0.2.1 (version bumped, NOT published)**: peerDependencies retargeted to
+  `>=0.1.5-alpha.1 <0.2.0-0 || >=0.1.6-alpha.1 <0.2.0-0` (same tuple convention: 0.1.6
+  prereleases/stable included, future 0.1.7-alpha.x excluded); `USER_ALLOWED` +=
+  `workspace.unarchiveSession` + the nine `terminal.*` methods (agent-scoped by the
+  Gateway = same trust boundary as `session.prompt`; `terminal.list`'s explicit
+  `sessionId` is ownership-guarded); `USER_DOMAINS` += `terminal`; +3 tests. Suite green
+  **17 files / 192 tests** against published 0.1.6-alpha.1 builds; `verify:imports` exit 0;
+  build green. Publish needs the user (`npm stage publish` + npmjs approval — token is
+  staging-only).
+- **Multi-user detection**: DSH 0.1.6 still has NO native multi-user support (grep
+  `multi-user|multiuser` zero hits; `packages/identity` = telemetry correlation ids, not
+  accounts; `packages/guard` = loop hygiene; `packages/sandbox` = process-confinement seam
+  — a future building block, not multi-user). dsh-login remains the multi-user layer.
+- **Role-based whole-UI control**: still infeasible at 0.1.6 — `ui-slots` source-unchanged
+  (no per-identity slot filter / activation gate / role concept), client runtime still
+  activates all bundles, third-party plugin exact routes still outside any gate. Upstream
+  asks recorded in `docs/adapt-dsh-0.1.6.md` §6.
+- Memory-file staleness flag: `architecture.md`/`modules.md`/`api.md` still describe the
+  pre-option-A `/api` takeover (connection.ts/api-filter createUserProxy era); the
+  changelog entries of 2026-09-08/11 + `docs/adapt-dsh-0.1.5.md` are the current truth.
+
 ## 2026-09-11 — npm release 0.2.0 (option A adaptation)
 - Published `@islibaodong/dsh-login@0.2.0`: the DSH ≥ 0.1.5-alpha.1 option-A adaptation
   (no /api takeover; native connection row; remote-guard isolation seam exported from the
@@ -341,3 +410,153 @@
 ## 2026-08-18 — Initial analysis
 - Full codebase analyzed and memory files written
 - 3 modules mapped, 0 endpoints documented, 0 models captured
+
+### Session ended at 18:01
+
+**Git diff:**
+```
+ .claude/rules/changelog.md |   71 ++++
+ .claude/rules/gotchas.md   |   13 +-
+ .gitignore                 |    1 +
+ README.md                  |    4 +-
+ README.zh.md               |    4 +-
+ dist/index.js              |   24 +-
+ dist/index.js.map          |    4 +-
+ package-lock.json          | 1142 +++++++++++++--------------------------------------
+ package.json               |   28 +-
+ src/api-filter.ts          |   12 +
+ src/capabilities.ts        |    4 +
+ src/login-page.ts          |  511 +++++++++++++++++------
+ tests/capabilities.spec.ts |   23 ++
+ tests/remote-guard.spec.ts |   21 +
+ 14 files changed, 866 insertions(+), 996 deletions(-)
+```
+
+**Recent commits:**
+```
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+a1db200 chore: ignore tooling config and scratch files
+8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
+```
+
+### Session ended at 18:05
+
+**Git diff:**
+```
+ .claude/rules/changelog.md |  101 +++++
+ .claude/rules/gotchas.md   |   13 +-
+ .gitignore                 |    1 +
+ README.md                  |    4 +-
+ README.zh.md               |    4 +-
+ dist/index.js              |   24 +-
+ dist/index.js.map          |    4 +-
+ package-lock.json          | 1142 +++++++++++++--------------------------------------
+ package.json               |   28 +-
+ src/api-filter.ts          |   12 +
+ src/capabilities.ts        |    4 +
+ src/login-page.ts          |  496 ++++++++++++++++------
+ tests/capabilities.spec.ts |   23 ++
+ tests/remote-guard.spec.ts |   21 +
+ 14 files changed, 883 insertions(+), 994 deletions(-)
+```
+
+**Recent commits:**
+```
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+a1db200 chore: ignore tooling config and scratch files
+8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
+```
+
+### Session ended at 18:15
+
+**Git diff:**
+```
+ .claude/rules/changelog.md |  131 ++++++
+ .claude/rules/gotchas.md   |   13 +-
+ .gitignore                 |    1 +
+ README.md                  |    4 +-
+ README.zh.md               |    4 +-
+ dist/index.js              |   24 +-
+ dist/index.js.map          |    4 +-
+ package-lock.json          | 1142 +++++++++++++--------------------------------------
+ package.json               |   28 +-
+ src/api-filter.ts          |   12 +
+ src/capabilities.ts        |    4 +
+ src/login-page.ts          |  567 +++++++++++++++++++------
+ tests/capabilities.spec.ts |   23 ++
+ tests/remote-guard.spec.ts |   21 +
+ 14 files changed, 981 insertions(+), 997 deletions(-)
+```
+
+**Recent commits:**
+```
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+a1db200 chore: ignore tooling config and scratch files
+8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
+```
+
+### Session ended at 18:16
+
+**Git diff:**
+```
+ .claude/rules/changelog.md |  161 ++++++++
+ .claude/rules/gotchas.md   |   13 +-
+ .gitignore                 |    1 +
+ README.md                  |    4 +-
+ README.zh.md               |    4 +-
+ dist/index.js              |   24 +-
+ dist/index.js.map          |    4 +-
+ package-lock.json          | 1142 +++++++++++++--------------------------------------
+ package.json               |   28 +-
+ src/api-filter.ts          |   12 +
+ src/capabilities.ts        |    4 +
+ src/login-page.ts          |  653 +++++++++++++++++++++++------
+ tests/capabilities.spec.ts |   23 ++
+ tests/remote-guard.spec.ts |   21 +
+ 14 files changed, 1097 insertions(+), 997 deletions(-)
+```
+
+**Recent commits:**
+```
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+a1db200 chore: ignore tooling config and scratch files
+8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
+```
+
+### Session ended at 18:20
+
+**Git diff:**
+```
+ .claude/rules/changelog.md |  191 +++++++++
+ .claude/rules/gotchas.md   |   13 +-
+ .gitignore                 |    1 +
+ README.md                  |    4 +-
+ README.zh.md               |    4 +-
+ dist/index.js              |   24 +-
+ dist/index.js.map          |    4 +-
+ package-lock.json          | 1142 +++++++++++++--------------------------------------
+ package.json               |   28 +-
+ src/api-filter.ts          |   12 +
+ src/capabilities.ts        |    4 +
+ src/login-page.ts          |  661 +++++++++++++++++++++++------
+ tests/capabilities.spec.ts |   23 ++
+ tests/remote-guard.spec.ts |   21 +
+ 14 files changed, 1135 insertions(+), 997 deletions(-)
+```
+
+**Recent commits:**
+```
+5f7b64b docs: sync READMEs with released 0.2.0 state + lockfile deps cleanup
+87920be chore: gitignore npm artifacts (env + recovery codes); record 0.2.0 publish
+31feecd chore(release): 0.2.0 — retarget peerDependencies to DSH >= 0.1.5-alpha.1
+a1db200 chore: ignore tooling config and scratch files
+8f5e28f feat(option-a): re-adapt to DSH >= 0.1.5-alpha.1 + code-review hardening
+```
