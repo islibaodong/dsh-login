@@ -21,10 +21,15 @@
 - WebServer rejects duplicate `/api` prefix registrations (throws at boot):
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
-- vitest resolves `@deepseek-ai/dsh-host-apiproxy` and
-  `@deepseek-ai/dsh-client-connection` via aliases to the harness checkout
-  (`DSH_HARNESS_CHECKOUT` env, default `E:/code/deepseek-harness`) — set it
-  when running tests away from the default path.
+- vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
+  tarballs, devDeps pinned to `^0.1.6-alpha.1` since 2026-09-17) — there are
+  NO vitest aliases. Only tsconfig `paths` map `@deepseek-ai/*` to the harness
+  checkout (`E:/code/deepseek-harness`) for TYPES. After a DSH upgrade:
+  `npm i -D @deepseek-ai/<pkgs>@<tag>` — do not assume node_modules matches
+  the harness checkout, and beware an `npm ci`/`install` resetting hand-set
+  versions to the lockfile (that regressed the tree to 0.1.1-rc.2 once, whose
+  5-arg `serveStatic` mis-slotted the `authorizeIndex` callback → gateway
+  failures).
 - `dist/client.js` must be regenerated (`npm run build:client`) after
   upgrading `@deepseek-ai/dsh-client-connection`; the script re-stamps the
   module-loader id banner and fails loudly if the banner pattern is missing.

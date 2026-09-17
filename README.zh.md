@@ -9,6 +9,8 @@
 | ![登录页](images/login.png) | ![用户管理](images/users.png) |
 
 > **与 DSH ≥ 0.1.5-alpha.1 的适配（option A）已发布：`@islibaodong/dsh-login@0.2.0`，npm 已上线。** 上游重构了 `/api` 传输；dsh-login 不再接管 `/api`，`connection` 行重新启用。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
+>
+> **2026-09-17：已适配 DSH 0.1.6-alpha.1（0.2.1，未发布）**：全部测试（17 文件 / 192 用例）在 0.1.6-alpha.1 正式构建上全绿，0.1.6 的新用户功能（侧栏**终端**、**会话取消归档**）已加入普通用户放行面。详见 [`docs/adapt-dsh-0.1.6.md`](docs/adapt-dsh-0.1.6.md)。
 
 ---
 
@@ -223,7 +225,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（189 项；option A 下在 DSH 0.1.5-alpha.1 上全绿——
+# 标准全量测试（192 项；option A 下在 DSH 0.1.5-alpha.1 与 0.1.6-alpha.1 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```

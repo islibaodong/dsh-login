@@ -49,6 +49,27 @@ describe('wrapRemoteGateway (option A isolation glue)', () => {
     expect(g.calls).toHaveLength(1)
   })
 
+  it('grants the DSH 0.1.6 additions (terminal + workspace.unarchiveSession) to an ordinary user', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    // The 0.1.6 sidebar terminal is agent-scoped by the Gateway (the browser
+    // never supplies `agent`), so create/follow are id-free calls.
+    await expect(wrapped.invoke({ namespace: 'terminal', method: 'create', args: { id: 'main', cols: 80, rows: 24 } }))
+      .resolves.toEqual({ invoked: 'terminal.create' })
+    await expect(wrapped.invoke({ namespace: 'terminal', method: 'write', args: { id: 'main', attachmentId: 'a-1', data: 'ls' } }))
+      .resolves.toEqual({ invoked: 'terminal.write' })
+    // Restore an archived Session (0.1.6), paired with archiveSession.
+    await expect(wrapped.invoke({ namespace: 'workspace', method: 'unarchiveSession', args: { sessionId: 's-1' } }))
+      .resolves.toEqual({ invoked: 'workspace.unarchiveSession' })
+    // terminal.list addresses a session explicitly: an owned id passes.
+    await expect(wrapped.invoke({ namespace: 'terminal', method: 'list', args: { sessionId: 's-1' } }))
+      .resolves.toEqual({ invoked: 'terminal.list' })
+    // ...and a foreign sessionId is still denied (ownership guard).
+    await expect(wrapped.invoke({ namespace: 'terminal', method: 'list', args: { sessionId: 's-foreign' } }))
+      .rejects.toThrow(/forbidden/)
+    expect(g.calls).toHaveLength(4)
+  })
+
   it('rejects a call addressing a session outside the owned set', async () => {
     const g = fakeGateway()
     const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))

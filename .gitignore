@@ -26,6 +26,7 @@ test-ts.ts
 /tmp/
 /-w
 /tokens.txt
+/preview-*.html
 
 # env files (npm toolchain side-effect)
 /.env

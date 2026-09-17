@@ -35,6 +35,29 @@ describe('capabilities', () => {
   it('userAllowedMethods matches the allow-list exactly', () => {
     expect(userAllowedMethods()).toEqual([...USER_ALLOWED])
   })
+
+  it('grants the DSH 0.1.6 user-facing additions (unarchive + terminal)', () => {
+    // workspace.unarchiveSession pairs with the already-allowed
+    // workspace.archiveSession — an ordinary user who can archive a Session
+    // can also restore it (0.1.6 sidebar feature).
+    expect(USER_ALLOWED.has('workspace.unarchiveSession')).toBe(true)
+    // The 0.1.6 sidebar terminal (typert namespace `terminal`): every method
+    // is session-agent-scoped by the Gateway, so it rides the caller's own
+    // agent subtree — the same trust boundary as session.prompt.
+    for (const m of [
+      'terminal.environment', 'terminal.shells', 'terminal.list', 'terminal.create',
+      'terminal.follow', 'terminal.write', 'terminal.resize', 'terminal.rename',
+      'terminal.close',
+    ]) {
+      expect(USER_ALLOWED.has(m)).toBe(true)
+    }
+  })
+
+  it('exposes the terminal domain to ordinary users and never denies it', () => {
+    const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
+    expect(caps.domains).toContain('terminal')
+    expect(isUserDeniedTwoSegment('terminal')).toBe(false)
+  })
 })
 
 describe('isReadProbe', () => {

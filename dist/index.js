@@ -755,6 +755,24 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "workspace.insertBefore",
   "workspace.insertSessionBefore",
   "workspace.archiveSession",
+  // DSH 0.1.6: restore one archived Session (pairs with archiveSession above).
+  "workspace.unarchiveSession",
+  // DSH 0.1.6: the sidebar terminal (`dsh-api-terminal-controller`, typert
+  // namespace `terminal`). Every method is session-agent-scoped by the Gateway
+  // (the `agent` argument is supplied by the Gateway itself, never by the
+  // browser), so it stays inside the caller's own agent subtree — the same
+  // trust boundary as `session.prompt` (an agent can already run shell for the
+  // user). `terminal.list` addresses a session explicitly and is ownership-
+  // checked through the guard's GUARDED_ID_FIELDS (`sessionId`).
+  "terminal.environment",
+  "terminal.shells",
+  "terminal.list",
+  "terminal.create",
+  "terminal.follow",
+  "terminal.write",
+  "terminal.resize",
+  "terminal.rename",
+  "terminal.close",
   "skill.list",
   "llm.providers",
   "llm.models",
@@ -779,7 +797,11 @@ var USER_DOMAINS = [
   "llm",
   "host",
   "skill",
-  "api"
+  "api",
+  // DSH 0.1.6: the sidebar terminal (dsh-api-terminal-controller) — every
+  // method is session-agent-scoped by the Gateway, so it rides the caller's
+  // own agent subtree like `session` does.
+  "terminal"
 ];
 var ADMIN_ONLY_UI_PLUGINS = [
   "@linxin666/dsh-client-ui-plugin-manager",
@@ -1025,110 +1047,516 @@ function createAdminRoutes(deps) {
 }
 
 // src/login-page.ts
+var BOARD_JS = `
+    (function () {
+      var reduce = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var board = document.getElementById('board');
+      var pane = document.getElementById('paneDark');
+      var CELL = 72, SIZE = 56;
+
+      function layout() {
+        board.innerHTML = '';
+        var W = pane.clientWidth, H = pane.clientHeight;
+        var cols = Math.ceil(W / CELL);
+        var rows = Math.ceil(H / CELL);
+        var count = Math.min(18, Math.max(8, Math.round(cols * rows * 0.04)));
+        var picks = {};
+        var placed = 0, guard = 0;
+        while (placed < count && guard++ < cols * rows * 4) {
+          var c = Math.floor(Math.random() * cols);
+          var r = Math.floor(Math.random() * rows);
+          var x = c * CELL + (CELL - SIZE) / 2;
+          var y = r * CELL + (CELL - SIZE) / 2;
+          // keep the space behind the text block clean
+          if (x < 520 && y > H * 0.18 && y < H * 0.82) continue;
+          var key = c + ':' + r;
+          if (picks[key]) continue;
+          picks[key] = true;
+          var t = document.createElement('div');
+          t.className = 'tile' + (Math.random() < 0.35 ? ' tile--lit' : '');
+          t.style.left = x + 'px';
+          t.style.top = y + 'px';
+          t.style.setProperty('--d', (placed * 45) + 'ms');
+          if (!reduce && Math.random() < 0.4) {
+            t.style.setProperty('--breath-delay', (6 + Math.random() * 16) + 's');
+          }
+          board.appendChild(t);
+          placed++;
+        }
+      }
+
+      var tm;
+      window.addEventListener('resize', function () {
+        clearTimeout(tm);
+        tm = setTimeout(layout, 200);
+      });
+      layout();
+    })();
+`;
 var BASE_CSS = `
+    :root {
+      --bg: #0f1420;
+      --panel: #151b2c;
+      --inset: #0d1220;
+      --line: #262f47;
+      --line-soft: #1c2438;
+      --text: #e8ebf4;
+      --muted: #97a0b6;
+      --accent: #6f9bff;
+      --accent-soft: rgba(111, 155, 255, 0.14);
+      --ok: #46d19a;
+      --lt-bg: #f3f5fa;
+      --lt-card: #ffffff;
+      --lt-line: #e1e6f1;
+      --lt-inset: #f6f8fc;
+      --lt-text: #1d2536;
+      --lt-muted: #67718c;
+      --danger: #d64545;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #1a1a2e;
-      color: #e0e0e0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+    }
+
+    .split {
+      display: flex;
+      min-height: 100vh;
+    }
+    .pane { flex: 1 1 50%; position: relative; }
+
+    /* ---- left: the dark DSH side ---- */
+    .pane--dark {
+      flex-basis: 53%;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .board-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(var(--line-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+      background-size: 72px 72px;
+      opacity: 0.35;
+    }
+    .board-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse 90% 80% at 30% 50%,
+        transparent 30%, var(--bg) 100%
+      );
+    }
+    #board { position: absolute; inset: 0; pointer-events: none; }
+    .tile {
+      position: absolute;
+      width: 56px;
+      height: 56px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(21, 27, 44, 0.55);
+      opacity: 0;
+      animation: tileIn 0.6s ease both;
+      animation-delay: var(--d, 0ms);
+    }
+    .tile--lit {
+      border-color: rgba(111, 155, 255, 0.45);
+      background: var(--accent-soft);
+      animation: tileIn 0.6s ease both, breath 7s ease-in-out infinite;
+      animation-delay: var(--d, 0ms), var(--breath-delay, 4s);
+    }
+    .tile--lit::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      margin: -3px 0 0 -3px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.8;
+    }
+    @keyframes tileIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 0.9; transform: none; }
+    }
+    @keyframes breath {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(111, 155, 255, 0); }
+      50% { box-shadow: 0 0 22px 0 rgba(111, 155, 255, 0.16); }
+    }
+
+    .pane-content {
+      position: relative;
+      height: 100%;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px 60px;
+      max-width: 560px;
+      animation: rise 0.55s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-row svg { flex: none; }
+    .brand-row .wordmark {
+      font-size: 2.35rem;
+      font-weight: 750;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+    .kicker {
+      margin-top: 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.01em;
+    }
+    .lead {
+      margin-top: 10px;
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.75;
+      max-width: 26em;
+    }
+
+    .features {
+      list-style: none;
+      margin-top: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .features li i {
+      flex: none;
+      width: 9px;
+      height: 9px;
+      margin-top: 5px;
+      border-radius: 2.5px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(111, 155, 255, 0.5);
+    }
+    .features li b {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .features li span {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .footnote {
+      position: absolute;
+      left: 60px;
+      bottom: 56px;
+      font-size: 0.7rem;
+      color: #6b7490;
+      line-height: 1.6;
+    }
+    .loaded {
+      position: absolute;
+      left: 60px;
+      bottom: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: #6b7490;
+    }
+    .loaded i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 6px rgba(70, 209, 154, 0.55);
+    }
+
+    /* ---- right: the light form side ---- */
+    .pane--light {
+      background: var(--lt-bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      padding: 40px 32px;
     }
+    /* soft blue glow seating the card */
+    .pane--light::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(
+        ellipse 55% 48% at 50% 46%,
+        rgba(111, 155, 255, 0.09), transparent 70%
+      );
+    }
+
+    /* ghost plugin tiles: the board's quiet echoes on this side */
+    .ghost {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      border: 1px solid #dfe5f0;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.7);
+      pointer-events: none;
+      animation: rise 0.7s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+    }
+    .ghost--g1 { top: 11%; left: 13%; animation-delay: 320ms; }
+    .ghost--g2 { bottom: 13%; right: 11%; animation-delay: 420ms; }
+    .ghost--g3 {
+      top: 15%;
+      right: 15%;
+      border-color: rgba(111, 155, 255, 0.4);
+      background: #eef2fd;
+      animation-delay: 520ms;
+    }
+    .ghost--g3::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      margin: -2.5px 0 0 -2.5px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.7;
+    }
+
+    /* free plugin slots, top-right: one is taken */
+    .slots {
+      position: absolute;
+      top: 26px;
+      right: 30px;
+      display: flex;
+      gap: 7px;
+      pointer-events: none;
+      animation: rise 0.7s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+      animation-delay: 600ms;
+    }
+    .slots span {
+      width: 9px;
+      height: 9px;
+      border: 1px solid #cdd6e6;
+      border-radius: 3px;
+    }
+    .slots span:first-child {
+      background: var(--accent);
+      border-color: var(--accent);
+      opacity: 0.75;
+    }
+
     .card {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
-      border-radius: 12px;
-      padding: 40px;
-      width: 360px;
-      max-width: 90vw;
+      position: relative;
+      z-index: 1;
+      width: 372px;
+      max-width: 100%;
+      background: var(--lt-card);
+      border: 1px solid var(--lt-line);
+      border-radius: 16px;
+      padding: 34px 34px 30px;
+      box-shadow: 0 14px 36px rgba(23, 32, 55, 0.08);
+      animation: rise 0.55s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+      animation-delay: 130ms;
     }
     .card h1 {
-      font-size: 1.5rem;
-      margin-bottom: 24px;
-      text-align: center;
-      color: #e0e0e0;
+      font-size: 1.3rem;
+      font-weight: 650;
+      color: var(--lt-text);
+      margin-bottom: 6px;
     }
     .card .subtitle {
-      font-size: 0.8rem;
-      color: #888;
-      text-align: center;
-      margin-bottom: 24px;
+      font-size: 0.82rem;
+      color: var(--lt-muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
     }
+    .field { margin-bottom: 14px; }
     .card input[type="text"], .card input[type="password"] {
       width: 100%;
-      padding: 12px 16px;
-      background: #0f0f23;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      color: #e0e0e0;
-      font-size: 1rem;
-      margin-bottom: 16px;
+      padding: 11px 14px;
+      background: var(--lt-inset);
+      border: 1px solid var(--lt-line);
+      border-radius: 9px;
+      color: var(--lt-text);
+      font-size: 0.95rem;
       outline: none;
+      transition: border-color 0.15s;
     }
-    .card input[type="text"]:focus, .card input[type="password"]:focus {
-      border-color: #4a4a6a;
+    .card input::placeholder { color: #9aa3b8; }
+    .card input[type="text"]:focus,
+    .card input[type="password"]:focus {
+      border-color: var(--accent);
+    }
+    .card input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
     }
     .card button[type="submit"] {
       width: 100%;
-      padding: 12px;
-      background: #4a6fa5;
+      padding: 11px;
+      margin-top: 4px;
+      background: var(--accent);
       border: none;
-      border-radius: 8px;
+      border-radius: 9px;
       color: #fff;
-      font-size: 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
-    .card button[type="submit"]:hover {
-      background: #5a7fb5;
+    .card button[type="submit"]:hover { background: #5d8dfe; }
+    .card button[type="submit"]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
     .card button[type="submit"]:disabled {
-      background: #3a3a5a;
+      background: #b6c4e4;
       cursor: not-allowed;
     }
     .error {
-      color: #ff6b6b;
-      font-size: 0.875rem;
-      text-align: center;
-      margin-bottom: 16px;
-      min-height: 1.25rem;
+      color: var(--danger);
+      font-size: 0.82rem;
+      min-height: 1.3em;
+      margin-bottom: 10px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+      .tile { opacity: 0.9; }
+    }
+
+    /* ---- narrow screens: dark story stacks on top of the form ---- */
+    @media (max-width: 880px) {
+      .split { flex-direction: column; }
+      .pane--dark { flex-basis: auto; overflow: visible; }
+      .pane-content {
+        min-height: 0;
+        padding: 36px 28px 30px;
+      }
+      .features { margin-top: 28px; gap: 14px; }
+      .footnote { position: static; margin-top: 24px; }
+      .loaded { position: static; margin-top: 10px; }
+      .tile { display: none; }
+      .pane--light { padding: 36px 24px 44px; }
+      .ghost, .slots { display: none; }
     }
 `;
-function renderLoginPage() {
+var PLUG_SVG = `
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+        stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 7V3" /><path d="M15 7V3" />
+        <path d="M7 7h10v4a5 5 0 0 1-5 5 5 5 0 0 1-5-5V7z" />
+        <path d="M12 16v5" />
+      </svg>`;
+function renderPage(opts) {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DSH Login</title>
+  <title>${opts.title}</title>
   <style>${BASE_CSS}</style>
 </head>
 <body>
-  <div class="card">
-    <h1>DSH</h1>
-    <div class="error" id="error"></div>
-    <form id="loginForm">
-      <input type="text" name="username" id="username" placeholder="Username" autocomplete="username" autofocus required>
-      <input type="password" name="password" id="password" placeholder="Password" autocomplete="current-password" required>
-      <button type="submit" id="submit">Login</button>
-    </form>
-  </div>
-  <script>
-    const form = document.getElementById('loginForm');
-    const username = document.getElementById('username');
-    const password = document.getElementById('password');
-    const error = document.getElementById('error');
-    const submit = document.getElementById('submit');
+  <main class="split">
+    <section class="pane pane--dark" id="paneDark">
+      <div class="board-bg" aria-hidden="true"></div>
+      <div id="board" aria-hidden="true"></div>
+      <div class="pane-content">
+        <header class="brand">
+          <div class="brand-row">${PLUG_SVG}<div class="wordmark">DSH</div></div>
+          <p class="kicker">\u591A\u7528\u6237\u767B\u5F55\u7F51\u5173\uFF0C\u800C\u8FD9\u9053\u95E8\u672C\u8EAB\u4E5F\u662F\u4E00\u4E2A\u63D2\u4EF6\u3002</p>
+          <p class="lead">DSH \u7684 Web GUI \u6309\u300C\u5355\u7528\u6237\u3001localhost\u300D\u8BBE\u8BA1\u2014\u2014\u4E00\u65E6\u66B4\u9732\u5230\u7F51\u7EDC\uFF0C\u4EFB\u4F55\u4EBA\u90FD\u80FD\u6253\u5F00\u5B83\u3002dsh-login \u52A0\u4E00\u9053\u767B\u5F55\u5899\uFF0C\u628A\u5B83\u53D8\u6210\u5B89\u5168\u7684\u591A\u7528\u6237\u90E8\u7F72\u3002</p>
+        </header>
+        <ul class="features">
+          <li><i></i><div><b>\u767B\u5F55\u5899</b><span>\u9875\u9762\u3001\u9759\u6001\u8D44\u6E90\u3001API \u4E0E WebSocket \u5168\u90E8\u8981\u6C42\u6709\u6548\u4F1A\u8BDD\uFF0C\u672A\u767B\u5F55\u4E00\u5F8B\u56DE\u5230\u8FD9\u9053\u95E8</span></div></li>
+          <li><i></i><div><b>\u4F1A\u8BDD\u9694\u79BB</b><span>\u666E\u901A\u7528\u6237\u53EA\u770B\u5230\u81EA\u5DF1\u7684\u5BF9\u8BDD\u3001\u5B50\u4EE3\u7406\u4E0E\u5DE5\u4F5C\u533A\uFF1B\u51ED\u636E\u3001\u5BBF\u4E3B\u8BBE\u7F6E\u7B49\u7BA1\u7406\u57DF\u6574\u4F53\u7981\u7528</span></div></li>
+          <li><i></i><div><b>\u7528\u6237\u7BA1\u7406</b><span>\u7BA1\u7406\u5458\u5728 \u8BBE\u7F6E \u2192 \u7528\u6237\u7BA1\u7406 \u65B0\u5EFA\u3001\u91CD\u7F6E\u5BC6\u7801\u3001\u7981\u7528\u3001\u5220\u9664\uFF0C\u64CD\u4F5C\u7ACB\u5373\u540A\u9500\u8BE5\u7528\u6237\u7684\u4F1A\u8BDD</span></div></li>
+          <li><i></i><div><b>\u8FDC\u7A0B\u53CB\u597D</b><span>frp\u3001\u96A7\u9053\u6216\u5C40\u57DF\u7F51\u8BBF\u95EE\uFF0C\u767B\u5F55\u4E00\u6B21\u5373\u81EA\u52A8\u4FE1\u4EFB\u4E3B\u673A\uFF0C\u65E0\u9700\u624B\u52A8\u6539\u914D\u7F6E</span></div></li>
+        </ul>
+      </div>
+      <div class="footnote">\u5BC6\u7801\u4EE5 scrypt \u54C8\u5E0C\u5B58\u50A8\uFF0C\u4F1A\u8BDD Cookie \u4E3A HttpOnly\uFF0C\u91CD\u542F\u540E\u767B\u5F55\u4F9D\u7136\u6709\u6548\u3002</div>
+      <div class="loaded"><i></i>dsh-login \u5DF2\u52A0\u8F7D</div>
+    </section>
+    <section class="pane pane--light">
+      <div class="ghost ghost--g1" aria-hidden="true"></div>
+      <div class="ghost ghost--g2" aria-hidden="true"></div>
+      <div class="ghost ghost--g3" aria-hidden="true"></div>
+      <div class="slots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <div class="card">
+        <h1>${opts.heading}</h1>
+        <div class="subtitle">${opts.subtitle}</div>
+        <div class="error" id="error" role="alert"></div>
+        <form id="authForm">${opts.fields}</form>
+      </div>
+    </section>
+  </main>
+  <script>${opts.script}</script>
+  <script>${BOARD_JS}</script>
+</body>
+</html>`;
+}
+function renderLoginPage() {
+  return renderPage({
+    title: "DSH \u767B\u5F55",
+    heading: "\u767B\u5F55 DSH",
+    subtitle: "\u591A\u7528\u6237\u7F51\u5173\uFF1A\u6BCF\u4EBA\u72EC\u7ACB\u4F1A\u8BDD\uFF0C\u6743\u9650\u5404\u5F52\u5176\u4F4D\u3002",
+    fields: `
+        <div class="field">
+          <input type="text" name="username" id="username" placeholder="\u7528\u6237\u540D"
+            autocomplete="username" autofocus required>
+        </div>
+        <div class="field">
+          <input type="password" name="password" id="password" placeholder="\u5BC6\u7801"
+            autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="submit">\u767B\u5F55</button>`,
+    script: `
+    var form = document.getElementById('authForm');
+    var username = document.getElementById('username');
+    var password = document.getElementById('password');
+    var error = document.getElementById('error');
+    var submit = document.getElementById('submit');
 
-    form.addEventListener('submit', async (e) => {
+    form.addEventListener('submit', async function (e) {
       e.preventDefault();
       error.textContent = '';
       submit.disabled = true;
-      submit.textContent = '...';
+      submit.textContent = '\u9A8C\u8BC1\u4E2D\u2026';
       try {
-        const res = await fetch('/api/auth/login', {
+        var res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: username.value, password: password.value }),
@@ -1136,77 +1564,73 @@ function renderLoginPage() {
         if (res.ok) {
           window.location = '/';
         } else if (res.status === 401) {
-          error.textContent = 'Invalid username or password';
+          error.textContent = '\u7528\u6237\u540D\u6216\u5BC6\u7801\u9519\u8BEF';
           password.value = '';
           password.focus();
         } else if (res.status === 400) {
-          error.textContent = 'Bad request';
+          error.textContent = '\u8BF7\u6C42\u65E0\u6548';
         } else if (res.status === 500) {
-          error.textContent = 'Server error - no users configured';
+          error.textContent = '\u5C1A\u672A\u521B\u5EFA\u4EFB\u4F55\u7528\u6237\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u5B8C\u6210\u521D\u59CB\u5316';
         } else {
-          error.textContent = 'Unexpected error';
+          error.textContent = '\u672A\u77E5\u9519\u8BEF';
         }
       } catch (err) {
-        error.textContent = 'Network error';
+        error.textContent = '\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5';
       } finally {
         submit.disabled = false;
-        submit.textContent = 'Login';
+        submit.textContent = '\u767B\u5F55';
       }
-    });
-  </script>
-</body>
-</html>`;
+    });`
+  });
 }
 function renderSetupPage() {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DSH Setup</title>
-  <style>${BASE_CSS}</style>
-</head>
-<body>
-  <div class="card">
-    <h1>DSH</h1>
-    <div class="subtitle">First-time setup: create the administrator account</div>
-    <div class="error" id="error"></div>
-    <form id="setupForm">
-      <input type="text" name="username" id="username" placeholder="Username" autocomplete="username" autofocus required>
-      <input type="password" name="password" id="password" placeholder="New password" autocomplete="new-password" required>
-      <input type="password" id="confirm" placeholder="Confirm password" autocomplete="new-password" required>
-      <button type="submit" id="submit">Create Account</button>
-    </form>
-  </div>
-  <script>
-    const form = document.getElementById('setupForm');
-    const username = document.getElementById('username');
-    const pw = document.getElementById('password');
-    const cf = document.getElementById('confirm');
-    const error = document.getElementById('error');
-    const submit = document.getElementById('submit');
+  return renderPage({
+    title: "DSH \u521D\u59CB\u5316",
+    heading: "\u521D\u59CB\u5316 DSH",
+    subtitle: "\u521B\u5EFA\u7B2C\u4E00\u4E2A\u8D26\u6237\uFF0C\u5B83\u5C06\u81EA\u52A8\u6210\u4E3A\u7BA1\u7406\u5458\u3002",
+    fields: `
+        <div class="field">
+          <input type="text" name="username" id="username" placeholder="\u7528\u6237\u540D"
+            autocomplete="username" autofocus required>
+        </div>
+        <div class="field">
+          <input type="password" name="password" id="password" placeholder="\u8BBE\u7F6E\u5BC6\u7801"
+            autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <input type="password" id="confirm" placeholder="\u786E\u8BA4\u5BC6\u7801"
+            autocomplete="new-password" required>
+        </div>
+        <button type="submit" id="submit">\u521B\u5EFA\u8D26\u6237</button>`,
+    script: `
+    var form = document.getElementById('authForm');
+    var username = document.getElementById('username');
+    var pw = document.getElementById('password');
+    var cf = document.getElementById('confirm');
+    var error = document.getElementById('error');
+    var submit = document.getElementById('submit');
 
-    form.addEventListener('submit', async (e) => {
+    form.addEventListener('submit', async function (e) {
       e.preventDefault();
       error.textContent = '';
       if (username.value.length < 1) {
-        error.textContent = 'Username cannot be empty';
+        error.textContent = '\u7528\u6237\u540D\u4E0D\u80FD\u4E3A\u7A7A';
         return;
       }
       if (pw.value.length < 1) {
-        error.textContent = 'Password cannot be empty';
+        error.textContent = '\u5BC6\u7801\u4E0D\u80FD\u4E3A\u7A7A';
         return;
       }
       if (pw.value !== cf.value) {
-        error.textContent = 'Passwords do not match';
+        error.textContent = '\u4E24\u6B21\u8F93\u5165\u7684\u5BC6\u7801\u4E0D\u4E00\u81F4';
         cf.value = '';
         cf.focus();
         return;
       }
       submit.disabled = true;
-      submit.textContent = '...';
+      submit.textContent = '\u521B\u5EFA\u4E2D\u2026';
       try {
-        const res = await fetch('/api/auth/setup', {
+        var res = await fetch('/api/auth/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: username.value, password: pw.value }),
@@ -1214,22 +1638,20 @@ function renderSetupPage() {
         if (res.ok) {
           window.location = '/';
         } else if (res.status === 403) {
-          error.textContent = 'Setup already completed';
+          error.textContent = '\u521D\u59CB\u5316\u5DF2\u5B8C\u6210\uFF0C\u8BF7\u76F4\u63A5\u767B\u5F55';
         } else if (res.status === 400) {
-          error.textContent = 'Bad request';
+          error.textContent = '\u8BF7\u6C42\u65E0\u6548\uFF08\u7528\u6237\u540D\u9650\u5B57\u6BCD\u3001\u6570\u5B57\u3001\u4E0B\u5212\u7EBF\u548C\u8FDE\u5B57\u7B26\uFF0C\u6700\u957F 32 \u4F4D\uFF09';
         } else {
-          error.textContent = 'Unexpected error';
+          error.textContent = '\u672A\u77E5\u9519\u8BEF';
         }
       } catch (err) {
-        error.textContent = 'Network error';
+        error.textContent = '\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5';
       } finally {
         submit.disabled = false;
-        submit.textContent = 'Create Account';
+        submit.textContent = '\u521B\u5EFA\u8D26\u6237';
       }
-    });
-  </script>
-</body>
-</html>`;
+    });`
+  });
 }
 
 // src/web-runtime.ts

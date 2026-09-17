@@ -86,6 +86,10 @@ export const USER_DOMAINS: readonly string[] = [
   'host',
   'skill',
   'api',
+  // DSH 0.1.6: the sidebar terminal (dsh-api-terminal-controller) — every
+  // method is session-agent-scoped by the Gateway, so it rides the caller's
+  // own agent subtree like `session` does.
+  'terminal',
 ]
 
 /** UI plugin ids hidden from an ordinary user (admin-only surfaces). */

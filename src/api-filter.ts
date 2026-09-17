@@ -28,6 +28,18 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'host.describe',
   'workspace.list', 'workspace.create', 'workspace.rename', 'workspace.delete',
   'workspace.insertBefore', 'workspace.insertSessionBefore', 'workspace.archiveSession',
+  // DSH 0.1.6: restore one archived Session (pairs with archiveSession above).
+  'workspace.unarchiveSession',
+  // DSH 0.1.6: the sidebar terminal (`dsh-api-terminal-controller`, typert
+  // namespace `terminal`). Every method is session-agent-scoped by the Gateway
+  // (the `agent` argument is supplied by the Gateway itself, never by the
+  // browser), so it stays inside the caller's own agent subtree — the same
+  // trust boundary as `session.prompt` (an agent can already run shell for the
+  // user). `terminal.list` addresses a session explicitly and is ownership-
+  // checked through the guard's GUARDED_ID_FIELDS (`sessionId`).
+  'terminal.environment', 'terminal.shells', 'terminal.list', 'terminal.create',
+  'terminal.follow', 'terminal.write', 'terminal.resize', 'terminal.rename',
+  'terminal.close',
   'skill.list',
   'llm.providers', 'llm.models',
   'goal.create', 'goal.edit', 'goal.pause', 'goal.resume', 'goal.complete', 'goal.clear',

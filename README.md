@@ -9,6 +9,8 @@ Adds a **login page, user accounts, and per-user conversation isolation** to the
 | ![Login page](images/login.png) | ![User management](images/users.png) |
 
 > **Compatibility with DSH ≥ 0.1.5-alpha.1 (option A) is released: `@islibaodong/dsh-login@0.2.0` on npm.** Upstream reworked the `/api` transport; dsh-login no longer takes it over, and the `connection` row is re-enabled. The per-user isolation guard ships as a composition primitive (`wrapRemoteGateway` / `createRemoteIsolation`, exported from the host bundle) but is **not yet boot-verified** — composing it over the native `typertGateway` plus a two-browser sign-off is the remaining step. See [`Current status →`](#current-status--released) and [`docs/verify-option-A.md`](docs/verify-option-A.md).
+>
+> **2026-09-17: DSH 0.1.6-alpha.1 support is adapted in 0.2.1** (unpublished): the full suite (17 files / 192 tests) is green against the published 0.1.6-alpha.1 builds, and the 0.1.6 user-facing additions (sidebar **terminal**, **unarchive sessions**) are in the ordinary-user allow-list. Details: [`docs/adapt-dsh-0.1.6.md`](docs/adapt-dsh-0.1.6.md).
 
 ---
 
@@ -234,7 +236,7 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (189 tests, green under option A against DSH 0.1.5-alpha.1; requires the DSH checkout for package
+# Canonical full suite (192 tests, green under option A against DSH 0.1.5-alpha.1 and 0.1.6-alpha.1; requires the DSH checkout for package
 # resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
 npx vitest run
 ```
