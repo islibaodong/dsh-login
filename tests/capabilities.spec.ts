@@ -53,6 +53,40 @@ describe('capabilities', () => {
     }
   })
 
+  it('grants the DSH 0.1.6-alpha.2 additions (terminal.retain + document preview)', () => {
+    // 0.1.6-alpha.2 terminal retention across reconnects; addresses a session
+    // explicitly (ownership-guarded like terminal.list).
+    expect(USER_ALLOWED.has('terminal.retain')).toBe(true)
+    // The right Sidebar's document preview: the read-only workspaceFiles
+    // surface plus the Office→PDF converter. Every wire call carries the
+    // scoped session identity (workspaceFileScopeId) the guard checks.
+    for (const m of [
+      'workspaceFiles.read', 'workspaceFiles.readAll', 'workspaceFiles.readBytes',
+      'workspaceFiles.readRelated', 'workspaceFiles.stat', 'workspaceFiles.list',
+      'workspaceFiles.changes', 'officeToPdf.render', 'officeToPdf.generation',
+    ]) {
+      expect(USER_ALLOWED.has(m)).toBe(true)
+    }
+  })
+
+  it('exposes the alpha.2 document-preview domains to ordinary users', () => {
+    const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
+    expect(caps.domains).toContain('workspaceFiles')
+    expect(caps.domains).toContain('officeToPdf')
+    // ...while the native plugin manager stays admin-only.
+    expect(caps.domains).not.toContain('pluginManager')
+  })
+
+  it('advertises the native plugin manager to admins only (0.1.6-alpha.2)', () => {
+    const admin = deriveCapabilities({ username: 'root', isAdmin: true })
+    expect(admin.domains).toContain('pluginManager')
+    expect(admin.methods).toContain('pluginManager.listPlugins')
+    expect(admin.methods).toContain('pluginManager.installBundle')
+    expect(admin.methods).toContain('pluginManager.removeBundle')
+    const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
+    expect(caps.methods.some(m => m.startsWith('pluginManager.'))).toBe(false)
+  })
+
   it('exposes the terminal domain to ordinary users and never denies it', () => {
     const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
     expect(caps.domains).toContain('terminal')

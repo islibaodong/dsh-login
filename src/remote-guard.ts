@@ -47,7 +47,12 @@ export type UserResolver = () => GuardUser | undefined
 export type OwnedPredicate = (id: string) => boolean
 
 /** Domains whose every method is admin-only (mirrors the old ADMIN_ONLY_DOMAINS). */
-const ADMIN_ONLY_NAMESPACES = new Set(['credentials', 'settings', 'agentPresets'])
+const ADMIN_ONLY_NAMESPACES = new Set([
+  'credentials', 'settings', 'agentPresets',
+  // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
+  // and removes profile bundles — never reachable by an ordinary user.
+  'pluginManager',
+])
 
 /**
  * Args fields that may carry a session or workspace id, plus the plural/agent
@@ -62,6 +67,11 @@ const GUARDED_ID_FIELDS = [
   'parentSessionId', 'parentSessionIds',
   'childSessionId', 'childSessionIds',
   'agentId', 'workspaceId', 'beforeSessionId',
+  // DSH 0.1.6-alpha.2: the scoped session identity the Gateway's
+  // workspaceFileScope lookup resolves for the document-preview surface
+  // (`workspaceFiles.*`, `officeToPdf.render`) — carries a SessionId on the
+  // wire exactly like `sessionId`.
+  'workspaceFileScopeId',
 ] as const
 
 /**

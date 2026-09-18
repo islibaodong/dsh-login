@@ -69,6 +69,25 @@ export interface Config {
    * side-effect-free calls.
    */
   quietDenials: boolean
+  /**
+   * Enforce the dsh-login session on the shared `/api` bridge (default true).
+   * DSH ≥ 0.1.6-alpha.2 fires the `connection/request` waterfall on the native
+   * connection row's `/api` route (option A: upstream owns the carrier); when
+   * this is on, dsh-login listens on it and answers 401 unless the request
+   * carries a valid dsh-login session cookie — so a logout (or expiry)
+   * actually revokes /api access even though the browser keeps the
+   * process-wide connection browser-auth cookie, and the per-user boundary no
+   * longer rides that shared cookie. On DSH < 0.1.6-alpha.2 the event never
+   * fires, so this silently degrades to the 0.2.1 behavior. The native
+   * Host/Origin + browser-auth fence still runs first (upstream order), and
+   * plugin-exact routes (dsh-login's /api/auth/*, remote-web-ui's
+   * /api/pair/*) never reach the bridge. Turn off only for deployments that
+   * serve the bridge to clients that cannot carry the dsh_session cookie
+   * (e.g. remote-web-ui's paired-device proxy re-issues requests server-side
+   * without it — pairing is by design a full-control credential outside the
+   * dsh-login user model).
+   */
+  apiBridgeAuth: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -85,4 +104,5 @@ export const Config: z<Config> = z.object({
   remoteWebUiCompat: z.boolean().default(true),
   remoteWebUiPublicBaseUrl: z.string().default(''),
   quietDenials: z.boolean().default(true),
+  apiBridgeAuth: z.boolean().default(true),
 })

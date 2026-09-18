@@ -90,6 +90,11 @@ export const USER_DOMAINS: readonly string[] = [
   // method is session-agent-scoped by the Gateway, so it rides the caller's
   // own agent subtree like `session` does.
   'terminal',
+  // DSH 0.1.6-alpha.2: the right Sidebar's document preview — the read-only
+  // workspaceFiles surface plus the Office→PDF converter, both scoped to the
+  // viewed session identity (workspaceFileScopeId) the Gateway resolves.
+  'workspaceFiles',
+  'officeToPdf',
 ]
 
 /** UI plugin ids hidden from an ordinary user (admin-only surfaces). */
@@ -159,12 +164,19 @@ function adminOnlyMethods(): string[] {
     'settings.list', 'settings.update', 'settings.reset',
     'agentPreset.list', 'agentPreset.read', 'agentPreset.write',
     'host.path', 'host.system',
+    // DSH 0.1.6-alpha.2: the native plugin manager (packages/boot/
+    // plugin-manager, typert namespace `pluginManager`) — installs, enables,
+    // disables, and removes profile bundles. Strictly admin-only: never added
+    // to USER_ALLOWED, and ADMIN_ONLY_NAMESPACES denies it for ordinary users.
+    'pluginManager.listPlugins', 'pluginManager.listBundles', 'pluginManager.inspect',
+    'pluginManager.setPluginEnabled', 'pluginManager.setBundleEnabled',
+    'pluginManager.installBundle', 'pluginManager.cancelInstall', 'pluginManager.removeBundle',
   ]
 }
 
 /** Every user domain plus the admin-only ones. */
 function allDomains(): string[] {
-  return [...USER_DOMAINS, 'credentials', 'settings', 'agentPresets']
+  return [...USER_DOMAINS, 'credentials', 'settings', 'agentPresets', 'pluginManager']
 }
 
 /** Every UI plugin id (core + admin-only). */

@@ -1,5 +1,58 @@
 # Memory Changelog
 
+## 2026-09-18 — DSH 0.1.6-alpha.2 adaptation + /api bridge auth wall (0.2.2, unpublished)
+- **New DSH release detected**: `@deepseek-ai/dsh-*` `0.1.6-alpha.2` on npm under
+  the **`alpha`** dist-tag (`latest` still stale at 0.0.1-rc.x; `next` at
+  0.1.5-rc.2). Harness tag `dsh-v0.1.6-alpha.2` (commit `ddefc45fbc`). Full
+  analysis in `docs/adapt-dsh-0.1.6-alpha.2.md`.
+- **Compat surface**: webserver / frontend-static / settings / credentials /
+  web-app `web-runtime`+`connection` rows all source-unchanged — the shipped
+  `cordis.patch.yml` applies as-is. What changed and mattered:
+  1. **`connection/request` waterfall** (dsh-client-connection): the native
+     /api route now lets a listener admit/wrap/veto each bridged request →
+     dsh-login 0.2.2 registers an **/api bridge auth wall**
+     (`src/api-bridge-auth.ts`, config `apiBridgeAuth`, default true): 401
+     without a valid `dsh_session`; closes the option-A hole where the
+     process-wide browser-auth cookie outlived logout. Cordis mechanics
+     verified: one shared hook registry (root EventsService, prototypally
+     inherited), string-first waterfall args → no dispatch filter → the
+     listener fires from any fiber; `{global:true}` for future-proofing. On
+     DSH < 0.1.6-alpha.2 the event never fires (no-op, 0.1.5 peer branch safe).
+  2. **`terminal.retain`** new wire method (retention) → USER_ALLOWED;
+     alpha.2 user terminals now run with **system-user permissions** (no
+     sandbox) — terminal.* grants are stronger than at alpha.1 (posture note
+     in docs §4).
+  3. **New namespace `officeToPdf`** (`render`/`generation`, document-preview
+     conversion) + the previously-unlisted `workspaceFiles` read surface →
+     added to USER_ALLOWED/USER_DOMAINS (document preview for ordinary users).
+     The scoped session identity rides the wire as **`workspaceFileScopeId`**
+     (confirmed from generated typert descriptors) → added to the guard's
+     GUARDED_ID_FIELDS.
+  4. **New namespace `pluginManager`** (native bundle install/remove) →
+     admin-only: guard ADMIN_ONLY_NAMESPACES += pluginManager; admin
+     capabilities advertise it; ordinary advertisement forbids it.
+- peerDependencies UNCHANGED — node-semver verified the shipped range already
+  admits 0.1.6-alpha.2 (same [0,1,6] tuple) and still excludes 0.1.7-alpha.1.
+- **Multi-user detection**: still NO native multi-user at alpha.2 (zero
+  multi-user/rbac hits; identity pkg = telemetry ids; one process-wide
+  browser session). dsh-login remains the multi-user layer.
+- **Role-based whole-UI control**: still infeasible — ui-slots' +522 lines are
+  Component Factories (reusability); README explicit that renderFactorySlot
+  takes no Session identity; no per-identity slot filter / activation gate /
+  role concept; client runtime still activates all bundles. The bridge wall
+  makes the API layer role-aware, but whole-UI visibility control still needs
+  the upstream asks in docs/adapt-dsh-0.1.6.md §6.
+- remote-web-ui note (verified against its 0.3.23 tarball): `/api/pair/*` are
+  webServer EXACT routes (pre-login pairing unaffected by the wall); its
+  `/remote` paired-device channel re-issues requests server-side without
+  dsh_session → 401 with the wall on (by design — pairing is a full-control
+  credential outside the user model; deployments wanting it set
+  `apiBridgeAuth: false`).
+- Suite green **18 files / 203 tests** against published 0.1.6-alpha.2 builds;
+  `verify:imports` exit 0; `npm run build` green (dist re-stamped from the
+  alpha.2 connection client). Publish needs the user (`npm stage publish` +
+  npmjs 2FA approval).
+
 ## 2026-09-17 (later) — PUBLISHED 0.2.1 + login-page redesign ride-along
 - **`@islibaodong/dsh-login@0.2.1` is LIVE on npmjs** (`latest = 0.2.1`), git tag
   `v0.2.1` + master pushed to GitHub (the plugin's other install channel). Full

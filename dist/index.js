@@ -17,7 +17,8 @@ var Config = z.object({
   workspaceRoot: z.string().default(""),
   remoteWebUiCompat: z.boolean().default(true),
   remoteWebUiPublicBaseUrl: z.string().default(""),
-  quietDenials: z.boolean().default(true)
+  quietDenials: z.boolean().default(true),
+  apiBridgeAuth: z.boolean().default(true)
 });
 
 // src/session.ts
@@ -616,6 +617,20 @@ function createGatewayHandler(ctx, config, store) {
   };
 }
 
+// src/api-bridge-auth.ts
+function createApiBridgeAuth(store) {
+  return async (request, response, next) => {
+    const token = extractSessionToken(request.headers.cookie);
+    const session = token === void 0 ? void 0 : store.verify(token);
+    if (session !== void 0) {
+      store.cleanup();
+      return next();
+    }
+    response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+    response.end("unauthorized");
+  };
+}
+
 // src/http-json.ts
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -773,6 +788,29 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "terminal.resize",
   "terminal.rename",
   "terminal.close",
+  // DSH 0.1.6-alpha.2: terminal retention across reconnects. `terminal.retain`
+  // addresses a session explicitly (`sessionId`) and is ownership-checked
+  // through GUARDED_ID_FIELDS like terminal.list. NOTE: since alpha.2 user
+  // terminals run with the execution environment's system-user permissions
+  // (no Agent sandbox), a deployment wanting stricter posture subtracts the
+  // terminal.* entries from this set before wrapping (see docs/adapt-dsh-0.1.6-alpha.2.md).
+  "terminal.retain",
+  // DSH 0.1.6-alpha.2: the right Sidebar's document preview. The read surface
+  // of `workspaceFiles` + the Office→PDF converter (`officeToPdf`) are what
+  // every user's document/Office preview tab calls; each method's first wire
+  // argument is the scoped session identity (`workspaceFileScopeId`), resolved
+  // by the Gateway's workspaceFileScope lookup and ownership-checked through
+  // GUARDED_ID_FIELDS. Read-only: no write/convert-bytes method is exposed to
+  // the wire surface listed here.
+  "workspaceFiles.read",
+  "workspaceFiles.readAll",
+  "workspaceFiles.readBytes",
+  "workspaceFiles.readRelated",
+  "workspaceFiles.stat",
+  "workspaceFiles.list",
+  "workspaceFiles.changes",
+  "officeToPdf.render",
+  "officeToPdf.generation",
   "skill.list",
   "llm.providers",
   "llm.models",
@@ -801,7 +839,12 @@ var USER_DOMAINS = [
   // DSH 0.1.6: the sidebar terminal (dsh-api-terminal-controller) — every
   // method is session-agent-scoped by the Gateway, so it rides the caller's
   // own agent subtree like `session` does.
-  "terminal"
+  "terminal",
+  // DSH 0.1.6-alpha.2: the right Sidebar's document preview — the read-only
+  // workspaceFiles surface plus the Office→PDF converter, both scoped to the
+  // viewed session identity (workspaceFileScopeId) the Gateway resolves.
+  "workspaceFiles",
+  "officeToPdf"
 ];
 var ADMIN_ONLY_UI_PLUGINS = [
   "@linxin666/dsh-client-ui-plugin-manager",
@@ -850,11 +893,23 @@ function adminOnlyMethods() {
     "agentPreset.read",
     "agentPreset.write",
     "host.path",
-    "host.system"
+    "host.system",
+    // DSH 0.1.6-alpha.2: the native plugin manager (packages/boot/
+    // plugin-manager, typert namespace `pluginManager`) — installs, enables,
+    // disables, and removes profile bundles. Strictly admin-only: never added
+    // to USER_ALLOWED, and ADMIN_ONLY_NAMESPACES denies it for ordinary users.
+    "pluginManager.listPlugins",
+    "pluginManager.listBundles",
+    "pluginManager.inspect",
+    "pluginManager.setPluginEnabled",
+    "pluginManager.setBundleEnabled",
+    "pluginManager.installBundle",
+    "pluginManager.cancelInstall",
+    "pluginManager.removeBundle"
   ];
 }
 function allDomains() {
-  return [...USER_DOMAINS, "credentials", "settings", "agentPresets"];
+  return [...USER_DOMAINS, "credentials", "settings", "agentPresets", "pluginManager"];
 }
 function allUiPlugins() {
   return [...CORE_UI_PLUGINS, ...ADMIN_ONLY_UI_PLUGINS];
@@ -1706,7 +1761,14 @@ function provideWebRuntime(ctx, trustedHosts) {
 }
 
 // src/remote-guard.ts
-var ADMIN_ONLY_NAMESPACES = /* @__PURE__ */ new Set(["credentials", "settings", "agentPresets"]);
+var ADMIN_ONLY_NAMESPACES = /* @__PURE__ */ new Set([
+  "credentials",
+  "settings",
+  "agentPresets",
+  // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
+  // and removes profile bundles — never reachable by an ordinary user.
+  "pluginManager"
+]);
 var GUARDED_ID_FIELDS = [
   "sessionId",
   "sessionIds",
@@ -1716,7 +1778,12 @@ var GUARDED_ID_FIELDS = [
   "childSessionIds",
   "agentId",
   "workspaceId",
-  "beforeSessionId"
+  "beforeSessionId",
+  // DSH 0.1.6-alpha.2: the scoped session identity the Gateway's
+  // workspaceFileScope lookup resolves for the document-preview surface
+  // (`workspaceFiles.*`, `officeToPdf.render`) — carries a SessionId on the
+  // wire exactly like `sessionId`.
+  "workspaceFileScopeId"
 ];
 function collectIds(value) {
   if (typeof value === "string") return value === "" ? [] : [value];
@@ -1842,6 +1909,12 @@ function apply(ctx, config) {
   const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get(), config.remoteWebUiPublicBaseUrl);
   void bootCompat;
   ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), "dsh-login: gateway fallback");
+  if (config.apiBridgeAuth) {
+    ctx.effect(
+      () => ctx.on("connection/request", createApiBridgeAuth(store), { global: true }),
+      "dsh-login: /api bridge auth wall"
+    );
+  }
   const cap = deriveCapabilities({ username: "", isAdmin: false });
   const sessionBaselineScript = `window.__DSH_SESSION__={username:null,isAdmin:false,capabilities:${JSON.stringify(cap)}};`;
   ctx.effect(() => ctx.on("webserver/index-inject", (table) => {

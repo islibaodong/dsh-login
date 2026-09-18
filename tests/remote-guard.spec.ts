@@ -70,6 +70,42 @@ describe('wrapRemoteGateway (option A isolation glue)', () => {
     expect(g.calls).toHaveLength(4)
   })
 
+  it('grants the DSH 0.1.6-alpha.2 document-preview surface scoped to owned sessions', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    // terminal.retain (0.1.6-alpha.2 retention): explicit sessionId.
+    await expect(wrapped.invoke({ namespace: 'terminal', method: 'retain', args: { sessionId: 's-1', id: 'main' } }))
+      .resolves.toEqual({ invoked: 'terminal.retain' })
+    // The document preview reads ride the scoped session identity
+    // (`workspaceFileScopeId` on the wire): an owned id passes.
+    await expect(wrapped.invoke({ namespace: 'workspaceFiles', method: 'readAll', args: { workspaceFileScopeId: 's-1', path: 'report.md' } }))
+      .resolves.toEqual({ invoked: 'workspaceFiles.readAll' })
+    await expect(wrapped.invoke({ namespace: 'officeToPdf', method: 'render', args: { workspaceFileScopeId: 's-1', path: 'report.docx', priority: 'foreground' } }))
+      .resolves.toEqual({ invoked: 'officeToPdf.render' })
+    // ...and a foreign scoped identity is denied (the document preview can
+    // not be used to read another user's session files).
+    await expect(wrapped.invoke({ namespace: 'workspaceFiles', method: 'read', args: { workspaceFileScopeId: 's-foreign', path: 'secret.md' } }))
+      .rejects.toThrow(/forbidden/)
+    await expect(wrapped.invoke({ namespace: 'officeToPdf', method: 'render', args: { workspaceFileScopeId: 's-foreign', path: 'secret.docx', priority: 'foreground' } }))
+      .rejects.toThrow(/forbidden/)
+    expect(g.calls).toHaveLength(3)
+  })
+
+  it('denies the native plugin manager (0.1.6-alpha.2) for an ordinary user but passes admins', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    // Installing/removing bundles is strictly admin-only.
+    for (const method of ['listPlugins', 'installBundle', 'removeBundle', 'setBundleEnabled']) {
+      await expect(wrapped.invoke({ namespace: 'pluginManager', method, args: {} }))
+        .rejects.toThrow(/forbidden/)
+    }
+    expect(g.calls).toHaveLength(0)
+    // Admins keep full plugin management.
+    const adminWrapped = wrapRemoteGateway(g, () => root)
+    await expect(adminWrapped.invoke({ namespace: 'pluginManager', method: 'listPlugins', args: {} }))
+      .resolves.toEqual({ invoked: 'pluginManager.listPlugins' })
+  })
+
   it('rejects a call addressing a session outside the owned set', async () => {
     const g = fakeGateway()
     const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))

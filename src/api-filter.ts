@@ -40,6 +40,24 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'terminal.environment', 'terminal.shells', 'terminal.list', 'terminal.create',
   'terminal.follow', 'terminal.write', 'terminal.resize', 'terminal.rename',
   'terminal.close',
+  // DSH 0.1.6-alpha.2: terminal retention across reconnects. `terminal.retain`
+  // addresses a session explicitly (`sessionId`) and is ownership-checked
+  // through GUARDED_ID_FIELDS like terminal.list. NOTE: since alpha.2 user
+  // terminals run with the execution environment's system-user permissions
+  // (no Agent sandbox), a deployment wanting stricter posture subtracts the
+  // terminal.* entries from this set before wrapping (see docs/adapt-dsh-0.1.6-alpha.2.md).
+  'terminal.retain',
+  // DSH 0.1.6-alpha.2: the right Sidebar's document preview. The read surface
+  // of `workspaceFiles` + the Office→PDF converter (`officeToPdf`) are what
+  // every user's document/Office preview tab calls; each method's first wire
+  // argument is the scoped session identity (`workspaceFileScopeId`), resolved
+  // by the Gateway's workspaceFileScope lookup and ownership-checked through
+  // GUARDED_ID_FIELDS. Read-only: no write/convert-bytes method is exposed to
+  // the wire surface listed here.
+  'workspaceFiles.read', 'workspaceFiles.readAll', 'workspaceFiles.readBytes',
+  'workspaceFiles.readRelated', 'workspaceFiles.stat', 'workspaceFiles.list',
+  'workspaceFiles.changes',
+  'officeToPdf.render', 'officeToPdf.generation',
   'skill.list',
   'llm.providers', 'llm.models',
   'goal.create', 'goal.edit', 'goal.pause', 'goal.resume', 'goal.complete', 'goal.clear',

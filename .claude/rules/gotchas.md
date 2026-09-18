@@ -22,7 +22,7 @@
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
 - vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
-  tarballs, devDeps pinned to `^0.1.6-alpha.1` since 2026-09-17) — there are
+  tarballs, devDeps pinned to `^0.1.6-alpha.2` since 2026-09-18) — there are
   NO vitest aliases. Only tsconfig `paths` map `@deepseek-ai/*` to the harness
   checkout (`E:/code/deepseek-harness`) for TYPES. After a DSH upgrade:
   `npm i -D @deepseek-ai/<pkgs>@<tag>` — do not assume node_modules matches

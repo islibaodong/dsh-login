@@ -1,6 +1,9 @@
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+// Type-only: pulls in the `connection/request` Events augmentation (DSH
+// ≥ 0.1.6-alpha.2) so the bridge wall below typechecks. Erased at build.
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { Config } from './config.ts'
 import { Config as ConfigSchema } from './config.ts'
@@ -12,6 +15,7 @@ import { DefaultWorkspaceSetting } from './workspace-setting.ts'
 import { BooleanSetting } from './boolean-setting.ts'
 import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
+import { createApiBridgeAuth } from './api-bridge-auth.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
 import { renderLoginPage, renderSetupPage } from './login-page.ts'
@@ -144,6 +148,20 @@ export function apply(ctx: Context, config: Config): void {
   // WebServer's prefix match only catches the exact path '/' for a '/'
   // prefix. The fallback catches everything no named route claims.
   ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), 'dsh-login: gateway fallback')
+
+  // DSH ≥ 0.1.6-alpha.2: the native connection row fires `connection/request`
+  // on its shared /api route before bridging. dsh-login registers a wall
+  // (default on, config.apiBridgeAuth) so /api requires a live dsh-login
+  // session — logout/expiry actually revokes the bridge even though the
+  // process-wide browser-auth cookie persists. `global: true` keeps the
+  // listener firing regardless of any context filter at the emit site; on
+  // DSH < 0.1.6-alpha.2 the event never fires and this is a harmless no-op.
+  if (config.apiBridgeAuth) {
+    ctx.effect(
+      () => ctx.on('connection/request', createApiBridgeAuth(store), { global: true }),
+      'dsh-login: /api bridge auth wall',
+    )
+  }
 
   // Per-identity capability baseline, injected at render time. index-inject
   // fires before any specific user's request, so this declares the ordinary-
