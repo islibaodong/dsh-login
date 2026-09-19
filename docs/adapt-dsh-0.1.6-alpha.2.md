@@ -161,8 +161,21 @@ paired-device channel open despite this should set `apiBridgeAuth: false`
   `tests/remote-guard.spec.ts` (+2). Suite: **18 files / 203 tests green**
   against the published 0.1.6-alpha.2 builds; `verify:imports` exit 0.
 
-## 8. Publish
+## 8. Publish record (executed 2026-09-19)
 
-Not published in this session (publish needs the user:
-`npm stage publish` + npmjs 2FA approval — the stored token is staging-only;
-see `docs/adapt-dsh-0.1.6.md` §7 for the working runbook).
+**Published: `@islibaodong/dsh-login@0.2.2` is LIVE on npmjs** (`latest = 0.2.2`,
+verified via `npm view dist-tags` against the official registry). Tarball:
+31 files / 144.4 kB, shasum `3e7f02a2c836f5965853e1a2548ef2a984972ac5`.
+
+Path (same runbook as 0.2.0/0.2.1): the `~/.npmrc` token left by the 0.2.1
+login had been revoked (whoami E401) → fresh **web login** in an interactive
+terminal window (`npm login --auth-type=web --registry=https://registry.npmjs.org`,
+user approved in browser; non-TTY would get the redacted URL) →
+`npm stage publish ./ --registry=…` → stage id
+`3c59197f-1271-4c3f-872b-6a59a1d5ce05` (prepack rebuild ran; staged with tag
+`latest`) → `npm stage approve <id>` in an interactive terminal window
+(`Start-Process powershell`) → user approved the 2FA prompt in the browser →
+registry dist-tags polled until `latest` flipped to `0.2.2`.
+
+Hygiene: the web login writes a fresh `//registry.npmjs.org/:_authToken` into
+`~/.npmrc` — revoke it on npmjs.com if the machine is shared.

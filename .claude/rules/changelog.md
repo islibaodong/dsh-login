@@ -1,5 +1,24 @@
 # Memory Changelog
 
+## 2026-09-19 (later) — PUBLISHED 0.2.2 (DSH 0.1.6-alpha.2 adaptation)
+- **`@islibaodong/dsh-login@0.2.2` is LIVE on npmjs** (`latest = 0.2.2`,
+  tarball 31 files / 144.4 kB, shasum `3e7f02a2c836f5965853e1a2548ef2a984972ac5`).
+  Stage id `3c59197f-1271-4c3f-872b-6a59a1d5ce05`. Publish path = the 0.2.1
+  runbook: the 0.2.1 login's leftover token had been revoked (whoami E401) →
+  fresh **web login** in an interactive `Start-Process powershell` window
+  (non-TTY gets the redacted URL; interactive auto-opens the browser and
+  polls) → `npm stage publish ./ --registry=https://registry.npmjs.org`
+  (prepack rebuild ran; deterministic) → `npm stage approve <id>` in another
+  interactive window → user approved 2FA in the browser → dist-tags polled
+  until `latest` flipped to 0.2.2. The "NO new version" entry below was the
+  auto-captured re-check session that ran between adaptation and publish; it
+  correctly found 0.1.6-alpha.2 still latest — no conflict with the 09-18
+  adaptation above.
+- Hygiene: the fresh `//registry.npmjs.org/:_authToken` from this login sits
+  in `~/.npmrc` — revoke it on npmjs.com if the machine is shared.
+- Git tag `v0.2.2` + master pushed to GitHub (the `dsh plugin add
+  github:islibaodong/dsh-login` install channel).
+
 ## 2026-09-19 — DSH release check: NO new version (0.1.6-alpha.2 still latest)
 - **Detection result**: no DSH release since `0.1.6-alpha.2`. npm official
   registry (`--registry=https://registry.npmjs.org`, mirror has propagation
