@@ -1,5 +1,36 @@
 # Memory Changelog
 
+## 2026-09-19 — DSH release check: NO new version (0.1.6-alpha.2 still latest)
+- **Detection result**: no DSH release since `0.1.6-alpha.2`. npm official
+  registry (`--registry=https://registry.npmjs.org`, mirror has propagation
+  delay): all six peer packages (`dsh-host-webserver`, `dsh-client-connection`,
+  `dsh-credentials`, `dsh-host-frontend-static`, `dsh-settings`,
+  `dsh-web-frontend`) end at `0.1.6-alpha.2`; dist-tags unchanged (`latest`
+  stale at 0.0.1-rc.x, `next` 0.1.5-rc.2, `alpha` 0.1.6-alpha.2). Harness git:
+  newest release tag `dsh-v0.1.6-alpha.2` = commit `ddefc45fbc` (PR #4469,
+  release merge) and `origin/master` == that same commit — zero post-release
+  commits at fetch time. → **No compatibility adaptation required**; 0.2.2's
+  peer ranges already admit alpha.2 and exclude 0.1.7-alpha.x.
+- **Fresh compat verification** (evidence today, not inherited): node_modules
+  confirmed at real `0.1.6-alpha.2` tarballs (cordis 4.0.2); full vitest suite
+  **green 18 files / 203 tests** (8.25s). Plugin works as-is on the current
+  latest release. 0.2.2 remains adapted+verified+unpublished (publish needs
+  the user: `npm stage publish` + npmjs 2FA).
+- **Multi-user detection (re-verified at the release tree)**: `git grep -iE
+  'multi.?user|multiuser|role.?based' dsh-v0.1.6-alpha.2 -- packages/` → zero
+  hits. Still NO native multi-user; dsh-login remains the multi-user layer.
+- **Role-based whole-UI control (re-verified)**: still infeasible at
+  0.1.6-alpha.2 — `ui-slots` "identity" hits are diagnostics/definition/scope
+  identities only (no per-user/role slot filter or activation gate);
+  `client/runtime/src` has ZERO hits for role/permission/isAdmin/isAllowed
+  (client runtime still activates every bundle unconditionally). Upstream
+  asks unchanged: docs/adapt-dsh-0.1.6.md §6.
+- **Environment note**: the `E:\code\deepseek-harness` working tree is STALE
+  (HEAD `0d1f50007f`, 882 commits behind the alpha.2 tag / origin/master).
+  Release-state analysis must grep the TAG (`git grep <pat>
+  dsh-v0.1.6-alpha.2 -- packages/`), not the tree; runtime truth for tests is
+  node_modules. Recorded in gotchas.md.
+
 ## 2026-09-18 — DSH 0.1.6-alpha.2 adaptation + /api bridge auth wall (0.2.2, unpublished)
 - **New DSH release detected**: `@deepseek-ai/dsh-*` `0.1.6-alpha.2` on npm under
   the **`alpha`** dist-tag (`latest` still stale at 0.0.1-rc.x; `next` at

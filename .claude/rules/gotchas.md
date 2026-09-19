@@ -51,3 +51,7 @@
 ## Environment Notes
 - No .env.example found. `DSH_HOME` (data dir resolution) and
   `DSH_HARNESS_CHECKOUT` (tests/client build) are the relevant env vars.
+- The `E:\code\deepseek-harness` checkout working tree can be STALE relative
+  to releases (2026-09-19: HEAD 882 commits behind `dsh-v0.1.6-alpha.2`).
+  For release-state analysis grep the TAG (`git grep <pat> dsh-v<ver> --
+  packages/`), never the tree; test/build runtime truth is `node_modules`.
