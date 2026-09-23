@@ -1,6 +1,30 @@
 # Memory Changelog
 
-## 2026-09-23 — DSH 0.1.7-alpha.2 RELEASE DETECTED → adapted (0.2.3, unpublished)
+## 2026-09-23 (later) — PUBLISHED 0.2.3 (DSH 0.1.7-alpha.2 adaptation)
+- **`@islibaodong/dsh-login@0.2.3` is LIVE on npmjs** (`latest = 0.2.3`,
+  tarball 31 files / 148.5 kB, shasum `b543eec6240bf25a0784efd2cbcf78ef2619d383`,
+  unpacked 515.9 kB). Stage id `806b86ab-ebd2-43cd-a506-178832a1e3e0`.
+  Publish path = the 0.2.2 runbook, executed end-to-end this session: the
+  0.2.2 token was dead again (whoami E401) → fresh **web login** in an
+  interactive `Start-Process powershell` window (whoami polling confirmed
+  `islibaodong` after one 30s poll) → `npm pack --dry-run` (31 files,
+  shasum b543eec6…; no `.env` side effect this time) → `npm stage publish
+  ./ --registry=https://registry.npmjs.org` (prepack rebuild deterministic —
+  staged shasum identical to dry-run) → `npm stage approve <id>` in another
+  interactive window → user approved in the browser → dist-tags polled until
+  `latest` flipped to 0.2.3 (3rd 15s poll). `npm view @0.2.3` re-verified
+  version + dist-tags on the official registry.
+- Release commit `5a664a5` (the 0.2.3 adaptation, 13 files +1305/−331);
+  **git tag `v0.2.3` + master pushed to GitHub** (the `dsh plugin add
+  github:islibaodong/dsh-login` install channel). Git push stderr shows a
+  cosmetic PowerShell NativeCommandError wrapper around git's progress line —
+  push succeeds.
+- Hygiene: the fresh `//registry.npmjs.org/:_authToken` from this login sits
+  in `~/.npmrc` — revoke it on npmjs.com if the machine is shared (same note
+  as after 0.2.1/0.2.2; past tokens were revoked and each release needed a
+  fresh web login — expect the same next time).
+
+## 2026-09-23 — DSH 0.1.7-alpha.2 RELEASE DETECTED → adapted (0.2.3 — published, see the entry above)
 - **New DSH release detected** (third same-day re-check found it; 09-21's two
   checks predate it): `@deepseek-ai/dsh-*` `0.1.7-alpha.1`
   (2026-09-22T06:10Z) + `0.1.7-alpha.2` (2026-09-22T15:54Z) under the
