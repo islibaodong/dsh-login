@@ -772,6 +772,23 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "workspace.archiveSession",
   // DSH 0.1.6: restore one archived Session (pairs with archiveSession above).
   "workspace.unarchiveSession",
+  // DSH 0.1.7: sidebar session pinning (pinned sessions ride the workspace
+  // tree like rename/archive; both carry the workspace/session ids the guard's
+  // GUARDED_ID_FIELDS already ownership-check).
+  "workspace.pinSession",
+  "workspace.unpinSession",
+  // DSH 0.1.7: the job controller (`dsh-api-job-controller`, typert namespace
+  // `job`; SessionJob moved here out of `session`). `list`/`follow` are
+  // reconnect-safe streams and `kill` is the human stop button — the same
+  // trust boundary as `session.prompt`. Every request carries `sessionId`
+  // (JobFollowRequest omits it only for unowned jobs, which any caller may
+  // observe), ownership-checked through the guard's GUARDED_ID_FIELDS. Note:
+  // `jobId` must NOT be added to the guarded fields — job ids are not in the
+  // ownership sidecar and every id collected must resolve owned, which would
+  // deny legitimate kills.
+  "job.list",
+  "job.follow",
+  "job.kill",
   // DSH 0.1.6: the sidebar terminal (`dsh-api-terminal-controller`, typert
   // namespace `terminal`). Every method is session-agent-scoped by the Gateway
   // (the `agent` argument is supplied by the Gateway itself, never by the
@@ -844,7 +861,11 @@ var USER_DOMAINS = [
   // workspaceFiles surface plus the Office→PDF converter, both scoped to the
   // viewed session identity (workspaceFileScopeId) the Gateway resolves.
   "workspaceFiles",
-  "officeToPdf"
+  "officeToPdf",
+  // DSH 0.1.7: the job controller (SessionJob moved here out of `session`) —
+  // list/follow/kill with the request's sessionId ownership-checked by the
+  // guard (USER_ALLOWED carries job.list/job.follow/job.kill).
+  "job"
 ];
 var ADMIN_ONLY_UI_PLUGINS = [
   "@linxin666/dsh-client-ui-plugin-manager",
@@ -886,9 +907,12 @@ function adminOnlyMethods() {
     "credentials.get",
     "credentials.set",
     "credentials.delete",
-    "settings.list",
+    // DSH 0.1.7: exact wire-method names of the settings controller
+    // (describe/update/replace — `settings.list`/`settings.reset` never
+    // existed on the wire; `canOpenAgentPresetDirectory` was removed in 0.1.7).
+    "settings.describe",
     "settings.update",
-    "settings.reset",
+    "settings.replace",
     "agentPreset.list",
     "agentPreset.read",
     "agentPreset.write",
@@ -905,11 +929,36 @@ function adminOnlyMethods() {
     "pluginManager.setBundleEnabled",
     "pluginManager.installBundle",
     "pluginManager.cancelInstall",
-    "pluginManager.removeBundle"
+    "pluginManager.removeBundle",
+    // DSH 0.1.7: the account controller (typert namespace `account`) — the
+    // process-wide upstream DeepSeek Platform grant: browser sign-in, cancel,
+    // and revoke are whole-instance operations; even the read projections
+    // (state/profile/recharge-wallet balance) are the operator's data.
+    // Ordinary users are denied by default; advertised here for admins.
+    "account.getState",
+    "account.getProfile",
+    "account.getBalance",
+    "account.startSignIn",
+    "account.cancelSignIn",
+    "account.signOut",
+    "account.watch",
+    // DSH 0.1.7: the plugin-registry probe the new bundled plugin-manager UI
+    // uses (client/ui-plugin-manager, service id `pluginRegistryProbe`) —
+    // same strictly-admin posture as pluginManager.
+    "pluginRegistryProbe.list"
   ];
 }
 function allDomains() {
-  return [...USER_DOMAINS, "credentials", "settings", "agentPresets", "pluginManager"];
+  return [
+    ...USER_DOMAINS,
+    "credentials",
+    "settings",
+    "agentPresets",
+    "pluginManager",
+    // DSH 0.1.7: the account controller's namespace (admin-only; see
+    // remote-guard's ADMIN_ONLY_NAMESPACES and the two-segment deny list).
+    "account"
+  ];
 }
 function allUiPlugins() {
   return [...CORE_UI_PLUGINS, ...ADMIN_ONLY_UI_PLUGINS];
@@ -1767,7 +1816,16 @@ var ADMIN_ONLY_NAMESPACES = /* @__PURE__ */ new Set([
   "agentPresets",
   // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
   // and removes profile bundles — never reachable by an ordinary user.
-  "pluginManager"
+  "pluginManager",
+  // DSH 0.1.7-alpha.2: the account controller (`namespace: 'account'`) drives
+  // the process-wide upstream DeepSeek Platform grant — startSignIn/signOut/
+  // cancelSignIn rebind or revoke THE instance's account — and even the read
+  // projections (getState/getProfile/getBalance) expose the operator's
+  // profile and recharge-wallet balance. Entire namespace is admin-only;
+  // ordinary users are denied by default (absent from USER_ALLOWED), this is
+  // defense-in-depth, and capabilities.ts mirrors it in the two-segment deny
+  // list and the quiet-deny set.
+  "account"
 ]);
 var GUARDED_ID_FIELDS = [
   "sessionId",

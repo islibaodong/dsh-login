@@ -22,7 +22,7 @@
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
 - vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
-  tarballs, devDeps pinned to `^0.1.6-alpha.2` since 2026-09-18) — there are
+  tarballs, devDeps pinned to `^0.1.7-alpha.2` since 2026-09-23) — there are
   NO vitest aliases. Only tsconfig `paths` map `@deepseek-ai/*` to the harness
   checkout (`E:/code/deepseek-harness`) for TYPES. After a DSH upgrade:
   `npm i -D @deepseek-ai/<pkgs>@<tag>` — do not assume node_modules matches
@@ -30,6 +30,18 @@
   versions to the lockfile (that regressed the tree to 0.1.1-rc.2 once, whose
   5-arg `serveStatic` mis-slotted the `authorizeIndex` callback → gateway
   failures).
+- Upgrading to 0.1.7+ hits TWO ERESOLVE traps (2026-09-23): (1) the plugin's
+  OWN peerDependencies must gain the new tuple branch BEFORE installing
+  (`0.1.7-alpha.2` does not satisfy `>=0.1.6-alpha.1` — node-semver prerelease
+  rule); (2) `dsh-client-connection` now exact-pins NEW peers
+  `@deepseek-ai/dsh-scope`, `dsh-session`, `dsh-brand` — add them to the
+  install list. When npm's incremental resolution wedges on the old tree,
+  delete node_modules + lockfile and reinstall fresh. Also `npm
+  install-scripts` may warn that esbuild's postinstall is not
+  allowScripts-covered (harmless so far — build works).
+- `npm view <pkg> dist-tags --json` returns the tags object at the TOP LEVEL
+  (not nested under a `dist-tags` key): read `$d.alpha`, not
+  `$d.'dist-tags'.alpha` (2026-09-21 false-alarm re-run).
 - `dist/client.js` must be regenerated (`npm run build:client`) after
   upgrading `@deepseek-ai/dsh-client-connection`; the script re-stamps the
   module-loader id banner and fails loudly if the banner pattern is missing.
@@ -55,3 +67,7 @@
   to releases (2026-09-19: HEAD 882 commits behind `dsh-v0.1.6-alpha.2`).
   For release-state analysis grep the TAG (`git grep <pat> dsh-v<ver> --
   packages/`), never the tree; test/build runtime truth is `node_modules`.
+- `git fetch` against github.com can fail with "TLS connect error:
+  unexpected eof while reading" (2026-09-19); retrying with
+  `git -c http.version=HTTP/1.1 fetch --tags origin` succeeded. Treat a bare
+  tag list BEFORE a successful fetch as stale data, not release evidence.

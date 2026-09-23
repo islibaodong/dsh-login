@@ -30,6 +30,20 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'workspace.insertBefore', 'workspace.insertSessionBefore', 'workspace.archiveSession',
   // DSH 0.1.6: restore one archived Session (pairs with archiveSession above).
   'workspace.unarchiveSession',
+  // DSH 0.1.7: sidebar session pinning (pinned sessions ride the workspace
+  // tree like rename/archive; both carry the workspace/session ids the guard's
+  // GUARDED_ID_FIELDS already ownership-check).
+  'workspace.pinSession', 'workspace.unpinSession',
+  // DSH 0.1.7: the job controller (`dsh-api-job-controller`, typert namespace
+  // `job`; SessionJob moved here out of `session`). `list`/`follow` are
+  // reconnect-safe streams and `kill` is the human stop button — the same
+  // trust boundary as `session.prompt`. Every request carries `sessionId`
+  // (JobFollowRequest omits it only for unowned jobs, which any caller may
+  // observe), ownership-checked through the guard's GUARDED_ID_FIELDS. Note:
+  // `jobId` must NOT be added to the guarded fields — job ids are not in the
+  // ownership sidecar and every id collected must resolve owned, which would
+  // deny legitimate kills.
+  'job.list', 'job.follow', 'job.kill',
   // DSH 0.1.6: the sidebar terminal (`dsh-api-terminal-controller`, typert
   // namespace `terminal`). Every method is session-agent-scoped by the Gateway
   // (the `agent` argument is supplied by the Gateway itself, never by the

@@ -92,6 +92,39 @@ describe('capabilities', () => {
     expect(caps.domains).toContain('terminal')
     expect(isUserDeniedTwoSegment('terminal')).toBe(false)
   })
+
+  it('grants the DSH 0.1.7 additions (job + session pinning) to ordinary users', () => {
+    // 0.1.7 job controller (SessionJob moved out of `session`): the
+    // reconnect-safe streams plus the human kill, all sessionId-scoped.
+    for (const m of ['job.list', 'job.follow', 'job.kill']) {
+      expect(USER_ALLOWED.has(m)).toBe(true)
+    }
+    // 0.1.7 workspace session pinning.
+    expect(USER_ALLOWED.has('workspace.pinSession')).toBe(true)
+    expect(USER_ALLOWED.has('workspace.unpinSession')).toBe(true)
+    const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
+    expect(caps.domains).toContain('job')
+  })
+
+  it('keeps the account namespace (0.1.7) admin-only across all three layers', () => {
+    // Wire guard: absent from the ordinary allow-list, advertised for admins.
+    const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
+    expect(caps.methods.some(m => m.startsWith('account.'))).toBe(false)
+    expect(caps.domains).not.toContain('account')
+    const admin = deriveCapabilities({ username: 'root', isAdmin: true })
+    expect(admin.methods).toContain('account.startSignIn')
+    expect(admin.methods).toContain('account.signOut')
+    expect(admin.domains).toContain('account')
+    // Two-segment URL layer: /api/account/* is admin-only.
+    expect(isUserDeniedTwoSegment('account')).toBe(true)
+    // Grace layer: read projections deny quietly (the GUI probes them at
+    // boot), writes stay loud 403.
+    expect(isReadProbe('account.getState')).toBe(true)
+    expect(isReadProbe('account.getProfile')).toBe(true)
+    expect(isReadProbe('account.getBalance')).toBe(true)
+    expect(isReadProbe('account.signOut')).toBe(false)
+    expect(isReadProbe('account.startSignIn')).toBe(false)
+  })
 })
 
 describe('isReadProbe', () => {

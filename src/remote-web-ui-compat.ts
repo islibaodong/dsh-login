@@ -29,7 +29,17 @@
  * This module is a no-op whenever remote-web-ui is not installed (its settings
  * namespace is not registered) or the settings service is absent.
  */
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
+/**
+ * Minimal settings-write seam. DSH 0.1.7 rewrote `@deepseek-ai/dsh-settings`
+ * (the `SettingsProvider`/provider seam became `SettingsForms`, and the old
+ * type export is gone), so this module no longer imports upstream types: the
+ * runtime service is still `ctx.settings` with merge-patch `update(ns, patch)`
+ * (verified at dsh-v0.1.7-alpha.2), which is all this module needs. Kept as a
+ * local structural type so future upstream renames cannot break the build.
+ */
+interface SettingsWriteSeam {
+  update(namespace: string, patch: object): Promise<void>
+}
 
 /** The settings namespace remote-web-ui registers its own config into. */
 export const REMOTE_WEB_UI_NAMESPACE = 'remote-web-ui' as const
@@ -40,7 +50,7 @@ export type CompatApplyResult = 'ok' | 'skipped' | 'unregistered'
 /** The minimal settings surface this module needs (narrow seam for tests). */
 export interface RemoteWebUiCompatDeps {
   /** Resolve the live settings service; undefined => nothing to write to. */
-  getSettings: () => Pick<SettingsProvider, 'update'> | undefined
+  getSettings: () => Pick<SettingsWriteSeam, 'update'> | undefined
 }
 
 /**

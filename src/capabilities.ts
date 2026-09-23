@@ -60,6 +60,10 @@ export const ADMIN_ONLY_TWO_SEGMENT_DOMAINS: ReadonlySet<string> = new Set([
   'market', 'git-graph', 'skill-explorer', 'skin-center', 'community-plugins',
   // harness admin-agent domain
   'agents',
+  // DSH 0.1.7: the account controller — sign-in/out of the process-wide
+  // upstream DeepSeek Platform grant is a whole-instance credential
+  // operation (mirrors remote-guard's ADMIN_ONLY_NAMESPACES 'account').
+  'account',
 ])
 
 /**
@@ -95,6 +99,10 @@ export const USER_DOMAINS: readonly string[] = [
   // viewed session identity (workspaceFileScopeId) the Gateway resolves.
   'workspaceFiles',
   'officeToPdf',
+  // DSH 0.1.7: the job controller (SessionJob moved here out of `session`) —
+  // list/follow/kill with the request's sessionId ownership-checked by the
+  // guard (USER_ALLOWED carries job.list/job.follow/job.kill).
+  'job',
 ]
 
 /** UI plugin ids hidden from an ordinary user (admin-only surfaces). */
@@ -161,7 +169,10 @@ function adminOnlyMethods(): string[] {
   // capability advertisement (the physical layer remains authoritative).
   return [
     'credentials.list', 'credentials.get', 'credentials.set', 'credentials.delete',
-    'settings.list', 'settings.update', 'settings.reset',
+    // DSH 0.1.7: exact wire-method names of the settings controller
+    // (describe/update/replace — `settings.list`/`settings.reset` never
+    // existed on the wire; `canOpenAgentPresetDirectory` was removed in 0.1.7).
+    'settings.describe', 'settings.update', 'settings.replace',
     'agentPreset.list', 'agentPreset.read', 'agentPreset.write',
     'host.path', 'host.system',
     // DSH 0.1.6-alpha.2: the native plugin manager (packages/boot/
@@ -171,12 +182,26 @@ function adminOnlyMethods(): string[] {
     'pluginManager.listPlugins', 'pluginManager.listBundles', 'pluginManager.inspect',
     'pluginManager.setPluginEnabled', 'pluginManager.setBundleEnabled',
     'pluginManager.installBundle', 'pluginManager.cancelInstall', 'pluginManager.removeBundle',
+    // DSH 0.1.7: the account controller (typert namespace `account`) — the
+    // process-wide upstream DeepSeek Platform grant: browser sign-in, cancel,
+    // and revoke are whole-instance operations; even the read projections
+    // (state/profile/recharge-wallet balance) are the operator's data.
+    // Ordinary users are denied by default; advertised here for admins.
+    'account.getState', 'account.getProfile', 'account.getBalance',
+    'account.startSignIn', 'account.cancelSignIn', 'account.signOut', 'account.watch',
+    // DSH 0.1.7: the plugin-registry probe the new bundled plugin-manager UI
+    // uses (client/ui-plugin-manager, service id `pluginRegistryProbe`) —
+    // same strictly-admin posture as pluginManager.
+    'pluginRegistryProbe.list',
   ]
 }
 
 /** Every user domain plus the admin-only ones. */
 function allDomains(): string[] {
-  return [...USER_DOMAINS, 'credentials', 'settings', 'agentPresets', 'pluginManager']
+  return [...USER_DOMAINS, 'credentials', 'settings', 'agentPresets', 'pluginManager',
+    // DSH 0.1.7: the account controller's namespace (admin-only; see
+    // remote-guard's ADMIN_ONLY_NAMESPACES and the two-segment deny list).
+    'account']
 }
 
 /** Every UI plugin id (core + admin-only). */
@@ -196,6 +221,10 @@ export const QUIET_DENY_METHODS: ReadonlySet<string> = new Set([
   'pluginManager.list', 'plugin.list',
   'doctor.status', 'doctor.run',
   'ui.plugins', 'ui.list',
+  // DSH 0.1.7: the account controller's read projections — every user's GUI
+  // may probe the account page at boot; deny quietly instead of a red wall
+  // (the whole namespace is admin-only; writes stay loud 403).
+  'account.getState', 'account.getProfile', 'account.getBalance', 'account.watch',
 ])
 
 /**

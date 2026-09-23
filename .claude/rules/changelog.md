@@ -1,5 +1,143 @@
 # Memory Changelog
 
+## 2026-09-23 — DSH 0.1.7-alpha.2 RELEASE DETECTED → adapted (0.2.3, unpublished)
+- **New DSH release detected** (third same-day re-check found it; 09-21's two
+  checks predate it): `@deepseek-ai/dsh-*` `0.1.7-alpha.1`
+  (2026-09-22T06:10Z) + `0.1.7-alpha.2` (2026-09-22T15:54Z) under the
+  **`alpha`** dist-tag; harness tags `dsh-v0.1.7-alpha.1` (`c36a83ff6b`) /
+  `dsh-v0.1.7-alpha.2` (`00102833df`); **1461 commits** since 0.1.6-alpha.2;
+  vendored cordis 4.0.4 / schemastery 3.18.4 / include 1.0.9 / loader 1.0.5.
+  Full analysis + adaptation: `docs/adapt-dsh-0.1.7.md`.
+- **Compat surface**: webserver (gzip multipart only), frontend-static
+  (`<base href="./">` sub-path mounts), web-app rows (**`web-runtime` +
+  `connection` untouched — patch applies as-is**), credentials main entry,
+  session/terminal/workspace-files/goal/llm/skill/subagent wire faces all
+  compatible. `connection/request` waterfall survives (now
+  `webCtx.waterfall`, string-first) — the api-bridge-auth wall works as-is.
+  What changed and mattered:
+  1. **`dsh-settings` rewritten** (provider seam → `SettingsForms`):
+     `ctx.settings` + merge-patch `update(ns, patch)` survive; the
+     `SettingsProvider` type export is gone → remote-web-ui-compat.ts now
+     uses a local structural `SettingsWriteSeam` (no upstream type imports).
+  2. **New namespace `account`** (api-account-controller): startSignIn/
+     cancelSignIn/signOut drive the ONE process-wide upstream DeepSeek
+     Platform grant; reads leak the operator's profile/wallet balance →
+     strictly admin-only (USER_ALLOWED absent + ADMIN_ONLY_NAMESPACES +
+     two-segment deny list + quiet-deny reads + admin advertisement).
+  3. **New namespace `job`** (api-job-controller; SessionJob moved out of
+     `session`): list/follow streams + kill, all sessionId-scoped →
+     USER_ALLOWED += job.list/follow/kill; USER_DOMAINS += job; `jobId`
+     deliberately NOT a guarded field (not in the ownership sidecar —
+     collecting it would deny legitimate kills).
+  4. **workspace += pinSession/unpinSession** → USER_ALLOWED += both.
+  5. `agentPresets` package renamed (`dsh-agent-presets` →
+     `dsh-agent-preset-registry`) but the **wire namespace stays
+     `agentPresets`** — admin lists unchanged. settings wire methods are
+     `describe/update/replace` (`canOpenAgentPresetDirectory` removed;
+     `settings.list/reset` never existed on the wire — advertisement
+     corrected). New `pluginRegistryProbe` (bundled plugin-manager UI)
+     advertised admin-only.
+- **Dependencies**: peerDependencies retargeted (tuple convention) to
+  `>=0.1.5-alpha.1 <0.2.0-0 || >=0.1.6-alpha.1 <0.2.0-0 || >=0.1.7-alpha.2
+  <0.2.0-0` for all six dsh peers — the new branch is MANDATORY
+  (node-semver prerelease rule: 0.1.7-alpha.2 does not satisfy
+  `>=0.1.6-alpha.1`; this exact mismatch caused the ERESOLVEs). devDeps
+  pinned to ^0.1.7-alpha.2 incl. NEW exact-pinned transitive peers
+  **dsh-scope / dsh-session / dsh-brand** (dsh-client-connection peers on
+  them; omitting them also ERESOLVEs) + cordis 4.0.4 + schemastery 3.18.4 +
+  include 1.0.9 + loader 1.0.5. Clean reinstall regenerated the lockfile.
+- **Verification**: `dist/client.js` re-stamped from the 0.1.7 connection
+  client (37134 chars); full suite **green 18 files / 207 tests** (203 + 4
+  new 0.1.7 regression tests: job/pin grants scoped to owned sessions,
+  foreign-session kill denied, account denied for ordinary users + admin
+  passthrough, three-layer account posture); `verify:imports` exit 0; build
+  exit 0. Publish needs the user (`npm stage publish` + npmjs 2FA).
+- **Multi-user detection at 0.1.7**: still NO native multi-user (0 grep
+  hits; no user/account/auth package; the new `account` namespace manages
+  the single process-wide Platform grant — reinforces the one-operator
+  model). dsh-login remains the multi-user layer.
+- **Role-based whole-UI control at 0.1.7**: still infeasible —
+  `packages/client/runtime` is byte-identical to 0.1.6 (activates every
+  bundle unconditionally, no identity gate), ui-slots ±5 lines
+  (`renderFactorySlot()` still takes no Session identity), zero
+  permission/isAdmin/isAllowed/role hits in both. `permission-presets`
+  (packages/interaction/permission-presets) is Agent-execution permission
+  modes (sandbox × approval presets), NOT user-account RBAC. Upstream asks
+  unchanged: docs/adapt-dsh-0.1.6.md §6.
+- Env notes: `npm install-scripts` now warns that esbuild's postinstall is
+  not allowScripts-covered (build still worked). The 09-21 gotcha about
+  `npm view <pkg> dist-tags --json` returning the top-level tags object
+  (not nested) cost one false-alarm re-run — remember `$d.alpha`.
+
+## 2026-09-21 — DSH release re-check: still NO new version (tri-source, all fresh)
+- **Detection result**: no DSH release since `0.1.6-alpha.2`. Three independent
+  sources, all fetched fresh this session: (1) npm official registry
+  (`--registry=https://registry.npmjs.org`) — all six peer packages PLUS
+  `dsh-web-app`, `dsh-invariants` end at `0.1.6-alpha.2`, dist-tags unchanged
+  (alpha=0.1.6-alpha.2, next=0.1.5-rc.2, `latest` still stale 0.0.1-rc.x;
+  cordis latest=4.0.2); (2) harness git fetch (succeeded on the HTTP/1.1
+  retry) — newest tag `dsh-v0.1.6-alpha.2`, `origin/master` == `ddefc45fbc` ==
+  the release merge, **0 post-release commits**; (3) github API tags
+  (`api.github.com/repos/deepseek-ai/deepseek-harness/tags`) — newest tag
+  `dsh-v0.1.6-alpha.2` @ `ddefc45fbc`. (The HTML tags page fetch failed with a
+  network TypeError; the API endpoint was used as the third source instead.)
+  → **No compatibility adaptation required**; published
+  `@islibaodong/dsh-login@0.2.2` remains the current adapted release (peer
+  ranges admit alpha.2, exclude 0.1.7-alpha.x).
+- **Fresh compat verification (evidence today, not inherited)**: node_modules
+  confirmed at real `0.1.6-alpha.2` for all seven `@deepseek-ai/dsh-*` deps
+  (six peers + invariants); full vitest suite **green 18 files / 203 tests**
+  (exit 0, 9.57s). Plugin works as-is on the current latest release.
+- **Multi-user detection (re-verified at the release tag)**: `git grep -ilE
+  'multi.?user|multiuser|role.?based|\brbac\b' dsh-v0.1.6-alpha.2 --
+  packages/` → **0 hits**; the package listing has no user/account/auth
+  package (`identity` matches only `anonymous-user-id` — telemetry
+  correlation ids, not accounts). Still NO native multi-user; dsh-login
+  remains the multi-user layer.
+- **Role-based whole-UI control (re-verified)**: still infeasible — **0 hits**
+  for `permission|isAdmin|isAllowed|role` in `packages/client/runtime/src` +
+  `packages/client/ui-slots/src` (client runtime still activates every bundle
+  unconditionally; no per-identity slot filter / activation gate / role
+  concept; ui-slots README still states `renderFactorySlot()` accepts no
+  Session identity). The one webserver `middleware` grep hit is gzip
+  `NodeMiddleware` (compression) — still **no pre-routing auth hook**, so
+  plugin-self-registered exact routes remain outside any gate. Upstream asks
+  unchanged: docs/adapt-dsh-0.1.6.md §6.
+- Environment note: the HTTP/1.1 `git fetch` retry workaround from gotchas.md
+  was used directly this session and succeeded (plain fetch not attempted, so
+  whether the TLS EOF is still live is unknown).
+
+## 2026-09-19 (later) — DSH release re-check: still NO new version (fresh tri-source evidence)
+- **Detection result**: no DSH release since `0.1.6-alpha.2`. Three independent
+  sources, all fetched fresh this session: (1) npm official registry — all six
+  peer packages end at `0.1.6-alpha.2`, `time.modified` 2026-09-17T13:38–13:57Z,
+  dist-tags unchanged (alpha=0.1.6-alpha.2, next=0.1.5-rc.2, latest stale
+  0.0.1-rc.x); (2) harness git fetch (succeeded on HTTP/1.1 retry) — newest tag
+  `dsh-v0.1.6-alpha.2`, origin/master == `ddefc45fbc` == the release merge,
+  zero post-release commits; (3) github.com/deepseek-ai/deepseek-harness tags
+  page — newest tag `dsh-v0.1.6-alpha.2` (2026-09-17). → **No compatibility
+  adaptation required**; published `@islibaodong/dsh-login@0.2.2` remains the
+  current adapted release (peer ranges admit alpha.2, exclude 0.1.7-alpha.x).
+- **Fresh compat verification (evidence today, not inherited)**: node_modules
+  confirmed at real `0.1.6-alpha.2` tarballs for all six peers (plugin at
+  0.2.2); full vitest suite **green 18 files / 203 tests** (exit 0, 44.1s).
+  Plugin works as-is on the current latest release.
+- **Multi-user detection (fresh at the release tag)**: `git grep -ilE
+  'multi.?user|multiuser|role.?based|\brbac\b' dsh-v0.1.6-alpha.2 --
+  packages/` → zero hits; the package listing has no user/account/auth
+  package (`packages/identity` remains telemetry correlation ids). Still NO
+  native multi-user; dsh-login remains the multi-user layer.
+- **Role-based whole-UI control (fresh at the release tag)**: still
+  infeasible — zero hits for `permission|isAdmin|isAllowed` in
+  `packages/client/runtime/src` and `packages/client/ui-slots/src` (client
+  runtime still activates every bundle unconditionally; no per-identity slot
+  filter / activation gate / role concept). Upstream asks unchanged:
+  docs/adapt-dsh-0.1.6.md §6.
+- **Environment note**: `git fetch` against github.com failed once with
+  "TLS connect error: unexpected eof while reading"; retrying with
+  `git -c http.version=HTTP/1.1 fetch --tags origin` succeeded (recorded in
+  gotchas.md).
+
 ## 2026-09-19 (later) — PUBLISHED 0.2.2 (DSH 0.1.6-alpha.2 adaptation)
 - **`@islibaodong/dsh-login@0.2.2` is LIVE on npmjs** (`latest = 0.2.2`,
   tarball 31 files / 144.4 kB, shasum `3e7f02a2c836f5965853e1a2548ef2a984972ac5`).

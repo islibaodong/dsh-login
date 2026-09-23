@@ -52,6 +52,15 @@ const ADMIN_ONLY_NAMESPACES = new Set([
   // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
   // and removes profile bundles — never reachable by an ordinary user.
   'pluginManager',
+  // DSH 0.1.7-alpha.2: the account controller (`namespace: 'account'`) drives
+  // the process-wide upstream DeepSeek Platform grant — startSignIn/signOut/
+  // cancelSignIn rebind or revoke THE instance's account — and even the read
+  // projections (getState/getProfile/getBalance) expose the operator's
+  // profile and recharge-wallet balance. Entire namespace is admin-only;
+  // ordinary users are denied by default (absent from USER_ALLOWED), this is
+  // defense-in-depth, and capabilities.ts mirrors it in the two-segment deny
+  // list and the quiet-deny set.
+  'account',
 ])
 
 /**

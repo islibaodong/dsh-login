@@ -106,6 +106,45 @@ describe('wrapRemoteGateway (option A isolation glue)', () => {
       .resolves.toEqual({ invoked: 'pluginManager.listPlugins' })
   })
 
+  it('grants the DSH 0.1.7 additions (job + session pinning) scoped to owned sessions', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    // job.list / job.follow (0.1.7 job controller, SessionJob moved out of
+    // `session`): reconnect-safe streams whose request carries `sessionId`.
+    await expect(wrapped.invoke({ namespace: 'job', method: 'list', args: { sessionId: 's-1' } }))
+      .resolves.toEqual({ invoked: 'job.list' })
+    // job.kill is the human stop button — allowed on the user's own session.
+    await expect(wrapped.invoke({ namespace: 'job', method: 'kill', args: { sessionId: 's-1', jobId: 'j-1' } }))
+      .resolves.toEqual({ invoked: 'job.kill' })
+    // ...and a foreign sessionId is denied (ownership guard; `jobId` is
+    // deliberately NOT a guarded field — only the session scope is).
+    await expect(wrapped.invoke({ namespace: 'job', method: 'kill', args: { sessionId: 's-foreign', jobId: 'j-1' } }))
+      .rejects.toThrow(/forbidden/)
+    // Session pinning (0.1.7 workspace additions) on the user's own tree.
+    await expect(wrapped.invoke({ namespace: 'workspace', method: 'pinSession', args: { sessionId: 's-1' } }))
+      .resolves.toEqual({ invoked: 'workspace.pinSession' })
+    // Three calls reached the gateway; the foreign kill was denied upstream.
+    expect(g.calls).toHaveLength(3)
+  })
+
+  it('denies the whole account namespace (0.1.7) for ordinary users but passes admins', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    // signOut/startSignIn rebind or revoke THE instance's upstream Platform
+    // grant; even the read projections leak the operator's profile/balance.
+    for (const method of ['signOut', 'startSignIn', 'cancelSignIn', 'getState', 'getProfile', 'getBalance']) {
+      await expect(wrapped.invoke({ namespace: 'account', method, args: {} }))
+        .rejects.toThrow(/forbidden/)
+    }
+    expect(g.calls).toHaveLength(0)
+    // Admins manage the instance account.
+    const adminWrapped = wrapRemoteGateway(g, () => root)
+    await expect(adminWrapped.invoke({ namespace: 'account', method: 'getState', args: {} }))
+      .resolves.toEqual({ invoked: 'account.getState' })
+    await expect(adminWrapped.invoke({ namespace: 'account', method: 'signOut', args: {} }))
+      .resolves.toEqual({ invoked: 'account.signOut' })
+  })
+
   it('rejects a call addressing a session outside the owned set', async () => {
     const g = fakeGateway()
     const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
