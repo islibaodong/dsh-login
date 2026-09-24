@@ -1,6 +1,30 @@
 # Memory Changelog
 
-## 2026-09-24 (later) — 0.2.4 prepared (unpublished): DSH dev settings refactor broke remote-web-ui-compat graceful skip
+## 2026-09-24 (later) — PUBLISHED 0.2.4 (DSH #4587 settings-error-wording fix)
+- **`@islibaodong/dsh-login@0.2.4` is LIVE on npmjs** (`latest = 0.2.4`,
+  tarball 31 files / 149.2 kB, shasum `2dd288d269addf527a9274d0b171c8d7bab62415`,
+  unpacked 518.2 kB). Stage id `98ecd73c-87f8-48d5-9764-fad3c73a29b8`.
+  Publish path = the 0.2.3 runbook, executed end-to-end this session: the
+  0.2.3 token was dead (whoami E401) → fresh **web login** in an interactive
+  `Start-Process powershell` window (whoami polling confirmed `islibaodong`
+  after 4×15s polls) → fresh pre-publish verification (suite 18 files / 209
+  tests green 6.54s; verify:imports exit 0; `npm pack --dry-run` 31 files,
+  shasum 2dd288d2…, no `.env` side effect, working tree clean after prepack)
+  → `npm stage publish ./ --registry=https://registry.npmjs.org` (prepack
+  rebuild deterministic — staged shasum identical to dry-run) → `npm stage
+  approve <id>` in another interactive window → user approved 2FA in the
+  browser → dist-tags polled until `latest` flipped to 0.2.4 (7th 15s poll).
+  `npm view @0.2.4` re-verified version + dist-tags on the official registry.
+- Release commit `1a4da85` (the #4587 fix, 7 files +66/−7); **git tag
+  `v0.2.4` + master pushed to GitHub** (`f68a658..1a4da85 master` +
+  `[new tag] v0.2.4`) — the `dsh plugin add github:islibaodong/dsh-login`
+  install channel now serves 0.2.4. Git push stderr shows the usual cosmetic
+  PowerShell NativeCommandError wrapper — push succeeds.
+- Hygiene: the fresh `//registry.npmjs.org/:_authToken` from this login sits
+  in `~/.npmrc` — revoke it on npmjs.com if the machine is shared (same note
+  as after 0.2.1/0.2.2/0.2.3; expect a fresh web login again next release).
+
+## 2026-09-24 — 0.2.4 prepared (published, see the entry above): DSH dev settings refactor broke remote-web-ui-compat graceful skip
 - **Upstream break found on dev** (post-rc.1, commit `601d6761e4`,
   2026-09-21, #4587 "profile-owned live configuration"): the settings
   service's `write()` now throws `No configurable plugin entry "<ns>"`
@@ -28,7 +52,10 @@
   loads `dist/index.js`; src-only edits are invisible (stack src
   line numbers are sourcemap-resolved). A profile `pnpm update` will
   restore npm 0.2.3 (still broken) until 0.2.4 is published.
-- **Not yet done**: npm stage publish + git tag `v0.2.4` + master push.
+- ~~**Not yet done**: npm stage publish + git tag `v0.2.4` + master push~~ →
+  all three done — published 0.2.4, tag `v0.2.4` + master pushed (see the
+  PUBLISHED entry above). A profile `pnpm update` now restores the official
+  npm 0.2.4 (no longer needs the stopgap dist+src copy).
 
 ## 2026-09-24 — DSH 0.1.7-rc.1 detected → verified compatible, NO release needed (devDeps pinned, advertisement +1)
 - **New DSH release detected**: `0.1.7-rc.1` (2026-09-23T13:25Z) under the
