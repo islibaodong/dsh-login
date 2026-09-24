@@ -41,7 +41,18 @@
   allowScripts-covered (harmless so far — build works).
 - `npm view <pkg> dist-tags --json` returns the tags object at the TOP LEVEL
   (not nested under a `dist-tags` key): read `$d.alpha`, not
-  `$d.'dist-tags'.alpha` (2026-09-21 false-alarm re-run).
+  `$d.'dist-tags'.alpha` (2026-09-21 false-alarm re-run). BUT requesting two
+  fields (`npm view <pkg> dist-tags time --json`) NESTS them — read
+  `$d.'dist-tags'.alpha` / `$d.time.<ver>` in that shape (2026-09-24).
+- DSH ≥ 0.1.7-rc.1 runs a BOOT-TIME plugin compatibility admission (app-boot
+  PR #5061): every bundle's/row's `@deepseek-ai/dsh*` peerDependencies is
+  tested with `semver.satisfies(runtime, range, { includePrerelease: true })`
+  — MORE lenient than npm's install-time tuple rule. Incompatible bundles are
+  stderr-reported and SKIPPED, so dsh-login's patch (web-runtime disable)
+  never applies and the GUI boots WITHOUT the login wall (fail-open). After
+  any DSH upgrade, verify dsh-login actually loaded (login page appears).
+  Exemption: profile `compatibility.json` + `dsh plugin allow-version
+  --accept-risk` (exact `name@version` → exact runtime versions).
 - `dist/client.js` must be regenerated (`npm run build:client`) after
   upgrading `@deepseek-ai/dsh-client-connection`; the script re-stamps the
   module-loader id banner and fails loudly if the banner pattern is missing.

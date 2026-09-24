@@ -916,6 +916,10 @@ function adminOnlyMethods() {
     "agentPreset.list",
     "agentPreset.read",
     "agentPreset.write",
+    // DSH 0.1.7-rc.1: the preset registry's document viewer
+    // (`agentPresets.readDocument` — view one declaration's child plugin
+    // list). Same strictly-admin posture as the rest of the namespace.
+    "agentPresets.readDocument",
     "host.path",
     "host.system",
     // DSH 0.1.6-alpha.2: the native plugin manager (packages/boot/

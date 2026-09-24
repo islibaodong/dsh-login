@@ -1,5 +1,44 @@
 # Memory Changelog
 
+## 2026-09-24 — DSH 0.1.7-rc.1 detected → verified compatible, NO release needed (devDeps pinned, advertisement +1)
+- **New DSH release detected**: `0.1.7-rc.1` (2026-09-23T13:25Z) under the
+  **`next`** dist-tag (alpha stays 0.1.7-alpha.2; latest still stale
+  0.0.1-rc.1), tag `dsh-v0.1.7-rc.1` (`46a7f68b09`, PR #5073); **156
+  commits** since 0.1.7-alpha.2. Verified on all 12 relevant packages.
+  Full analysis: `docs/adapt-dsh-0.1.7-rc.1.md`.
+- **Compat verdict: 0.2.3 already works on rc.1 — no release.** Compat
+  surface source-unchanged (webserver/frontend-static/settings/credentials/
+  web-app rows/connection waterfall/runtime/ui-slots); wire registry only
+  gained a type re-export. Sole wire addition:
+  `agentPresets.readDocument` (admin namespace → deny-by-default for
+  ordinary users already; admins pass). Gateway changes are internal
+  stream-cancellation hygiene.
+- **NEW upstream mechanism (PR #5061) — plugin/bundle compatibility
+  admission**: app-boot now evaluates every bundle's + row's
+  `@deepseek-ai/dsh*` peerDependencies against the running runtime with
+  `semver.satisfies(..., { includePrerelease: true })`; incompatible
+  bundles are stderr-reported and SKIPPED (patch layer never loads),
+  incompatible rows disabled, Include trees denied whole; exemption =
+  profile `compatibility.json` (exact `name@version` → exact runtime
+  versions) via `dsh plugin allow-version --accept-risk`. dsh-login 0.2.3
+  passes (its peers admit rc.1; boot check is MORE lenient than npm's
+  install-time tuple rule). **Operational fail-open note**: a future DSH
+  beyond the peer ranges makes the bundle skip → GUI boots WITHOUT the
+  login wall (stderr diagnostic only) — always verify dsh-login loaded
+  after upgrading DSH.
+- **Changes shipped in-repo (not published)**: devDeps → `^0.1.7-rc.1`
+  (10 pkgs; incremental install ERESOLVE'd on the stale tree → fresh
+  reinstall per runbook, exit 0; no new transitive peers); `capabilities.ts`
+  adminOnlyMethods() += `agentPresets.readDocument` (advertisement
+  accuracy discipline); `dist/client.js` re-stamp byte-identical (37134
+  chars — connection client unchanged). Suite green **18 files / 207
+  tests** on real rc.1 builds; verify:imports exit 0; build exit 0.
+- Multi-user at rc.1: still NONE (0 grep hits; `account` namespace still
+  the single process-wide Platform grant). Role-based whole-UI control:
+  still infeasible (runtime/ui-slots source-unchanged, 0 hits; rc.1's
+  compatibility machinery is per-plugin admission, not per-user
+  visibility). Upstream asks unchanged: docs/adapt-dsh-0.1.6.md §6.
+
 ## 2026-09-23 (later) — PUBLISHED 0.2.3 (DSH 0.1.7-alpha.2 adaptation)
 - **`@islibaodong/dsh-login@0.2.3` is LIVE on npmjs** (`latest = 0.2.3`,
   tarball 31 files / 148.5 kB, shasum `b543eec6240bf25a0784efd2cbcf78ef2619d383`,
