@@ -524,11 +524,15 @@ var RemoteWebUiCompat = class {
       await settings.update(REMOTE_WEB_UI_NAMESPACE, patch);
       return "ok";
     } catch (error) {
-      if (String(error instanceof Error ? error.message : error).includes("not registered")) return "unregistered";
+      if (isUnregisteredNamespace(error)) return "unregistered";
       throw error;
     }
   }
 };
+function isUnregisteredNamespace(error) {
+  const message = String(error instanceof Error ? error.message : error);
+  return message.includes("not registered") || message.includes("No configurable plugin entry");
+}
 function isHttpUrl(value) {
   try {
     const url = new URL(value);

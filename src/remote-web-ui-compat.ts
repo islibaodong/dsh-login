@@ -92,10 +92,21 @@ export class RemoteWebUiCompat {
       return 'ok'
     } catch (error) {
       // The namespace exists only while remote-web-ui is installed and applied.
-      if (String(error instanceof Error ? error.message : error).includes('not registered')) return 'unregistered'
+      if (isUnregisteredNamespace(error)) return 'unregistered'
       throw error
     }
   }
+}
+
+/** Whether an error means the target namespace cannot be written here — i.e.
+ *  remote-web-ui is not installed and has registered nothing. Matched by
+ *  message because both settings generations report it as a plain Error:
+ *  the legacy service says "settings namespace not registered", the
+ *  profile-backed form rewrite (DSH ≥ 2026-09-21, #4587) throws
+ *  `No configurable plugin entry "<ns>"` from write(). */
+function isUnregisteredNamespace(error: unknown): boolean {
+  const message = String(error instanceof Error ? error.message : error)
+  return message.includes('not registered') || message.includes('No configurable plugin entry')
 }
 
 /** Whether a string is a parseable http(s) URL with a host (mirror of remote-web-ui). */

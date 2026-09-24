@@ -1,7 +1,7 @@
 {
   "name": "@islibaodong/dsh-login",
   "description": "Multi-user authentication gateway plugin for the DSH Web GUI",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "main": "dist/index.js",
   "exports": {

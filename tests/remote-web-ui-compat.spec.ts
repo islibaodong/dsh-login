@@ -39,6 +39,20 @@ describe('RemoteWebUiCompat.apply', () => {
     expect(await compat.apply(true)).toBe('unregistered')
   })
 
+  it('returns unregistered for the profile-backed form error (DSH settings refactor)', async () => {
+    // DSH ≥ 2026-09-21 replaced the "not registered" wording with
+    // `No configurable plugin entry "<ns>"` (packages/settings write()).
+    const { settings } = fakeSettings(() => { throw new Error('No configurable plugin entry "remote-web-ui"') })
+    const compat = new RemoteWebUiCompat({ getSettings: () => settings })
+    expect(await compat.apply(true)).toBe('unregistered')
+  })
+
+  it('gives up with unregistered under applyWithRetry for the profile-backed form error', async () => {
+    const { settings } = fakeSettings(() => { throw new Error('No configurable plugin entry "remote-web-ui"') })
+    const compat = new RemoteWebUiCompat({ getSettings: () => settings })
+    expect(await applyWithRetry(compat, true, '', 2, 1)).toBe('unregistered')
+  })
+
   it('rethrows unexpected errors (a real failure, not a missing namespace)', async () => {
     const { settings } = fakeSettings(() => { throw new Error('disk full') })
     const compat = new RemoteWebUiCompat({ getSettings: () => settings })

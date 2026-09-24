@@ -1,5 +1,35 @@
 # Memory Changelog
 
+## 2026-09-24 (later) — 0.2.4 prepared (unpublished): DSH dev settings refactor broke remote-web-ui-compat graceful skip
+- **Upstream break found on dev** (post-rc.1, commit `601d6761e4`,
+  2026-09-21, #4587 "profile-owned live configuration"): the settings
+  service's `write()` now throws `No configurable plugin entry "<ns>"`
+  where the legacy service threw "settings namespace not registered".
+  `RemoteWebUiCompat.apply` classifies the unregistered-namespace case by
+  matching the error MESSAGE (both generations throw a plain `Error`),
+  so the new wording no longer matched → the graceful
+  `'unregistered'` skip became a rethrow → `applyWithRetry` has no
+  catch → **fiber-fatal: the whole `dsh web` boot dies** whenever
+  `@linxin666/dsh-remote-web-ui` is NOT installed (its own namespace
+  absent — the exact path designed to be a no-op). Triggered in the
+  web profile on 2026-09-24 boot.
+- **Fix (0.2.4)**: new `isUnregisteredNamespace()` helper matches both
+  wordings ("not registered" legacy + "No configurable plugin entry"
+  #4587); comments pin the provenance of each. Same break class as the
+  2026-08-31 seam-rehome — settings error TEXT is not a stable contract;
+  replace message matching with a structural probe if upstream ever
+  exposes one.
+- **Tests**: 2 new cases in `remote-web-ui-compat.spec.ts` (apply +
+  applyWithRetry against the new wording) — both red before the fix,
+  green after; compat suite 15/15, full suite 209/209.
+- **Deployed to the web profile install directly** (dist+src copied
+  after `npm run build`) as a stopgap — boot verified clean
+  (`dsh web: http://127.0.0.1:3080`). Gotcha re-confirmed: the plugin
+  loads `dist/index.js`; src-only edits are invisible (stack src
+  line numbers are sourcemap-resolved). A profile `pnpm update` will
+  restore npm 0.2.3 (still broken) until 0.2.4 is published.
+- **Not yet done**: npm stage publish + git tag `v0.2.4` + master push.
+
 ## 2026-09-24 — DSH 0.1.7-rc.1 detected → verified compatible, NO release needed (devDeps pinned, advertisement +1)
 - **New DSH release detected**: `0.1.7-rc.1` (2026-09-23T13:25Z) under the
   **`next`** dist-tag (alpha stays 0.1.7-alpha.2; latest still stale
