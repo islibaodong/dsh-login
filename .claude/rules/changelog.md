@@ -1,5 +1,36 @@
 # Memory Changelog
 
+## 2026-09-28 — DSH 0.1.7-rc.2 detected → verified compatible, NO release needed (devDeps pinned, advertisement +1)
+- **New DSH release detected**: `0.1.7-rc.2` (2026-09-24T14:01–14:19Z) under the
+  **`next`** dist-tag (alpha stays 0.1.7-alpha.2; latest still stale
+  0.0.1-rc.1), tag `dsh-v0.1.7-rc.2` (release commit `787b746b80`); **346
+  commits** since 0.1.7-rc.1; `origin/master` already past the tag (post-
+  release pwsh tail-grace fix PR #5282). Verified on all seven integrated
+  packages + `dsh-invariants`. Full analysis: `docs/adapt-dsh-0.1.7-rc.2.md`.
+- **Compat verdict: 0.2.4 already works on rc.2 — no release.** The change
+  mass is account/Platform credential lifecycle + i18n; every integration
+  point is source-unchanged (webserver/frontend-static/settings/credentials/
+  gateway/connection waterfall/web-app rows/runtime/ui-slots). Sole wire
+  addition: `account.watchExpiry` (expiry-notice stream — admin-only
+  namespace, denied for users by construction);
+  `workspace.initializeDefault` dropped its `{directoryName,title}` request
+  but was never user-allowed → no impact. New session error codes only.
+- **Changes shipped in-repo (NOT published)**: devDeps → `^0.1.7-rc.2`
+  (10 pkgs; the known incremental ERESOLVE wedge → fresh reinstall per the
+  09-23 runbook, exit 0; cordis 4.0.4 / schemastery 3.18.4 unchanged);
+  `capabilities.ts` adminOnlyMethods() + QUIET_DENY_METHODS +=
+  `account.watchExpiry` (advertisement accuracy + read-shaped stream quiet
+  204); spec asserts all three layers. peerDependencies **unchanged** —
+  `>=0.1.7-alpha.2 <0.2.0-0` admits rc.2 (tuple rule; verified
+  semver.satisfies includePrerelease). `dist/client.js` re-stamp
+  **byte-identical** (37134 chars). Suite green **18 files / 209 tests** on
+  real rc.2 builds; verify:imports exit 0; build exit 0.
+- Multi-user at rc.2: still NONE (0 grep hits; `packages/identity` still
+  telemetry-only; the rc.2 `account` work manages the ONE process-wide
+  Platform grant). Role-based whole-UI control: still infeasible
+  (runtime/ui-slots source-identical to rc.1, 0 permission/role hits).
+  Upstream asks unchanged: docs/adapt-dsh-0.1.6.md §6.
+
 ## 2026-09-24 (later) — PUBLISHED 0.2.4 (DSH #4587 settings-error-wording fix)
 - **`@islibaodong/dsh-login@0.2.4` is LIVE on npmjs** (`latest = 0.2.4`,
   tarball 31 files / 149.2 kB, shasum `2dd288d269addf527a9274d0b171c8d7bab62415`,

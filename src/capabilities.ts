@@ -191,8 +191,12 @@ function adminOnlyMethods(): string[] {
     // and revoke are whole-instance operations; even the read projections
     // (state/profile/recharge-wallet balance) are the operator's data.
     // Ordinary users are denied by default; advertised here for admins.
+    // 0.1.7-rc.2 adds `watchExpiry` (credential-expiry notice stream, commit
+    // 8f180cf45f): same strictly-admin posture — it streams the operator's
+    // grant-expiry events to the account page.
     'account.getState', 'account.getProfile', 'account.getBalance',
     'account.startSignIn', 'account.cancelSignIn', 'account.signOut', 'account.watch',
+    'account.watchExpiry',
     // DSH 0.1.7: the plugin-registry probe the new bundled plugin-manager UI
     // uses (client/ui-plugin-manager, service id `pluginRegistryProbe`) —
     // same strictly-admin posture as pluginManager.
@@ -227,8 +231,11 @@ export const QUIET_DENY_METHODS: ReadonlySet<string> = new Set([
   'ui.plugins', 'ui.list',
   // DSH 0.1.7: the account controller's read projections — every user's GUI
   // may probe the account page at boot; deny quietly instead of a red wall
-  // (the whole namespace is admin-only; writes stay loud 403).
+  // (the whole namespace is admin-only; writes stay loud 403). rc.2's
+  // `watchExpiry` is a read-shaped stream (no side effects), so it joins the
+  // quiet set even though the trailing verb is not a read verb.
   'account.getState', 'account.getProfile', 'account.getBalance', 'account.watch',
+  'account.watchExpiry',
 ])
 
 /**

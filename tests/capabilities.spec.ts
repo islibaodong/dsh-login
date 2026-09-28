@@ -115,6 +115,11 @@ describe('capabilities', () => {
     expect(admin.methods).toContain('account.startSignIn')
     expect(admin.methods).toContain('account.signOut')
     expect(admin.domains).toContain('account')
+    // DSH 0.1.7-rc.2: the credential-expiry notice stream joins the strictly-
+    // admin account surface (advertisement accuracy), and its read-shaped
+    // stream denial stays quiet for ordinary users.
+    expect(admin.methods).toContain('account.watchExpiry')
+    expect(caps.methods.some(m => m.startsWith('account.'))).toBe(false)
     // Two-segment URL layer: /api/account/* is admin-only.
     expect(isUserDeniedTwoSegment('account')).toBe(true)
     // Grace layer: read projections deny quietly (the GUI probes them at
@@ -122,6 +127,7 @@ describe('capabilities', () => {
     expect(isReadProbe('account.getState')).toBe(true)
     expect(isReadProbe('account.getProfile')).toBe(true)
     expect(isReadProbe('account.getBalance')).toBe(true)
+    expect(isReadProbe('account.watchExpiry')).toBe(true)
     expect(isReadProbe('account.signOut')).toBe(false)
     expect(isReadProbe('account.startSignIn')).toBe(false)
   })
