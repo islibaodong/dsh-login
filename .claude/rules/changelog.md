@@ -1,5 +1,25 @@
 # Memory Changelog
 
+## 2026-09-28 (later) — READMEs synced to the released-0.2.4 / rc.2 reality (commit e19a61b)
+- Both `README.md` + `README.zh.md` were still describing the 0.2.0-era state
+  (0.2.1/0.2.2 labeled "unpublished", "17 files / 189 tests", "203 tests
+  through 0.1.6-alpha.2"). Synced, verified against the changelog + source:
+  banner now leads with **0.2.4 (npm latest) verified against DSH
+  0.1.7-rc.2** and a compact published adaptation history (0.2.1→0.1.6-alpha.1,
+  0.2.2→0.1.6-alpha.2, 0.2.3→0.1.7-alpha.2, 0.2.4→#4587 fix; rc.1/rc.2
+  no-release verifications linked); "Current status" rewritten around the
+  completed option-A adaptation (apiBridgeAuth wall included) with the guard
+  caveat kept verbatim-accurate (verified `src/index.ts` only exports
+  `wrapRemoteGateway`/`createRemoteIsolation` — still a composition primitive,
+  not auto-composed; two-browser sign-off still outstanding); new
+  "Tracks upstream" bullet (user-surface growth + admin-only namespaces +
+  the rc.1 boot-time compatibility-admission fail-open note); the
+  permission-model enumeration now matches `USER_ALLOWED` (terminal.*/job.*/
+  workspaceFiles.*/officeToPdf.*/pin-unpin/unarchive) and the admin-only
+  domain list (pluginManager+pluginRegistryProbe+account incl. watchExpiry);
+  test counts 189/203 → **18 files / 209 tests, DSH range through
+  0.1.7-rc.2** in "Running tests" + "Project structure" (both languages).
+
 ## 2026-09-28 — DSH 0.1.7-rc.2 detected → verified compatible, NO release needed (devDeps pinned, advertisement +1)
 - **New DSH release detected**: `0.1.7-rc.2` (2026-09-24T14:01–14:19Z) under the
   **`next`** dist-tag (alpha stays 0.1.7-alpha.2; latest still stale
