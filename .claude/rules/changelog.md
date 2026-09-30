@@ -1,5 +1,41 @@
 # Memory Changelog
 
+## 2026-09-30 — DSH 0.2.0-rc.2 adaptation (0.2.5 — peer retarget only, publish pending)
+- **New DSH release detected**: `0.2.0-rc.2` (harness tag `dsh-v0.2.0-rc.2`, release merge
+  `639ed01539`, commit 2026-09-29; npm `next` dist-tag 2026-09-29T09:44Z). First release
+  on the **0.2.0 tuple line** — this forces a peer retarget (unlike rc.1/rc.2 of 0.1.7,
+  which the existing `>=0.1.7-alpha.2 <0.2.0-0` branch already admitted).
+- **Compat surface verified between `dsh-v0.1.7-rc.2..dsh-v0.2.0-rc.2`** (33 files,
+  +354/−49 on the nine integrated packages): webserver / frontend-static / settings /
+  client-runtime / ui-slots / client-connection are **source-unchanged** (version bumps
+  only); gateway gains additive `hasLiveClient()` + client `signal` field (no
+  connection/request waterfall change); credentials is additive (`DeepSeekAccount`
+  gains abstract `getDeviceIdentity()` — Host-side, no wire method); controllers:
+  session `fork` gains optional `onCreated` arg (wire-backward-compatible), terminal
+  shell-discovery + workspace default-directory are internal logic. web-app rows:
+  `web-runtime`/`connection` untouched (schedule rows removed, desktop-gated
+  product-telemetry/otel rows added) — the shipped `cordis.patch.yml` applies as-is.
+  **Zero new wire methods, zero new namespaces** → capabilities/quiet-deny lists
+  unchanged. **Verdict: source-compatible, no code adaptation.**
+- **Changes shipped in 0.2.5**: `peerDependencies` retargeted (tuple convention) —
+  all six dsh peers gain `|| >=0.2.0-rc.2 <0.3.0-0`; devDeps → `^0.2.0-rc.2`
+  (10 pkgs) via fresh reinstall per the 09-23 runbook (incremental ERESOLVE wedge
+  confirmed again — lingering 0.1.7-rc.2 `dsh-host-frontend-static` pinned
+  `dsh-client-connection@0.1.7-rc.2`); cordis 4.0.4 / schemastery 3.18.4 unchanged
+  (verified against the 0.2.0-rc.2 published peers).
+- **Verification**: full suite green **18 files / 209 tests** on real 0.2.0-rc.2
+  builds (incl. the full-composition boot spec); `verify:imports` exit 0; build exit 0;
+  `dist/client.js` re-stamp **byte-identical (37134 chars)** — connection client
+  unchanged, as the source diff predicted.
+- Runtime boot already smoke-verified on the live web profile (0.2.0-rc.2 harness):
+  login wall active (302 to /login), no peer-gate skip under the
+  `dsh plugin allow-version` exemption — the exemption in
+  `~/.dsh/profiles/web/compatibility.json` becomes unnecessary once 0.2.5 is
+  installed (revoke after the profile upgrade).
+- Publish: needs the user (`npm stage publish` + npmjs 2FA), then git tag `v0.2.5`
+  + master push (GitHub install channel), then profile `pnpm update
+  @islibaodong/dsh-login` + `dsh plugin revoke-version`.
+
 ## 2026-09-28 (later) — READMEs synced to the released-0.2.4 / rc.2 reality (commit e19a61b)
 - Both `README.md` + `README.zh.md` were still describing the 0.2.0-era state
   (0.2.1/0.2.2 labeled "unpublished", "17 files / 189 tests", "203 tests
