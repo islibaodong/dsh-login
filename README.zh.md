@@ -8,22 +8,23 @@
 |:---:|:---:|
 | ![登录页](images/login.png) | ![用户管理](images/users.png) |
 
-> **已发布：`@islibaodong/dsh-login@0.2.4`（npm latest）。** 已验证兼容 DSH **0.1.7-rc.2**（2026-09-28；全量测试 18 文件 / 209 用例在正式 rc.2 构建上全绿）。option A：上游重构了 `/api` 传输——dsh-login 不再接管 `/api`（`connection` 行保持启用），并对未携带会话的共享 `/api` 桥请求直接回 401（`apiBridgeAuth`，默认开）。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
+> **已发布：`@islibaodong/dsh-login@0.2.5`（npm latest）。** 已验证兼容 DSH **0.2.0-rc.2**（2026-09-30；全量测试 18 文件 / 211 用例在正式 rc.2 构建上全绿）。option A：上游重构了 `/api` 传输——dsh-login 不再接管 `/api`（`connection` 行保持启用），并对未携带会话的共享 `/api` 桥请求直接回 401（`apiBridgeAuth`，默认开）。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 >
-> **适配历史（以下版本均已在 npm 发布）：** `0.2.1` → DSH 0.1.6-alpha.1（侧栏**终端**、**会话取消归档**）；`0.2.2` → 0.1.6-alpha.2（共享 `/api` 桥鉴权墙 `apiBridgeAuth`、文档预览 `workspaceFiles`/`officeToPdf` 用户面、原生 `pluginManager` 命名空间仅管理员）；`0.2.3` → 0.1.7-alpha.2（设置 seam 重构、新 `account` 命名空间仅管理员、`job` 控制器用户面、会话置顶）；`0.2.4` → DSH #4587 设置报错修复。0.1.7-rc.1 / rc.2 验证兼容、无需发版——详见 [`docs/adapt-dsh-0.1.7-rc.1.md`](docs/adapt-dsh-0.1.7-rc.1.md) / [`docs/adapt-dsh-0.1.7-rc.2.md`](docs/adapt-dsh-0.1.7-rc.2.md)。上游**仍然没有**原生多用户支持与按角色的 UI 门控（0.1.7-rc.2 重新验证）。
+> **适配历史（以下版本均已在 npm 发布）：** `0.2.1` → DSH 0.1.6-alpha.1（侧栏**终端**、**会话取消归档**）；`0.2.2` → 0.1.6-alpha.2（共享 `/api` 桥鉴权墙 `apiBridgeAuth`、文档预览 `workspaceFiles`/`officeToPdf` 用户面、原生 `pluginManager` 命名空间仅管理员）；`0.2.3` → 0.1.7-alpha.2（设置 seam 重构、新 `account` 命名空间仅管理员、`job` 控制器用户面、会话置顶）；`0.2.4` → DSH #4587 设置报错修复；`0.2.5` → DSH 0.2.0-rc.2（peer 重定向到 0.2.0 元组线——兼容面验证源码零改动，无需代码适配）。0.1.7-rc.1 / rc.2 验证兼容、无需发版——详见 [`docs/adapt-dsh-0.1.7-rc.1.md`](docs/adapt-dsh-0.1.7-rc.1.md) / [`docs/adapt-dsh-0.1.7-rc.2.md`](docs/adapt-dsh-0.1.7-rc.2.md) / [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md)。上游**仍然没有**原生多用户支持与按角色的 UI 门控（0.2.0-rc.2 重新验证）。
 
 ---
 
 ## 当前状态 —— 已发布（option A）
 
-**`@islibaodong/dsh-login@0.2.4` 已发布（npm + git 标签 `v0.2.4`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.1.7-rc.2**（2026-09-28 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 209 用例**在 0.1.7-rc.2 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一的原始目标「**对第三方 UI 插件的功能按角色控制**」仍无法完成——这是**被上游 DSH 能力阻塞**（0.1.7-rc.2 复核：客户端 runtime 与 ui-slots 源码未变，依旧没有按身份过滤 slot/section 或按角色的插件激活门）。
+**`@islibaodong/dsh-login@0.2.5` 已发布（npm + git 标签 `v0.2.5`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.2.0-rc.2**（2026-09-30 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 211 用例**在 0.2.0-rc.2 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一的原始目标「**对第三方 UI 插件的功能按角色控制**」仍无法完成——这是**被上游 DSH 能力阻塞**（0.2.0-rc.2 复核：客户端引导/激活层与 ui-slots 源码未变，依旧没有按身份过滤 slot/section 或按角色的插件激活门）。
 任务清单与验收矩阵见 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 
 **已完成并可用的**
 - 登录墙 + 多账号用户管理（设置 → 用户管理）+ 按用户隔离会话/工作区。
 - 能力发现（`GET /api/auth/capabilities`，会话鉴权）与写读静默拒绝（无权读探针 → `204`，写 → `403`，可用 `quietDenials` 开关），普通用户浏览器不再被「forbidden」报错墙和重试风暴困扰。
 - dsh-login **自己**的设置项**已按用户显隐**：管理员看到「用户管理」，普通用户看到「账户」（身份 + 退出）；普通用户不会调用任何 admin 接口。
-- **跟随上游 0.1.5-alpha.1 → 0.1.7-rc.2。** 每个上游版本的用户面线方法随发布即加入普通用户放行面（侧栏 `terminal.*`、`workspace.unarchiveSession`/`pinSession`/`unpinSession`、只读 `workspaceFiles`/`officeToPdf` 文档预览、`job` 控制器），而新的管理员专属命名空间（`pluginManager` + `pluginRegistryProbe`，以及 DeepSeek Platform 的 `account` 控制器——唯一进程级上游授权，含 rc.2 的 `watchExpiry` 过期通知流）整体禁用。DSH ≥ 0.1.7-rc.1 起，宿主在启动期对 peer 范围运行**插件兼容性准入**——dsh-login 的 peer 范围接纳当前 runtime，且该检查是 fail-open（仅 stderr 报告）：任何 DSH 升级后，请确认登录页真的出现了。
+- **按用户隔离守卫作为组合原语交付（option A）。** DSH ≥ 0.1.5 下 `/api` 归原生 `connection`/`api-gateway` 持有，dsh-login 的隔离是 REMOTE 层守卫——`wrapRemoteGateway` + `createRemoteIsolation`，从本包宿主 bundle 导出并经单元/集成测试（含所有权收窄与管理员放行）。包装器会原样转发守卫两个分发方法之外的全部网关成员（例如 DSH 0.2.0-rc.2 新增的必需方法 `hasLiveClient()`），组合后接口始终完整。`connection` 所有权与按用户默认工作区已在原生栈上重建。**守卫本身需在启动时组合进原生 `typertGateway` 行**（部署决策，非运行时热替换——重新 provide `typertGateway` 会触发重复服务错误），并以两浏览器启动做行为验收；目前**shipped patch 单独并不强制它**。详见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B。
+- **跟随上游 0.1.5-alpha.1 → 0.2.0-rc.2。** 每个上游版本的用户面线方法随发布即加入普通用户放行面（侧栏 `terminal.*`、`workspace.unarchiveSession`/`pinSession`/`unpinSession`、只读 `workspaceFiles`/`officeToPdf` 文档预览、`job` 控制器；0.2.0 未新增任何 wire 方法或命名空间），而新的管理员专属命名空间（`pluginManager` + `pluginRegistryProbe`，以及 DeepSeek Platform 的 `account` 控制器——唯一进程级上游授权，含 0.1.7-rc.2 的 `watchExpiry` 过期通知流）整体禁用。DSH ≥ 0.1.7-rc.1 起，宿主在启动期对 peer 范围运行**插件兼容性准入**——dsh-login 的 peer 范围接纳当前 runtime（0.2.5 已加入 0.2.0 分支），且该检查是 fail-open（仅 stderr 报告）：任何 DSH 升级后，请确认登录页真的出现了。
 
 **已知限制 —— 为什么无法做到对整个 UI 的按角色控制**
 - DSH 的设置面板渲染的是**一张全局分组列表**（`SettingsRoot` → `useSections`，`HostObservable<readonly SettingsSectionRow[]>`，无身份维度），因此某个插件的设置项无法在 `dsh-login` 内部按用户显隐。
@@ -228,7 +229,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（209 项；option A 下在 DSH 0.1.5-alpha.1 至 0.1.7-rc.2 上全绿——
+# 标准全量测试（211 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.0-rc.2 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
@@ -261,7 +262,7 @@ src/
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
 scripts/build-client.mjs  # 生成 dist/client.js：设置面板 dsh.client 注册
-tests/（option A 套件：18 文件 / 209 用例全绿——详见 docs/verify-option-A.md）
+tests/（option A 套件：18 文件 / 211 用例全绿——详见 docs/verify-option-A.md）
 └── *.spec.ts         # vitest 测试定义
 
 ## 许可证
