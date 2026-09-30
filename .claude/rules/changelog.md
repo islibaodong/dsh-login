@@ -1,6 +1,6 @@
 # Memory Changelog
 
-## 2026-09-30 — DSH 0.2.0-rc.2 adaptation (0.2.5 — peer retarget only, publish pending)
+## 2026-09-30 — DSH 0.2.0-rc.2 adaptation (0.2.5 — peer retarget only; PUBLISHED, see below)
 - **New DSH release detected**: `0.2.0-rc.2` (harness tag `dsh-v0.2.0-rc.2`, release merge
   `639ed01539`, commit 2026-09-29; npm `next` dist-tag 2026-09-29T09:44Z). First release
   on the **0.2.0 tuple line** — this forces a peer retarget (unlike rc.1/rc.2 of 0.1.7,
@@ -35,6 +35,30 @@
 - Publish: needs the user (`npm stage publish` + npmjs 2FA), then git tag `v0.2.5`
   + master push (GitHub install channel), then profile `pnpm update
   @islibaodong/dsh-login` + `dsh plugin revoke-version`.
+
+## 2026-09-30 (later) — PUBLISHED 0.2.5 + exemption revoked
+- **`@islibaodong/dsh-login@0.2.5` is LIVE on npmjs** (`latest = 0.2.5`,
+  31 files / 150.8 kB, shasum `86299e3d462783f82d58b3c728e2bb5ccb2d6a57`,
+  unpacked 522.1 kB). Stage id `8ad14b49-cdf0-4718-89b3-390d2ed01df3`.
+- Publish path: fresh web login in an interactive window (first attempt's CLI
+  session expired → relaunched; the follow-on scripted `stage publish` step
+  hung after login, so publish ran from the agent shell with the fresh token).
+  `npm stage publish` (prepack rebuild deterministic — client.js 37134 chars
+  staged identical). **`npm stage approve` with the `.env` granular token hit
+  EOTP** (non-TTY redacts the auth URL `***`) — approval completed by the
+  user in the interactive approve window's browser popup. dist-tags polled:
+  `latest` flipped to 0.2.5.
+- Release commit `033cf3b` + **git tag `v0.2.5` + master pushed to GitHub**
+  before staging (the github install channel serves 0.2.5).
+- Profile upgraded: `pnpm update @islibaodong/dsh-login` → 0.2.5 installed;
+  `dsh plugin revoke-version @islibaodong/dsh-login@0.2.4 --dsh-version
+  0.2.0-rc.2` executed — profile `compatibility.json` back to `{}`. Boot
+  verification (login wall 302, no peer-gate skip) is the user's restart.
+- Hygiene: the fresh `//registry.npmjs.org/:_authToken` from this web login
+  sits in `~/.npmrc` — revoke it on npmjs.com if the machine is shared (same
+  note as after 0.2.1–0.2.4). The `.env` `NPM_ACCESS_TOKENS` remains
+  staging-publish-capable but NOT approve-capable (EOTP) — expected under the
+  npm bypass-2FA restriction policy.
 
 ## 2026-09-28 (later) — READMEs synced to the released-0.2.4 / rc.2 reality (commit e19a61b)
 - Both `README.md` + `README.zh.md` were still describing the 0.2.0-era state
