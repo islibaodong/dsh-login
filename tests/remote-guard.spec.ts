@@ -351,3 +351,36 @@ describe('composed seam end-to-end (agents → createRemoteIsolation → wrapRem
     expect(calls).toHaveLength(2)
   })
 })
+
+describe('wrapRemoteGateway forwards non-dispatch gateway members (DSH 0.2.0-rc.2 TypertGateway)', () => {
+  // DSH 0.2.0-rc.2 added `hasLiveClient(): boolean` to the TypertGateway
+  // interface (packages/api/gateway). A deployment composing this guard over
+  // the live gateway must keep such members reachable — a hand-rolled
+  // two-method wrapper would break its consumers ("hasLiveClient is not a
+  // function"). The wrap therefore spreads the gateway and only overrides
+  // invoke/stream.
+  it('forwards unknown members like hasLiveClient to the live gateway', async () => {
+    const g = fakeGateway() as RemoteGateway & { calls: RemoteInvokeRequest[]; hasLiveClient?: () => boolean }
+    let live = true
+    g.hasLiveClient = () => live
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    expect(typeof (wrapped as unknown as { hasLiveClient?: unknown }).hasLiveClient).toBe('function')
+    expect((wrapped as unknown as { hasLiveClient: () => boolean }).hasLiveClient()).toBe(true)
+    live = false
+    expect((wrapped as unknown as { hasLiveClient: () => boolean }).hasLiveClient()).toBe(false)
+    // The dispatch methods remain guarded after the spread.
+    await expect(wrapped.invoke({ namespace: 'credentials', method: 'list', args: {} }))
+      .rejects.toThrow(/forbidden/)
+    expect(g.calls).toHaveLength(0)
+  })
+
+  it('keeps the guarded invoke/stream semantics on the spread wrapper', async () => {
+    const g = fakeGateway()
+    const wrapped = wrapRemoteGateway(g, () => alice, id => owned.has(id))
+    await expect(wrapped.invoke({ namespace: 'session', method: 'history', args: { sessionId: 's-1' } }))
+      .resolves.toEqual({ invoked: 'session.history' })
+    await expect(wrapped.invoke({ namespace: 'session', method: 'history', args: { sessionId: 's-9' } }))
+      .rejects.toThrow(/forbidden/)
+    expect(g.calls).toHaveLength(1)
+  })
+})

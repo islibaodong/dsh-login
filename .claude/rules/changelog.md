@@ -1,5 +1,39 @@
 # Memory Changelog
 
+## 2026-09-30 (later) — 0.2.0 re-verified + multi-user/RBAC detection recorded + guard-forwarding hardening (in-repo)
+- **Full state re-check**: 0.2.5 confirmed PUBLISHED (npm latest,
+  2026-09-30T02:55Z), tag `v0.2.5` + master pushed (nothing unpushed). Suite
+  re-run on the current tree against real 0.2.0-rc.2 builds: green.
+- **Multi-user detection at 0.2.0-rc.2 (was missing from the 0.2.5 entry)**:
+  `git grep -ilE 'multi.?user|multiuser|role.?based|\brbac\b' dsh-v0.2.0-rc.2
+  -- packages/ apps/` → **0 hits**; no user/account/auth package (identity =
+  telemetry ids, telemetry/otel = OTLP log channels, no wire namespace).
+  Still NO native multi-user; dsh-login remains the multi-user layer.
+- **Role-based whole-UI control at 0.2.0-rc.2**: still infeasible —
+  `packages/client/modules/src` (boot/activation; the client-runtime package
+  was folded into it on 2026-08-23, commit `be531688f3`, so a
+  `packages/client/runtime` diff is silently empty — always verify the path
+  exists before trusting a zero-diff!) and `packages/client/ui-slots/src`
+  are source-identical to 0.1.7-rc.2, 0 hits for
+  isAdmin/isAllowed/role/permission. The new `ui-settings-session-log`
+  web-app row ships no per-identity visibility hook (global section list).
+- **Guard hardening (in-repo, rides the next release)**: 0.2.0-rc.2 made
+  `TypertGateway.hasLiveClient()` a REQUIRED interface member (rc.1 lacks
+  it; consumers `cordis-host-runner/inspect-registry` +
+  `tool-cordis/api-catalog`). The shipped deployment never composes the
+  guard, so nothing breaks live, but the hand-rolled two-method
+  `wrapRemoteGateway` would go structurally incomplete the moment a
+  deployment composed it. Now spreads the gateway and overrides only
+  invoke/stream (`WrappedRemoteGateway<G>` type); +2 regression tests.
+  Suite **18 files / 211 tests** green; verify:imports exit 0; build exit 0;
+  `dist/client.js` unchanged (37134 chars).
+- Full analysis written to `docs/adapt-dsh-0.2.0-rc.2.md` (includes the
+  path-correction lessons: web-app rows live at `packages/bundle/web-app`,
+  dsh-web-frontend at `apps/web`).
+- Repo hygiene: `.gitignore` += `/.claude/` + `/.github/` (untracked local
+  hooks/settings/copilot-instructions; the tracked `.claude/rules/*` memory
+  files are unaffected).
+
 ## 2026-09-30 — DSH 0.2.0-rc.2 adaptation (0.2.5 — peer retarget only; PUBLISHED, see below)
 - **New DSH release detected**: `0.2.0-rc.2` (harness tag `dsh-v0.2.0-rc.2`, release merge
   `639ed01539`, commit 2026-09-29; npm `next` dist-tag 2026-09-29T09:44Z). First release

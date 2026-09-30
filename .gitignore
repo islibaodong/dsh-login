@@ -33,3 +33,5 @@ test-ts.ts
 
 # npm artifacts
 /npm_recovery_codes.txt
+/.claude/
+/.github/

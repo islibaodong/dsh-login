@@ -30,6 +30,16 @@ export interface RemoteGateway {
   stream(request: RemoteInvokeRequest): Promise<AsyncIterable<unknown>>
 }
 
+/**
+ * The wrapped gateway: the guard's enforcing `invoke`/`stream` plus every other
+ * member forwarded from the live gateway. DSH 0.2.0-rc.2 added `hasLiveClient()`
+ * to the `TypertGateway` interface (packages/api/gateway, commit 639ed01539-era);
+ * a hand-rolled two-method wrapper would go structurally incomplete and break
+ * such consumers, so the wrap spreads the gateway and overrides only the two
+ * dispatch methods.
+ */
+export type WrappedRemoteGateway<G extends RemoteGateway = RemoteGateway> = RemoteGateway & Omit<G, keyof RemoteGateway>
+
 /** Per-method identity (set by the caller on first dispatch). */
 export interface GuardUser {
   username: string
@@ -123,11 +133,11 @@ function forbidden(namespace: string, method: string): Error {
  * @param owns - ownership test for a session/workspace id; default fail-closed deny.
  * @returns a gateway of the same shape that enforces the guard per call.
  */
-export function wrapRemoteGateway(
-  gateway: RemoteGateway,
+export function wrapRemoteGateway<G extends RemoteGateway>(
+  gateway: G,
   resolveUser: UserResolver,
   owns: OwnedPredicate = () => false,
-): RemoteGateway {
+): WrappedRemoteGateway<G> {
   const allowed = (user: GuardUser, namespace: string, method: string): boolean => {
     if (user.isAdmin) return true
     if (ADMIN_ONLY_NAMESPACES.has(namespace)) return false
@@ -150,6 +160,10 @@ export function wrapRemoteGateway(
     user === undefined || !allowed(user, request.namespace, request.method) || !ownershipGuarded(user, request)
 
   return {
+    // Forward every non-dispatch member of the live gateway unchanged
+    // (e.g. DSH 0.2.0-rc.2's `hasLiveClient()`), then override the two
+    // dispatch methods with the guarded implementations.
+    ...gateway,
     async invoke(request: RemoteInvokeRequest): Promise<unknown> {
       if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method)
       return gateway.invoke(request)
@@ -158,7 +172,7 @@ export function wrapRemoteGateway(
       if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method)
       return gateway.stream(request)
     },
-  }
+  } as WrappedRemoteGateway<G>
 }
 
 export default wrapRemoteGateway

@@ -1892,6 +1892,10 @@ function wrapRemoteGateway(gateway, resolveUser, owns = () => false) {
   };
   const refuse = (user, request) => user === void 0 || !allowed(user, request.namespace, request.method) || !ownershipGuarded(user, request);
   return {
+    // Forward every non-dispatch member of the live gateway unchanged
+    // (e.g. DSH 0.2.0-rc.2's `hasLiveClient()`), then override the two
+    // dispatch methods with the guarded implementations.
+    ...gateway,
     async invoke(request) {
       if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method);
       return gateway.invoke(request);
