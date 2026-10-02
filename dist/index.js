@@ -589,6 +589,16 @@ function createAuthorizeIndex(ctx) {
   return (req, res) => {
     const connection = ctx.get("connection");
     if (connection === void 0) return true;
+    const auth = connection.browserAuth ?? connection;
+    const hasTokenParam = req.url !== void 0 && /[?&]token=/.test(req.url);
+    if (!hasTokenParam && typeof auth.isAuthenticated === "function" && !auth.isAuthenticated(req) && typeof auth.launchToken === "string" && auth.launchToken.length > 0) {
+      res.writeHead(302, {
+        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
+        "cache-control": "no-store"
+      });
+      res.end();
+      return false;
+    }
     return connection.authorizeIndex(req, res);
   };
 }

@@ -1,5 +1,55 @@
 # Memory Changelog
 
+## 2026-09-30 (later) — GitHub issue #3 fixed in-repo: fresh-device core-401 after login (launch-token bootstrap redirect)
+- **Issue #3** (github.com/islibaodong/dsh-login/issues/3, reporter Johnwikix,
+  against 0.2.4/DSH 0.1.7-rc.2): on a NEW device (no historical cookies),
+  after a successful dsh-login login the first page load returns the core's
+  plain-text 401 "dsh web authentication required; reopen the URL printed by
+  dsh web." instead of the SPA. Devices already holding a valid core cookie
+  worked fine, masking the bug (the same 401 also surfaced after the core
+  cookie expired).
+- **Root cause verified against the real dsh-client-connection 0.2.0-rc.2
+  source (source-identical to 0.1.7-rc.2 per the compat analysis)**: core
+  `BrowserAuth.authorizeIndex` (lib/index.js ~L388-427) mints its
+  authority-bound cookie ONLY in the `GET /?token=<launchToken>` exchange
+  (303 → clean `./` + set-cookie); a valid cookie admits the index; EVERYTHING
+  else → writeUnauthorized 401. dsh-login's login wall (302 /login until
+  `dsh_session`) never routes the browser through `?token=` — POST
+  /api/auth/login sets only `dsh_session` and login-page redirects to `/` —
+  so the forwarded bare index request hits the core 401. The gateway tests
+  never caught it: `bootServer()` compositions provide NO `connection`
+  service, so `createAuthorizeIndex` short-circuited to `return true`.
+  Wrapper shape confirmed: `ctx.get('connection')` = HostConnectionService,
+  real BrowserAuth in `.browserAuth` (`.launchToken` is a plain runtime field
+  despite the private TS annotation; the wrapper itself has NO
+  isAuthenticated/launchToken — only authorizeIndex/authenticatedUrl
+  delegates).
+- **Fix (src/gateway.ts `createAuthorizeIndex`)**: before forwarding to
+  `connection.authorizeIndex`, resolve `auth = connection.browserAuth ??
+  connection`; when the request has no `token` query param, auth exposes
+  `isAuthenticated`, the core cookie is missing/expired (`!auth.isAuthenticated(req)`),
+  and `auth.launchToken` is a non-empty string → writeHead(302,
+  Location `/?token=<encodeURIComponent(launchToken)>`, cache-control
+  no-store) + return false (one bounce; the core mints the cookie and 303s to
+  `./`, then the index serves normally). Requests already carrying a token
+  always forward (the core owns the exchange — a second bounce would loop);
+  connections without the browserAuth surface keep plain-forward semantics;
+  no usable launchToken → forward, the core's own 401 passes through. The
+  redirect Location is root-RELATIVE on purpose (works behind the nginx
+  0.0.0.0:3088 proxy; the browser re-sends its own Host authority, which the
+  cookie is bound to).
+- **Tests**: 5 new cases in tests/gateway.spec.ts (new describe "gateway
+  authorizeIndex: core browser-auth handshake (issue #3)") with a fake
+  connection service mirroring the real BrowserAuth decision shape (token
+  exchange → 303 + set-cookie; cookie-valid → admit; else 401 plain text):
+  fresh-device 302 (RED first: `expected 401 to be 302`), forwarded exchange
+  mints (303 + location ./ + set-cookie), cookie-valid direct serve, no
+  browserAuth back-compat forward, empty launchToken → core 401 passthrough.
+  Suite **18 files / 216 tests** green (was 211); verify:imports exit 0;
+  `npm run build` green — dist/index.js carries the fix, dist/client.js
+  re-stamp byte-identical (37134 chars). NOT yet published (needs the user:
+  commit + npm stage publish + tag/push per the release runbook).
+
 ## 2026-09-30 (later) — 0.2.0 re-verified + multi-user/RBAC detection recorded + guard-forwarding hardening (in-repo)
 - **Full state re-check**: 0.2.5 confirmed PUBLISHED (npm latest,
   2026-09-30T02:55Z), tag `v0.2.5` + master pushed (nothing unpushed). Suite

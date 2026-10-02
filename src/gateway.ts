@@ -33,22 +33,65 @@ function indexRenderer(ctx: Context, distIndex: string): () => Promise<string> {
 }
 
 /**
+ * The upstream Connection service surface the index handshake relies on.
+ * The core dsh-client-connection provides HostConnectionService, which keeps
+ * the real BrowserAuth in its `browserAuth` field (its `launchToken` is a
+ * plain runtime field despite the private TS annotation); alternative or
+ * test connections may expose the same surface directly on the service.
+ */
+interface ConnectionAuth {
+  authorizeIndex(req: IncomingMessage, res: ServerResponse): boolean
+  browserAuth?: {
+    isAuthenticated?(request: { headers: IncomingMessage['headers'] }): boolean
+    launchToken?: unknown
+  }
+  isAuthenticated?(request: { headers: IncomingMessage['headers'] }): boolean
+  launchToken?: unknown
+}
+
+/**
  * The index `authorizeIndex` callback handed to `serveStatic` (DSH ≥
  * 0.1.5-alpha.1 requires it). dsh-login validates its login wall in the
- * handler, so this only forwards to the upstream Connection service's
+ * handler, so this forwards to the upstream Connection service's
  * `authorizeIndex`, which hands the browser its /api browser-session cookie
- * (the now-enabled `connection` row owns /api transport). When Connection is
+ * (the enabled `connection` row owns /api transport). When Connection is
  * absent from the fiber we accept, so a boot without it still serves.
+ *
+ * Fresh-device bootstrap (issue #3): the core BrowserAuth mints its
+ * authority-bound cookie ONLY during the `GET /?token=<launchToken>`
+ * exchange, and dsh-login's login wall never routes the browser through it —
+ * a device that just logged in holds only `dsh_session`, so a bare index
+ * forward would return the core's plain-text 401 ("dsh web authentication
+ * required"). When the core cookie is missing/expired and the request does
+ * not already carry the exchange token, bounce it once to `/?token=<token>`:
+ * the core mints the cookie and 303s back to the clean `./`, from where the
+ * index is served normally. Requests already carrying a token always forward
+ * (the core owns the exchange; a second bounce would loop), and connections
+ * without the browserAuth surface keep the plain forward semantics.
  *
  * @returns true when the SPA index may be served; false when an upstream
  *   redirect/401 has already been written.
  */
 function createAuthorizeIndex(ctx: Context): (req: IncomingMessage, res: ServerResponse) => boolean {
   return (req, res) => {
-    const connection = ctx.get('connection') as
-      | { authorizeIndex(req: IncomingMessage, res: ServerResponse): boolean }
-      | undefined
+    const connection = ctx.get('connection') as ConnectionAuth | undefined
     if (connection === undefined) return true
+    const auth = connection.browserAuth ?? connection
+    const hasTokenParam = req.url !== undefined && /[?&]token=/.test(req.url)
+    if (
+      !hasTokenParam &&
+      typeof auth.isAuthenticated === 'function' &&
+      !auth.isAuthenticated(req) &&
+      typeof auth.launchToken === 'string' &&
+      auth.launchToken.length > 0
+    ) {
+      res.writeHead(302, {
+        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
+        'cache-control': 'no-store',
+      })
+      res.end()
+      return false
+    }
     return connection.authorizeIndex(req, res)
   }
 }
