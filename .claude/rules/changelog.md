@@ -1,5 +1,66 @@
 # Memory Changelog
 
+## 2026-10-02 (later) — NO new DSH release; 0.2.0-rc.2 re-verified; whole-UI role gating found FEASIBLE in-plugin
+- **Version check (12:15 local): no new DSH release.** npm `@deepseek-ai/dsh`
+  dist-tags `latest` = `next` = **0.2.0-rc.2** (`alpha` 0.1.7-alpha.2); GitHub
+  newest tag `dsh-v0.2.0-rc.2`; harness `origin/master` == `639ed01539` == the
+  tag commit (0 ahead). **So no compatibility adaptation was needed** — 0.2.6
+  is current for the newest runtime. (Gotcha re-confirmed: all DSH releases are
+  prereleases, so `GET /releases/latest` 404s — read the tags endpoint instead.)
+- **Re-verified on the current tree**: suite **18 files / 216 tests green**
+  against the published 0.2.0-rc.2 builds; `verify:imports` exit 0; build exit 0
+  with `dist/client.js` re-stamp **byte-identical** (37134 chars; `git status`
+  clean right after the build). **Local run is 0.2.0-rc.2** — the
+  `~/.dsh/profiles/web` store has dsh-base/web-app/client-connection/
+  host-webserver/credentials/web-frontend/host-frontend-static all at rc.2, with
+  dsh-login 0.2.6 installed. `dsh-client-runtime` absent from the store (the
+  2026-08-23 fold is real — never diff that path).
+- **Multi-user: still NONE** (0 hits for `multi.?user|multiuser|role.?based|
+  \brbac\b` in `packages/` + `apps/`). Lead resolved: the new-looking
+  `@deepseek-ai/dsh-authorization` is a **credentials sub-package**
+  (`packages/credentials/authorization`, a nested `packages/*/*` workspace) =
+  a credential-acquisition seam ("obtain a credential through a conversation
+  with the human"), NOT account RBAC. dsh-login remains the multi-user layer.
+- **Role surface: no native per-identity filter** — `packages/client/modules/src`
+  + `ui-slots/src` have 0 hits for `isAdmin|isAllowed|role|permission`;
+  `SlotEntryDef` has no visibility field and `SlotScope` is
+  `root|session-maybe|session` (session-bound, not identity-bound). **Grep
+  trap:** the ~250 `role` hits under `packages/client` are ALL DOM
+  `role="…"` a11y attributes.
+- **NEW / IMPORTANT — whole-UI role control IS implementable inside dsh-login,
+  without upstream changes.** The old verdict ("blocked on upstream") was too
+  strong. Verified mechanism: (1) dsh-login's gateway renders the index via
+  `webServer.renderIndex` and the rendered HTML carries the client module
+  roster as `window.__DSH_BOOT__` (`bootInjections()` at
+  `packages/client/modules/src/index.ts:552` emits
+  `{kind:'global', name:'__DSH_BOOT__', value: graph}`; web-app's patch comment
+  confirms the node half composes it); (2) the page activates exactly that
+  roster — `ClientEntries.reconcile()` creates one Loader entry per
+  `manifest.modules` row and **removes** managed entries absent from
+  `manifest.plugins`; (3) so filtering the graph per role before serving the
+  index gates which bundles ever mount. Role data already exists
+  (`deriveCapabilities(user)`). Constraints: keep the bootstrap batch +
+  `dsh-client-modules` entry (else "bootstrap facade is missing"); keep graph
+  shape valid (`parseBootManifest` string id/url/rev, no duplicate batch URLs);
+  granularity is **per package** (hiding one slot/section inside an allowed
+  package needs dsh-login's own client half to wrap the slot registry);
+  presentation-only (the boundary stays the `/api` allow-list + remote guard);
+  dev-mode `client-hmr` is always mounted but idle, yet a dev rebuild pushes
+  `{type:'graph'}` and re-syncs the full roster — a robust gate must cover that
+  channel too. **Not implemented, not boot-verified.** Full write-up:
+  `docs/adapt-dsh-0.2.0-rc.2.md` §6.
+- **README fix**: the stale `211` test count (missed by the 0.2.6 release, which
+  updated the 216 counts at the top) corrected in `README.md` and `README.zh.md`;
+  the RBAC verdict text refined in both to the accurate split (no *native*
+  upstream filter; in-plugin boot-graph gate feasible).
+- **Repo-memory correction**: `.claude/rules/architecture.md` / `modules.md` /
+  `gotchas.md` still described the pre-option-A `/api` takeover
+  (`src/connection.ts`, `src/connection.client.ts`, `/api` prefix route,
+  "the shipped `connection` row stays disabled", `dsh-host-apiproxy`) — those
+  files/specs are gone and `cordis.patch.yml` keeps `connection` **ENABLED**
+  (only `web-runtime` disabled). Corrected in place; `modules.md` needs a fuller
+  re-analysis, and `docs/PROJECT-INDEX.md` is stale (v0.1.0 era).
+
 ## 2026-10-02 — PUBLISHED 0.2.6 (issue #3 fix) — first publish fully on the .env granular token path
 - **`@islibaodong/dsh-login@0.2.6` is LIVE on npmjs** (`latest = 0.2.6`,
   31 files / 154.8 kB tarball / 531.0 kB unpacked, shasum

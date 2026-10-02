@@ -83,3 +83,116 @@ per-identity visibility hook (same global-section-list limitation). The
 available levers remain dsh-login's own surfaces (capability advertisement,
 `window.__DSH_SESSION__` baseline, `/api/auth/capabilities`, wire guard).
 Upstream asks unchanged: `docs/adapt-dsh-0.1.6.md` §6.
+
+**Superseded in part by §6 (2026-10-02):** upstream still ships no *native*
+per-identity filter — but a whole-UI role gate **is** implementable inside
+dsh-login itself, because dsh-login owns the index render and the client
+module graph (`window.__DSH_BOOT__`) lives in that HTML. See §6.
+
+## 6. 2026-10-02 re-check — no new upstream release; whole-UI role gating found feasible in-plugin
+
+### 6.1 Version re-check (2026-10-02 12:15 local)
+
+| Channel | Finding |
+|---|---|
+| npm `@deepseek-ai/dsh` dist-tags | `latest` = `next` = **`0.2.0-rc.2`** (`alpha` stays `0.1.7-alpha.2`) |
+| GitHub tags | newest = **`dsh-v0.2.0-rc.2`** (all releases are prereleases, so `/releases/latest` 404s — read tags, not that endpoint) |
+| Harness checkout `origin/master` | `639ed01539` == tag `dsh-v0.2.0-rc.2` (0 commits ahead; worktree clean apart from untracked agent-skill dirs) |
+
+**No new DSH release since 0.2.0-rc.2 → no compatibility adaptation was
+required.** dsh-login `0.2.6` (published 2026-10-02T04:04Z) remains current for
+the newest runtime.
+
+### 6.2 Re-verification on the current tree
+
+- Suite **18 files / 216 tests green** against the published 0.2.0-rc.2 builds;
+  `npm run verify:imports` exit 0; `npm run build` exit 0 with the
+  `dist/client.js` re-stamp **byte-identical** (37134 chars — `git status`
+  clean immediately after the build).
+- **Local run is on 0.2.0-rc.2**: the `~/.dsh/profiles/web` store carries
+  `dsh-base` / `dsh-web-app` / `dsh-client-connection` / `dsh-host-webserver` /
+  `dsh-credentials` / `dsh-web-frontend` / `dsh-host-frontend-static` all at
+  **`0.2.0-rc.2`**, with `@islibaodong/dsh-login@0.2.6` installed from the
+  github channel. (`dsh-client-runtime` is absent from the store — the
+  fold-into-`dsh-client-modules` of 2026-08-23 is real; never diff that path.)
+
+### 6.3 Multi-user detection (re-run)
+
+`multi.?user|multiuser|role.?based|\brbac\b` → **0 hits** across `packages/`
+and `apps/`. Two near-miss leads resolved as NOT multi-user:
+
+- **`@deepseek-ai/dsh-authorization`** (new-looking name; real path
+  `packages/credentials/authorization`, a *nested* workspace — `packages/*/*`)
+  is a **credential-acquisition seam**: "plugin-owned flows that obtain a
+  credential through a conversation with the human" (device/OAuth-style
+  flows). Not account RBAC.
+- `packages/identity` remains anonymous telemetry correlation ids.
+
+**Verdict unchanged: still NO native multi-user; dsh-login remains the
+multi-user layer.**
+
+### 6.4 Role surface (re-run) — no native per-identity filter
+
+- `packages/client/modules/src` and `packages/client/ui-slots/src`: **0 hits**
+  for `isAdmin|isAllowed|role|permission`.
+- Careful reading of `role`: `packages/client` has ~250 `role` hits and **every
+  one is a DOM `role="…"` accessibility attribute** (`role="dialog"`,
+  `role="treeitem"`, ARIA lists in `base.css`) — a false-positive trap for
+  future greps.
+- `SlotEntryDef` (ui-slots `index.ts:116`) carries **no** visibility /
+  condition / permission field, and `SlotScope` is
+  `'root' | 'session-maybe' | 'session'` — **session**-bound, not
+  **identity**-bound.
+
+### 6.5 NEW — whole-UI role gating IS implementable inside dsh-login
+
+Mechanism **verified in source** (not yet implemented, not boot-verified):
+
+1. **dsh-login renders the index itself.** The gateway's `indexRenderer` calls
+   `webServer.renderIndex(html)` (`src/gateway.ts`), and its own comment records
+   that `renderIndex` is what emits the module-loader queue facade, the batch
+   preloads and **`window.__DSH_BOOT__`**. Upstream confirms the producer:
+   `bootInjections(graph)` (`packages/client/modules/src/index.ts:552`) returns
+   `{ kind: 'global', name: '__DSH_BOOT__', value: graph }`, and the web-app
+   bundle's `cordis.patch.yml` comment says the modules row's node half
+   "composes `window.__DSH_BOOT__`". So the **full client module roster passes
+   through HTML that dsh-login already holds as a string, per request.**
+2. **The page activates exactly that roster.** `ClientEntries.reconcile()`
+   (`packages/client/modules/src/client/entries.ts`) walks `manifest.modules`
+   creating one Loader entry per row, and **removes** any managed entry whose id
+   is absent from `manifest.plugins`.
+3. ⇒ **Filtering the graph before serving the index gates which bundles ever
+   activate** — per user, per role, with no upstream change. The role data
+   already exists: `deriveCapabilities(user)` in `src/capabilities.ts`.
+
+Constraints to honour if this is built:
+
+- Keep the **bootstrap** batch and the `dsh-client-modules` bootstrap entry, or
+  the shell fails with "bootstrap facade is missing".
+- Keep the graph shape valid: `parseBootManifest` requires string `id/url/rev`
+  and throws on duplicate batch URLs.
+- Granularity is **per package**: a bundle activates or not. Hiding one
+  slot/section *inside* an allowed package is NOT possible this way (that needs
+  dsh-login's own client half to wrap the slot registry; it already runs
+  `immediately: true`).
+- **Presentation only** — the security boundary stays the `/api` bridge
+  allow-list (`apiBridgeAuth` + `USER_ALLOWED`) and the remote isolation guard.
+- **Dev-mode caveat**: `client-hmr` is "always mounted … idle until a rebuild
+  watcher (`pnpm run dev:web`) actually rewrites client bundles", so production
+  never re-pushes the graph — but under the dev watcher a `{type:'graph'}`
+  frame re-syncs the full roster and would re-add filtered modules. A robust
+  gate must also cover that runtime graph channel.
+
+### 6.6 Repo-memory correction (recorded, partially applied)
+
+`.claude/rules/architecture.md`, `modules.md` and `gotchas.md` still describe
+the **pre-option-A `/api` takeover**: `src/connection.ts`,
+`src/connection.client.ts`, a `/api` prefix route + WS upgrades, "the shipped
+`connection` row stays disabled", and `dsh-host-apiproxy`. Those source files do
+not exist, those specs are deleted, and `cordis.patch.yml` keeps the
+`connection` row **ENABLED** (only `web-runtime` is disabled). Corrected in
+place 2026-10-02 where load-bearing; `modules.md` still needs a fuller
+re-analysis (it omits `remote-guard.ts`, `api-bridge-auth.ts`, `capabilities.ts`,
+`provision.ts`, `hosts.ts`, `boolean-setting.ts`, `workspace-setting.ts`,
+`remote-web-ui-compat.ts`). `docs/PROJECT-INDEX.md` is likewise stale (v0.1.0,
+single-password era, 2026-08-17).

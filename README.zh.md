@@ -16,7 +16,7 @@
 
 ## 当前状态 —— 已发布（option A）
 
-**`@islibaodong/dsh-login@0.2.6` 已发布（npm + git 标签 `v0.2.6`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.2.0-rc.2**（2026-09-30 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 216 用例**在 0.2.0-rc.2 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一的原始目标「**对第三方 UI 插件的功能按角色控制**」仍无法完成——这是**被上游 DSH 能力阻塞**（0.2.0-rc.2 复核：客户端引导/激活层与 ui-slots 源码未变，依旧没有按身份过滤 slot/section 或按角色的插件激活门）。
+**`@islibaodong/dsh-login@0.2.6` 已发布（npm + git 标签 `v0.2.6`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.2.0-rc.2**（2026-09-30 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 216 用例**在 0.2.0-rc.2 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一尚未交付的原始目标「**对第三方 UI 插件的功能按角色控制**」：上游仍**没有原生的按身份过滤**（2026-10-02 在 0.2.0-rc.2 复核：客户端引导/激活层与 ui-slots 源码未变，依旧没有按身份过滤 slot/section，也没有按角色的插件激活门）——**但**这次复核发现整个 UI 的角色门可以在 **dsh-login 内部实现**：网关自己渲染 index，而客户端模块清单（`window.__DSH_BOOT__`）就在这份 HTML 里，页面只激活该清单中的 bundle——因此按角色过滤该清单即可决定哪些 bundle 根本不挂载。尚未实现、也尚未 boot 验证；详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
 任务清单与验收矩阵见 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 
 **已完成并可用的**
@@ -26,12 +26,13 @@
 - **按用户隔离守卫作为组合原语交付（option A）。** DSH ≥ 0.1.5 下 `/api` 归原生 `connection`/`api-gateway` 持有，dsh-login 的隔离是 REMOTE 层守卫——`wrapRemoteGateway` + `createRemoteIsolation`，从本包宿主 bundle 导出并经单元/集成测试（含所有权收窄与管理员放行）。包装器会原样转发守卫两个分发方法之外的全部网关成员（例如 DSH 0.2.0-rc.2 新增的必需方法 `hasLiveClient()`），组合后接口始终完整。`connection` 所有权与按用户默认工作区已在原生栈上重建。**守卫本身需在启动时组合进原生 `typertGateway` 行**（部署决策，非运行时热替换——重新 provide `typertGateway` 会触发重复服务错误），并以两浏览器启动做行为验收；目前**shipped patch 单独并不强制它**。详见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B。
 - **跟随上游 0.1.5-alpha.1 → 0.2.0-rc.2。** 每个上游版本的用户面线方法随发布即加入普通用户放行面（侧栏 `terminal.*`、`workspace.unarchiveSession`/`pinSession`/`unpinSession`、只读 `workspaceFiles`/`officeToPdf` 文档预览、`job` 控制器；0.2.0 未新增任何 wire 方法或命名空间），而新的管理员专属命名空间（`pluginManager` + `pluginRegistryProbe`，以及 DeepSeek Platform 的 `account` 控制器——唯一进程级上游授权，含 0.1.7-rc.2 的 `watchExpiry` 过期通知流）整体禁用。DSH ≥ 0.1.7-rc.1 起，宿主在启动期对 peer 范围运行**插件兼容性准入**——dsh-login 的 peer 范围接纳当前 runtime（0.2.5 已加入 0.2.0 分支），且该检查是 fail-open（仅 stderr 报告）：任何 DSH 升级后，请确认登录页真的出现了。
 
-**已知限制 —— 为什么无法做到对整个 UI 的按角色控制**
-- DSH 的设置面板渲染的是**一张全局分组列表**（`SettingsRoot` → `useSections`，`HostObservable<readonly SettingsSectionRow[]>`，无身份维度），因此某个插件的设置项无法在 `dsh-login` 内部按用户显隐。
+**对整个 UI 的按角色控制 —— 当前状态与已有的杠杆**
+- **尚未交付。** DSH 的设置面板渲染的是**一张全局分组列表**（`SettingsRoot` → `useSections`，`HostObservable<readonly SettingsSectionRow[]>`，无身份维度），因此某个插件的设置项无法在 `dsh-login` 内部按用户显隐。
 - DSH 的 WebServer 路由优先级是 **exact 优先于 prefix**，且**没有前置路由钩子**，因此像 `@linxin666/dsh-pet` 这样自己注册精确路由（`/api/pet/pets`、`/api/pet/state`、…）的插件，无法被 `dsh-login` 按用户拦截或静默。
-- DSH 客户端运行时以**无按用户启用开关**的方式激活所有 bundle 插件，因此未改动的第三方插件仍会对每个用户触发其挂载期请求。
+- 上游**没有按身份的门**：客户端引导/激活层与 ui-slots 完全没有 `role`/`permission`/`isAdmin` 概念，未改动的第三方插件仍会对每个用户激活（2026-10-02 在 0.2.0-rc.2 复核——注意 `packages/client` 下所有 `role` 命中都是 DOM 的 `role="…"` 无障碍属性，不是账号角色）。
+- **已经存在的杠杆（2026-10-02 验证机制，尚未实现）：** dsh-login 的网关自己渲染 index，客户端模块清单以 `window.__DSH_BOOT__` 的形式就在这份 HTML 里；页面只激活该清单（`ClientEntries.reconcile()` 为清单每一行创建一个条目，并**移除**不在清单中的 bundle）。因此**在返回 index 前按角色过滤该引导图，即可决定哪些 bundle 根本不挂载**——粒度是**按包**，且仅是展示层（安全边界仍是 `/api` 放行面）。详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
 
-**等待的是：** 上游 DSH 在客户端与路由层提供**按身份的分组过滤**或**条件化插件激活**。一旦具备，就可以在已交付的能力面之上实现「按角色控制功能（无权限即隐藏 / 不渲染 / 不发请求）」。
+**仍希望上游提供：** 按身份的分组/设置项**过滤**（用于放行包**内部**的细粒度控制）与宿主侧的按用户插件激活门。0.2.0-rc.2 两者都没有；在此之前，上面的引导图杠杆就是插件内的实现路径。
 
 ## 这个插件解决什么问题
 
@@ -229,7 +230,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（211 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.0-rc.2 上全绿——
+# 标准全量测试（216 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.0-rc.2 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
@@ -262,7 +263,7 @@ src/
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
 scripts/build-client.mjs  # 生成 dist/client.js：设置面板 dsh.client 注册
-tests/（option A 套件：18 文件 / 211 用例全绿——详见 docs/verify-option-A.md）
+tests/（option A 套件：18 文件 / 216 用例全绿——详见 docs/verify-option-A.md）
 └── *.spec.ts         # vitest 测试定义
 
 ## 许可证
