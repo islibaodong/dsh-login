@@ -1,5 +1,49 @@
 # Memory Changelog
 
+## 2026-10-02 — PUBLISHED 0.2.6 (issue #3 fix) — first publish fully on the .env granular token path
+- **`@islibaodong/dsh-login@0.2.6` is LIVE on npmjs** (`latest = 0.2.6`,
+  31 files / 154.8 kB tarball / 531.0 kB unpacked, shasum
+  `e0b8a000f578b1e3bfec9986f7bd6dc7a7b0ea15` — identical to the dry-run AND
+  the staged tarball; prepack rebuild deterministic as always). Registry
+  timestamp 2026-10-02T04:04:37Z. `npm view @0.2.6` re-verified version +
+  shasum on the official registry.
+- **Publish path — NO web login needed (new):** the stored ~/.npmrc token was
+  dead (whoami E401) as usual, but the user proposed the `.env`
+  `NPM_ACCESS_TOKENS` granular token and it is STILL ALIVE: token copied
+  (value never echoed) into a temp publish npmrc in %TEMP% → whoami →
+  `islibaodong` → `npm stage publish ./ --registry=…
+  --userconfig=<temp>` staged id `7cab5226-1eb1-4211-b863-b3112fe34ef4`
+  directly from the agent shell. **BUT the bypass-2FA setting still does NOT
+  cover approve**: fresh EOTP evidence on 0.2.6 day — `npm stage approve`
+  with the granular token errors EOTP with the auth URL redacted to `***`
+  (non-TTY); approve remains the human 2FA gate of npm's staged-publishing
+  policy (the publish output itself warns "npm tokens that bypass 2FA are
+  being restricted for account changes and direct publishing",
+  gh.io/npm-gat-bypass2fa-deprecation). The user approved in the browser via
+  the launched interactive approve window; dist-tags polled until `latest`
+  flipped (10-min background poll, hit at 12:04:59 local). Temp npmrc +
+  approve script deleted after success. **Runbook update: publish step can
+  now be fully scripted with the .env token; only approve needs one browser
+  2FA click.** For real end-to-end automation the offered path is npm
+  trusted publishing (GitHub Actions OIDC, no token at all) — user has not
+  decided yet.
+- Release commit `c7494ea` (version bump + README EN/ZH sync: banner 0.2.6,
+  adaptation-history entry for 0.2.6, test counts 211→216) + **git tag
+  `v0.2.6` + master pushed BEFORE staging** (github install channel serves
+  0.2.6). Fix commit `171aaf7` had auto-closed issue #3 on push.
+- Pre-publish verification on the 0.2.6 tree: suite 18 files / 216 tests
+  green; verify:imports exit 0; `npm pack --dry-run` 31 files / 531.0 kB,
+  shasum e0b8a000…, no `.env` side effect.
+- **Web profile upgraded the same session:** profile dependency is the
+  github channel (`github:islibaodong/dsh-login`, not an npm range) —
+  `pnpm update '@islibaodong/dsh-login' --dir <profile>` re-resolves the ref
+  and pulled 0.2.6; installed dist/index.js verified to contain the
+  browserAuth-redirect fix. `compatibility.json` stays `{}` (no exemption).
+  Boot verification (login wall 302, fresh-device login now lands on the SPA
+  via the ?token= bootstrap) is the user's restart. Gotcha: `pwsh` is not on
+  PATH for nested invocations — use `pnpm --dir` instead of wrapping in
+  another shell.
+
 ## 2026-09-30 (later) — GitHub issue #3 fixed in-repo: fresh-device core-401 after login (launch-token bootstrap redirect)
 - **Issue #3** (github.com/islibaodong/dsh-login/issues/3, reporter Johnwikix,
   against 0.2.4/DSH 0.1.7-rc.2): on a NEW device (no historical cookies),
