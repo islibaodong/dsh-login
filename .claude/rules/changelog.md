@@ -50,7 +50,22 @@
   files under `packages/client` match a raw `\brole\b` grep (DOM a11y
   attributes) — never read that as account roles.
 - Records: `docs/adapt-dsh-0.2.1-alpha.1.md` (new), README.md + README.zh.md
-  status/history updated, this entry. Commit + tag `v0.2.7` + push.
+  status/history updated, this entry. Commit `6b35ac6` + tag `v0.2.7` + push.
+- **Follow-up (same day): GitHub Releases channel CREATED** — all 8 tags
+  v0.2.0…v0.2.7 now have Releases (previously 0 releases / 7 tags);
+  v0.2.7 marked Latest with custom notes (release id 403690403). gh CLI
+  paths: `gh release create <tag> --generate-notes`; editing a release body
+  needs `gh api -X PATCH repos/.../releases/<id> --input file.json` (PATCH by
+  tag 404s; build the JSON with ConvertTo-Json + WriteAllText UTF8-no-BOM —
+  here-strings with backticks break "Problems parsing JSON").
+- **npm publish of 0.2.7 BLOCKED — user action required**: `npm whoami
+  --registry=https://registry.npmjs.org` → **401 Unauthorized** (the
+  `_authToken` in `C:\Users\Administrator\.npmrc` is revoked/invalid); the
+  default registry is registry.npmmirror.com (a mirror — cannot publish).
+  `npm pack` works (156.0 kB, 31 files). **npm still shows 0.2.6 as latest;
+  0.2.7 is NOT on npm.** Fix per docs/PUBLISHING.md: user mints a NEW granular
+  token (Read/write, @islibaodong scope, bypass 2FA) → update `.npmrc` →
+  `npm publish --access public --registry=https://registry.npmjs.org`.
 
 ## 2026-10-02 (later) — NO new DSH release; 0.2.0-rc.2 re-verified; whole-UI role gating found FEASIBLE in-plugin
 - **Version check (12:15 local): no new DSH release.** npm `@deepseek-ai/dsh`
