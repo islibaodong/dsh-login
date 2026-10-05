@@ -8,15 +8,15 @@
 |:---:|:---:|
 | ![登录页](images/login.png) | ![用户管理](images/users.png) |
 
-> **已发布：`@islibaodong/dsh-login@0.2.6`（npm latest）。** 已验证兼容 DSH **0.2.0-rc.2**（2026-10-02；全量测试 18 文件 / 216 用例在正式 rc.2 构建上全绿）。option A：上游重构了 `/api` 传输——dsh-login 不再接管 `/api`（`connection` 行保持启用），并对未携带会话的共享 `/api` 桥请求直接回 401（`apiBridgeAuth`，默认开）。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
+> **已发布：`@islibaodong/dsh-login@0.2.7`（npm latest）。** 已验证兼容 DSH **0.2.1-alpha.1**（2026-10-05；全量测试 18 文件 / 216 用例在正式 alpha 构建上全绿）。option A：上游重构了 `/api` 传输——dsh-login 不再接管 `/api`（`connection` 行保持启用），并对未携带会话的共享 `/api` 桥请求直接回 401（`apiBridgeAuth`，默认开）。按用户的隔离守卫作为组合原语（`wrapRemoteGateway` / `createRemoteIsolation`，从宿主 bundle 导出）交付，但**尚未 boot 验证**——把它组合进原生 `typertGateway` 并做两浏览器验收是剩余的一步。详见[当前状态 →](#当前状态--已发布)与 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 >
-> **适配历史（以下版本均已在 npm 发布）：** `0.2.1` → DSH 0.1.6-alpha.1（侧栏**终端**、**会话取消归档**）；`0.2.2` → 0.1.6-alpha.2（共享 `/api` 桥鉴权墙 `apiBridgeAuth`、文档预览 `workspaceFiles`/`officeToPdf` 用户面、原生 `pluginManager` 命名空间仅管理员）；`0.2.3` → 0.1.7-alpha.2（设置 seam 重构、新 `account` 命名空间仅管理员、`job` 控制器用户面、会话置顶）；`0.2.4` → DSH #4587 设置报错修复；`0.2.5` → DSH 0.2.0-rc.2（peer 重定向到 0.2.0 元组线——兼容面验证源码零改动，无需代码适配）；`0.2.6` → issue #3 修复（新设备登录后的首次页面加载命中核心 BrowserAuth 的纯文本 401——网关现在会先 302 一次经过 `?token=` 交换，让核心铸出浏览器 Cookie）。0.1.7-rc.1 / rc.2 验证兼容、无需发版——详见 [`docs/adapt-dsh-0.1.7-rc.1.md`](docs/adapt-dsh-0.1.7-rc.1.md) / [`docs/adapt-dsh-0.1.7-rc.2.md`](docs/adapt-dsh-0.1.7-rc.2.md) / [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md)。上游**仍然没有**原生多用户支持与按角色的 UI 门控（0.2.0-rc.2 重新验证）。
+> **适配历史（以下版本均已在 npm 发布）：** `0.2.1` → DSH 0.1.6-alpha.1（侧栏**终端**、**会话取消归档**）；`0.2.2` → 0.1.6-alpha.2（共享 `/api` 桥鉴权墙 `apiBridgeAuth`、文档预览 `workspaceFiles`/`officeToPdf` 用户面、原生 `pluginManager` 命名空间仅管理员）；`0.2.3` → 0.1.7-alpha.2（设置 seam 重构、新 `account` 命名空间仅管理员、`job` 控制器用户面、会话置顶）；`0.2.4` → DSH #4587 设置报错修复；`0.2.5` → DSH 0.2.0-rc.2（peer 重定向到 0.2.0 元组线——兼容面验证源码零改动，无需代码适配）；`0.2.6` → issue #3 修复（新设备登录后的首次页面加载命中核心 BrowserAuth 的纯文本 401——网关现在会先 302 一次经过 `?token=` 交换，让核心铸出浏览器 Cookie）；`0.2.7` → DSH 0.2.1-alpha.1（peer 重定向到 0.2.1 元组线 + 移除已退役的 `@deepseek-ai/dsh-invariants` 引用——无源码改动）。0.1.7-rc.1 / rc.2 验证兼容、无需发版——详见 [`docs/adapt-dsh-0.1.7-rc.1.md`](docs/adapt-dsh-0.1.7-rc.1.md) / [`docs/adapt-dsh-0.1.7-rc.2.md`](docs/adapt-dsh-0.1.7-rc.2.md) / [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md)。上游**仍然没有**原生多用户支持与按角色的 UI 门控（0.2.1-alpha.1 重新验证）。
 
 ---
 
 ## 当前状态 —— 已发布（option A）
 
-**`@islibaodong/dsh-login@0.2.6` 已发布（npm + git 标签 `v0.2.6`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.2.0-rc.2**（2026-09-30 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 216 用例**在 0.2.0-rc.2 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一尚未交付的原始目标「**对第三方 UI 插件的功能按角色控制**」：上游仍**没有原生的按身份过滤**（2026-10-02 在 0.2.0-rc.2 复核：客户端引导/激活层与 ui-slots 源码未变，依旧没有按身份过滤 slot/section，也没有按角色的插件激活门）——**但**这次复核发现整个 UI 的角色门可以在 **dsh-login 内部实现**：网关自己渲染 index，而客户端模块清单（`window.__DSH_BOOT__`）就在这份 HTML 里，页面只激活该清单中的 bundle——因此按角色过滤该清单即可决定哪些 bundle 根本不挂载。尚未实现、也尚未 boot 验证；详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
+**`@islibaodong/dsh-login@0.2.7` 已发布（npm + git 标签 `v0.2.7`）。** 针对 DSH ≥ 0.1.5-alpha.1 的 option A 适配已完成，并跟随上游到 **0.2.1-alpha.1**（2026-10-05 验证）：dsh-login 不再接管 `/api`——原生 `connection` + `api-remotes`/`api-gateway` 持有传输——而是在其上组合登录墙（fallback 席位）、共享 `/api` 桥的 `apiBridgeAuth` 鉴权墙与能力发现。全量测试 **18 文件 / 216 用例**在 0.2.0-rc.2 与 0.2.1-alpha.1 正式构建上全绿；设置面板客户端重置、`dist` 宿主重建、测试套件重写均**已完成**。**尚未完成（需真实 `dsh web` boot 验证）**：把守卫组合进原生 `typertGateway` 并按用户隔离做两浏览器行为验收（见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B）。原始状态矩阵见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md)。唯一尚未交付的原始目标「**对第三方 UI 插件的功能按角色控制**」：上游仍**没有原生的按身份过滤**（2026-10-05 在 0.2.1-alpha.1 复核：客户端引导/激活层与 ui-slots 源码未变，依旧没有按身份过滤 slot/section，也没有按角色的插件激活门）——**但**这次复核发现整个 UI 的角色门可以在 **dsh-login 内部实现**：网关自己渲染 index，而客户端模块清单（`window.__DSH_BOOT__`）就在这份 HTML 里，页面只激活该清单中的 bundle——因此按角色过滤该清单即可决定哪些 bundle 根本不挂载。尚未实现、也尚未 boot 验证；详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
 任务清单与验收矩阵见 [`docs/verify-option-A.md`](docs/verify-option-A.md)。
 
 **已完成并可用的**
@@ -24,15 +24,15 @@
 - 能力发现（`GET /api/auth/capabilities`，会话鉴权）与写读静默拒绝（无权读探针 → `204`，写 → `403`，可用 `quietDenials` 开关），普通用户浏览器不再被「forbidden」报错墙和重试风暴困扰。
 - dsh-login **自己**的设置项**已按用户显隐**：管理员看到「用户管理」，普通用户看到「账户」（身份 + 退出）；普通用户不会调用任何 admin 接口。
 - **按用户隔离守卫作为组合原语交付（option A）。** DSH ≥ 0.1.5 下 `/api` 归原生 `connection`/`api-gateway` 持有，dsh-login 的隔离是 REMOTE 层守卫——`wrapRemoteGateway` + `createRemoteIsolation`，从本包宿主 bundle 导出并经单元/集成测试（含所有权收窄与管理员放行）。包装器会原样转发守卫两个分发方法之外的全部网关成员（例如 DSH 0.2.0-rc.2 新增的必需方法 `hasLiveClient()`），组合后接口始终完整。`connection` 所有权与按用户默认工作区已在原生栈上重建。**守卫本身需在启动时组合进原生 `typertGateway` 行**（部署决策，非运行时热替换——重新 provide `typertGateway` 会触发重复服务错误），并以两浏览器启动做行为验收；目前**shipped patch 单独并不强制它**。详见 [`docs/verify-option-A.md`](docs/verify-option-A.md) §B。
-- **跟随上游 0.1.5-alpha.1 → 0.2.0-rc.2。** 每个上游版本的用户面线方法随发布即加入普通用户放行面（侧栏 `terminal.*`、`workspace.unarchiveSession`/`pinSession`/`unpinSession`、只读 `workspaceFiles`/`officeToPdf` 文档预览、`job` 控制器；0.2.0 未新增任何 wire 方法或命名空间），而新的管理员专属命名空间（`pluginManager` + `pluginRegistryProbe`，以及 DeepSeek Platform 的 `account` 控制器——唯一进程级上游授权，含 0.1.7-rc.2 的 `watchExpiry` 过期通知流）整体禁用。DSH ≥ 0.1.7-rc.1 起，宿主在启动期对 peer 范围运行**插件兼容性准入**——dsh-login 的 peer 范围接纳当前 runtime（0.2.5 已加入 0.2.0 分支），且该检查是 fail-open（仅 stderr 报告）：任何 DSH 升级后，请确认登录页真的出现了。
+- **跟随上游 0.1.5-alpha.1 → 0.2.1-alpha.1。** 每个上游版本的用户面线方法随发布即加入普通用户放行面（侧栏 `terminal.*`、`workspace.unarchiveSession`/`pinSession`/`unpinSession`、只读 `workspaceFiles`/`officeToPdf` 文档预览、`job` 控制器；0.2.0 未新增任何 wire 方法或命名空间；0.2.1 新增 `claudeCodeMods` 命名空间——提示框上方的 agent-mod 带状 UI——走默认拒绝，暂无用户面），而新的管理员专属命名空间（`pluginManager` + `pluginRegistryProbe`，以及 DeepSeek Platform 的 `account` 控制器——唯一进程级上游授权，含 0.1.7-rc.2 的 `watchExpiry` 过期通知流）整体禁用。DSH ≥ 0.1.7-rc.1 起，宿主在启动期对 peer 范围运行**插件兼容性准入**——dsh-login 的 peer 范围接纳当前 runtime（0.2.7 已加入 0.2.1 分支），且该检查是 fail-open（仅 stderr 报告）：任何 DSH 升级后，请确认登录页真的出现了。
 
 **对整个 UI 的按角色控制 —— 当前状态与已有的杠杆**
 - **尚未交付。** DSH 的设置面板渲染的是**一张全局分组列表**（`SettingsRoot` → `useSections`，`HostObservable<readonly SettingsSectionRow[]>`，无身份维度），因此某个插件的设置项无法在 `dsh-login` 内部按用户显隐。
 - DSH 的 WebServer 路由优先级是 **exact 优先于 prefix**，且**没有前置路由钩子**，因此像 `@linxin666/dsh-pet` 这样自己注册精确路由（`/api/pet/pets`、`/api/pet/state`、…）的插件，无法被 `dsh-login` 按用户拦截或静默。
-- 上游**没有按身份的门**：客户端引导/激活层与 ui-slots 完全没有 `role`/`permission`/`isAdmin` 概念，未改动的第三方插件仍会对每个用户激活（2026-10-02 在 0.2.0-rc.2 复核——注意 `packages/client` 下所有 `role` 命中都是 DOM 的 `role="…"` 无障碍属性，不是账号角色）。
-- **已经存在的杠杆（2026-10-02 验证机制，尚未实现）：** dsh-login 的网关自己渲染 index，客户端模块清单以 `window.__DSH_BOOT__` 的形式就在这份 HTML 里；页面只激活该清单（`ClientEntries.reconcile()` 为清单每一行创建一个条目，并**移除**不在清单中的 bundle）。因此**在返回 index 前按角色过滤该引导图，即可决定哪些 bundle 根本不挂载**——粒度是**按包**，且仅是展示层（安全边界仍是 `/api` 放行面）。详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
+- 上游**没有按身份的门**：客户端引导/激活层与 ui-slots 完全没有 `role`/`permission`/`isAdmin` 概念，未改动的第三方插件仍会对每个用户激活（2026-10-05 在 0.2.1-alpha.1 复核：`isAdmin`/`isAllowed` 在 `packages/client` 下零命中——注意约 238 个文件仍会命中裸 `role` 搜索，那是 DOM `role="…"` 无障碍属性，不是账号角色）。
+- **已经存在的杠杆（2026-10-02 验证机制，2026-10-05 在 0.2.1-alpha.1 复核，尚未实现）：** dsh-login 的网关自己渲染 index，客户端模块清单以 `window.__DSH_BOOT__` 的形式就在这份 HTML 里；页面只激活该清单（`ClientEntries.reconcile()` 为清单每一行创建一个条目，并**移除**不在清单中的 bundle）。因此**在返回 index 前按角色过滤该引导图，即可决定哪些 bundle 根本不挂载**——粒度是**按包**，且仅是展示层（安全边界仍是 `/api` 放行面）。详见 [`docs/adapt-dsh-0.2.0-rc.2.md`](docs/adapt-dsh-0.2.0-rc.2.md) §6。
 
-**仍希望上游提供：** 按身份的分组/设置项**过滤**（用于放行包**内部**的细粒度控制）与宿主侧的按用户插件激活门。0.2.0-rc.2 两者都没有；在此之前，上面的引导图杠杆就是插件内的实现路径。
+**仍希望上游提供：** 按身份的分组/设置项**过滤**（用于放行包**内部**的细粒度控制）与宿主侧的按用户插件激活门。0.2.1-alpha.1 两者都没有；在此之前，上面的引导图杠杆就是插件内的实现路径。
 
 ## 这个插件解决什么问题
 
@@ -230,7 +230,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（216 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.0-rc.2 上全绿——
+# 标准全量测试（216 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.1-alpha.1 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```

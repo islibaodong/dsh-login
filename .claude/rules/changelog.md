@@ -1,5 +1,57 @@
 # Memory Changelog
 
+## 2026-10-05 — DSH 0.2.1-alpha.1 released; adapted + RELEASED as 0.2.7 (invariant retirement, peer retarget)
+- **Version check: NEW DSH release.** npm `@deepseek-ai/dsh` dist-tags now
+  **`alpha` = 0.2.1-alpha.1** (`latest` = `next` = 0.2.0-rc.2); GitHub newest
+  tag `dsh-v0.2.1-alpha.1`; harness `origin/master` = `5badb15009`; **266
+  commits** since `dsh-v0.2.0-rc.2`. Local harness checkout is on branch `dev`
+  (258 behind) — read upstream content via `git show origin/master:<path>` /
+  `git grep … origin/master`, never through that worktree.
+- **The breaking change: runtime invariant plugins removed** (`f028f25667`,
+  1355 files, −15.4k lines) — `@deepseek-ai/dsh-invariants` retired (npm stops
+  at 0.2.0-rc.2) and every `./invariant` subpath export deleted. dsh-login
+  referenced it in exactly three places, all config-only (devDep,
+  tsconfig path, two test-runner PACKAGE_MAP entries) — **no `src/` import**,
+  so removal was mechanical. Other churn: new wire namespace
+  `claudeCodeMods` (agent-mod band UI; rides default deny, no allow-list
+  change), `SignInErrorCode` gains `'no-response'`, session-list scheduling
+  work, `packages/client/modules` + `ui-slots` src-unchanged at the
+  plugin-visible level.
+- **Peer graph moved too**: ALL 0.2.1-alpha.1 packages peer-require
+  `@deepseek-ai/cordis@~4.0.5-alpha.1`; `dsh-settings` also peers
+  `schemastery ~3.18.5-alpha.1`; `cordis@4.0.5-alpha.1` peers
+  `cordis-plugin-loader ~1.0.6-alpha.1` + `include ~1.0.10-alpha.1`.
+  `@deepseek-ai/cordis` npm versions: …4.0.4, **4.0.5-alpha.1**;
+  schemastery: …3.18.4, **3.18.5-alpha.1**.
+- **0.2.7 shipped** (version bump 0.2.6 → 0.2.7): six dsh peers gain
+  `|| >=0.2.1-alpha.1 <0.3.0-0` (tuple rule); cordis peer gains
+  `|| ~4.0.5-alpha.1`; schemastery peer gains `|| ~3.18.5-alpha.1`; devDeps →
+  9 dsh packages `^0.2.1-alpha.1`, cordis `~4.0.5-alpha.1`, include
+  `~1.0.10-alpha.1`, loader `~1.0.6-alpha.1`, schemastery
+  `~3.18.5-alpha.1`; `dsh-invariants` removed from package.json /
+  tsconfig.json / tests/runner.mjs / tests/integration-runner.mjs. **No src/
+  change.**
+- **The recurring ERESOLVE wedge struck again (3rd time)**: incremental
+  `npm install` failed because the stale rc.2 `node_modules` still carried
+  `dsh-settings@0.2.0-rc.2` → `dsh-config-editor@0.2.0-rc.2` →
+  `dsh-app-boot@0.2.0-rc.2` → `cordis-plugin-group@1.0.4` demanding
+  cordis `~4.0.4`. **Delete `node_modules` + `package-lock.json` and
+  reinstall fresh FIRST** — don't debug the conflict, nuke the tree.
+- **Verification on real 0.2.1-alpha.1 builds**: `npm test` **18 files /
+  216 tests green**; `verify:imports` all ok; `npm run build` exit 0 with
+  `dist/client.js` **byte-identical (37134 chars)** — the harness bump
+  changed nothing in the client bundle.
+- **Multi-user / role verdict at 0.2.1-alpha.1 (git grep on origin/master)**:
+  multi-user/rbac greps **0 hits**; `isAdmin|isAllowed` in `packages/client`
+  **0 hits**; `SlotEntryDef` (`packages/client/ui-slots/src/index.ts:116`)
+  unchanged, still no visibility/permission field. The 2026-10-02 verdict
+  stands: no upstream multi-user, no native role gate; the boot-graph lever
+  (rc.2 doc §6.5) remains valid and **unimplemented**. Trap persists: ~238
+  files under `packages/client` match a raw `\brole\b` grep (DOM a11y
+  attributes) — never read that as account roles.
+- Records: `docs/adapt-dsh-0.2.1-alpha.1.md` (new), README.md + README.zh.md
+  status/history updated, this entry. Commit + tag `v0.2.7` + push.
+
 ## 2026-10-02 (later) — NO new DSH release; 0.2.0-rc.2 re-verified; whole-UI role gating found FEASIBLE in-plugin
 - **Version check (12:15 local): no new DSH release.** npm `@deepseek-ai/dsh`
   dist-tags `latest` = `next` = **0.2.0-rc.2** (`alpha` 0.1.7-alpha.2); GitHub

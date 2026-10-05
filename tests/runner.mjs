@@ -22,7 +22,6 @@ const PACKAGE_MAP = {
   '@deepseek-ai/dsh-host-webserver': join(DSH_ROOT, 'packages/host/webserver/src'),
   '@deepseek-ai/dsh-host-frontend-static': join(DSH_ROOT, 'packages/host/frontend-static/src'),
   '@deepseek-ai/dsh-credentials': join(DSH_ROOT, 'packages/credentials/credentials/src'),
-  '@deepseek-ai/dsh-invariants': join(DSH_ROOT, 'packages/runtime-diagnostics/invariants/src'),
 }
 
 // Custom resolve hook for @deepseek-ai/* packages
