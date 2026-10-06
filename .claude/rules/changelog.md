@@ -1,5 +1,36 @@
 # Memory Changelog
 
+## 2026-10-06 (final) — 0.3.1 released: bridge-wall per-user enforcement shipped, `latest` = 0.3.1
+- Audit-fix session completed end-to-end: committed the per-user enforcement
+  work, split as feature/docs, then released as **0.3.1** on npm + GitHub.
+  Commits: `3168c54` feat (11 files, +1827/−92: `src/api-bridge-auth.ts` wall —
+  `USER_ALLOWED` method gate for ordinary users, owned-only
+  `session.list`/`session.search`/`workspace.list` response narrowing via
+  `src/bridge-list-filter.ts`, ownership recording incl. admin record-only,
+  default-workspace provisioning via `src/provision.ts` +
+  `src/host-session-access.ts`; new tests: 232→**247**), `733694f` docs
+  (`docs/compose-guard.md` deployment guide + both READMEs rewritten to the
+  two-layer model: bridge-wall method gate shipped + REMOTE guard composed),
+  `43cb81c` release (version 0.3.1 + README release sync + dist rebuild
+  93160 B @ 16:49:47).
+- Publish flow (all exit 0): push `master` + tag `v0.3.1` BEFORE staging
+  (427281f..43cb81c; tag `[new tag] v0.3.1`) → token from `.env`
+  `NPM_ACCESS_TOKENS` → temp `.npmrc.publish` → `npm whoami` = `islibaodong`
+  → **`+ @islibaodong/dsh-login@0.3.1`** (35 files, 197.3 kB tgz, 681.2 kB
+  unpacked, sha 468cc8bf) → `.npmrc.publish` deleted. Token never printed.
+- **Propagation gotcha (new data point):** "may take a few minutes" is real —
+  registry.npmjs.org itself 404'd `@0.3.1` for ~5 minutes after the publish
+  PUT returned success (polled every 30 s: gone at 16:54–16:55, live at
+  16:56:05 with `latest`=0.3.1). This lag is on the authoritative registry,
+  not just npmmirror. Don't misread it as publish failure; verify with
+  `Invoke-RestMethod https://registry.npmjs.org/@islibaodong%2fdsh-login`
+  (abbreviated JSON), not bare `npm view` (default registry here is the
+  npmmirror mirror — double lag).
+- GitHub release: `gh release create v0.3.1 --generate-notes` →
+  https://github.com/islibaodong/dsh-login/releases/tag/v0.3.1
+- Open item unchanged: two-browser boot acceptance of the composed REMOTE
+  guard (`docs/compose-guard.md` checklist) remains a deployment-side step.
+
 ## 2026-10-06 (even later) — npm publish COMPLETE: 0.2.7 + 0.3.0 are live, `latest` = 0.3.0
 - User supplied a fresh npm granular token in **`E:\code\dsh-login\.env`** under
   key **`NPM_ACCESS_TOKENS`** (40 chars, `npm_` prefix). SAFETY: `/.env` is
