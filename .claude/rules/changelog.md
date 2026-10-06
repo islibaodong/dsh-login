@@ -1,5 +1,13 @@
 # Memory Changelog
 
+## 2026-10-06 morning — token still 401; no new DSH release; README npm-claim corrected
+- `npm whoami --registry=https://registry.npmjs.org` STILL **401** → 0.2.7
+  remains **unpublished** (npm latest 0.2.6). Upstream dist-tags unchanged
+  (`alpha` = 0.2.1-alpha.1; latest/next = 0.2.0-rc.2) — no overnight release,
+  no adaptation work triggered. README.md/README.zh.md "（npm latest）" claims
+  softened to "git tag v0.2.7; npm publish pending a fresh token" (restore the
+  npm-latest wording once the new token lands and 0.2.7 is published).
+
 ## 2026-10-05 — DSH 0.2.1-alpha.1 released; adapted + RELEASED as 0.2.7 (invariant retirement, peer retarget)
 - **Version check: NEW DSH release.** npm `@deepseek-ai/dsh` dist-tags now
   **`alpha` = 0.2.1-alpha.1** (`latest` = `next` = 0.2.0-rc.2); GitHub newest
