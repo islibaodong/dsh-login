@@ -6,6 +6,7 @@ import { serveStatic } from '@deepseek-ai/dsh-host-frontend-static'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { SessionStore } from './session.ts'
 import { extractSessionToken } from './auth.ts'
+import { applyUiGate } from './ui-gate.ts'
 import type { Config } from './config.ts'
 
 /**
@@ -128,20 +129,30 @@ export function createGatewayHandler(
       return
     }
     const token = extractSessionToken(req.headers.cookie)
-    if (token === undefined || store.verify(token) === undefined) {
+    const session = token === undefined ? undefined : store.verify(token)
+    if (session === undefined) {
       res.writeHead(302, { Location: '/login' })
       res.end()
       return
     }
     store.cleanup()
     const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+    // Whole-UI role gating (config.uiRoleGate): an ordinary user's index
+    // ships with the admin-only client bundles removed from the boot graph,
+    // so their shell never activates those plugins. renderIndex is invoked
+    // by serveStatic only for the index document, and the session was just
+    // verified above, so the per-request closure sees the live identity.
+    // Admins (and deployments with the gate off) get the unmodified render.
+    const render = config.uiRoleGate && !session.isAdmin
+      ? async (): Promise<string> => applyUiGate(await renderIndex())
+      : renderIndex
     await serveStatic(
       decodeURIComponent(rawPath),
       res,
       distRoot,
       config.distIndex,
       () => authorizeIndex(req, res),
-      renderIndex,
+      render,
     )
   }
 }

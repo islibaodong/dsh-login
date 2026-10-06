@@ -1,4 +1,4 @@
-# DSH 0.2.1-alpha.1 compatibility check (2026-10-05)
+# DSH 0.2.1-alpha.1 compatibility check (2026-10-05; §6 = 2026-10-06 role-gate feature)
 
 Status: **adapted and RELEASED as `@islibaodong/dsh-login@0.2.7`** (npm latest,
 2026-10-05; git tag `v0.2.7` + master pushed). First adaptation on the
@@ -86,5 +86,80 @@ allow-list change needed.
   still no visibility/permission/identity field.
 - Conclusion: the 2026-10-02 verdict stands — no upstream per-role UI gate;
   the whole-UI role gate remains implementable **inside dsh-login** via the
-  boot-graph lever (`docs/adapt-dsh-0.2.0-rc.2.md` §6.5), still **not
-  implemented**.
+  boot-graph lever (`docs/adapt-dsh-0.2.0-rc.2.md` §6.5) — see **§6**: it has
+  since been implemented as 0.3.0.
+
+## 6. 2026-10-06 — the boot-graph lever IMPLEMENTED as 0.3.0 (per-role whole-UI gate)
+
+Status: **shipped as `@islibaodong/dsh-login@0.3.0`** (git tag `v0.3.0`).
+This is the feature the 2026-10-02 §6.5 investigation said was feasible and
+the 2026-10-05 §5 re-check confirmed still valid — now implemented inside
+dsh-login with **zero upstream changes**.
+
+### 6.1 Mechanism recap (verified at 0.2.1-alpha.1)
+
+The whole boot roster lives in the rendered index HTML that dsh-login's
+gateway already holds per request:
+
+- `bootInjections` (`packages/client/modules/src/index.ts:552` at
+  0.2.1-alpha.1) emits the `window.__DSH_BOOT__` global row carrying the
+  `WebBootGraph` (`{rev, entries, batches}`).
+- The page controller (`packages/client/modules/src/client/entries.ts`,
+  `start()`) activates **exactly** `graph.entries` — one cordis entry per
+  row — and `reconcile` removes managed entries absent from the roster.
+  There is no other activation source and no bypass.
+- `parseBootManifest` (client manifest parser) requires: string `id/url/rev`
+  per entry, no duplicate ids, batch `phase` enum, no duplicate batch URLs,
+  non-empty batch entry lists, every batch entry naming a graph entry, and
+  each entry in exactly one batch.
+- `webServer.renderIndex` (dsh-host-webserver) renders the global row as
+  `<script>globalThis["__DSH_BOOT__"] = <json></script>` with every `<`
+  escaped to `\u003c` inside the value — so the first `</script>` after the
+  marker safely terminates the element, and a rewritten value must re-escape
+  the same way.
+
+### 6.2 Implementation (new `src/ui-gate.ts`, wiring in gateway/config)
+
+- **`filterBootGraph(graph)`**: pure filter over the decoded JSON. Removes
+  every entry whose id is in `ADMIN_ONLY_UI_PLUGINS` (the deny-list exported
+  from `src/capabilities.ts`); patches the owning batches (`entries` minus
+  removed ids), **drops batches that become empty**; **fails open (returns
+  null)** on any unexpected shape — unknown top-level fields are preserved by
+  spread, `rev` untouched. A kept bundle that `inject`s or `external`s a
+  removed id (including the `<pkg>/client` alias) aborts the filter — refuse
+  to guess rather than serve a graph the shell cannot resolve.
+- **`applyUiGate(html)`**: locates the `__DSH_BOOT__` global row in the
+  rendered index, decodes, filters, re-encodes with the upstream `\u003c`
+  escaping, splices back. Every failure mode (marker absent, malformed JSON,
+  unexpected shape) returns the input HTML unchanged.
+- **Wiring**: `src/config.ts` gains `uiRoleGate: boolean` (default **true**);
+  `src/gateway.ts` passes a gated `renderIndex` to `serveStatic` only when
+  `config.uiRoleGate && !session.isAdmin` — admins and unauthenticated
+  requests (the latter already redirect to `/login`) see the graph untouched.
+- **Boundaries (unchanged and deliberate)**: presentation only — the `/api`
+  allow-list (`apiBridgeAuth` + `USER_ALLOWED`) and the remote isolation
+  guard remain the security boundary; per-package granularity (hiding one
+  slot inside an allowed bundle is out of scope); a dev-mode `client-hmr`
+  rebuild pushes a full `{type:'graph'}` frame and re-syncs the complete
+  roster (dev sessions only; production never re-pushes the graph).
+
+### 6.3 Verification (0.2.1-alpha.1)
+
+- **`tests/ui-gate.spec.ts`**: 16 tests — filter semantics (remove/patch/
+  drop/keep-rev/no-op identity/idempotence), fail-open on 11 malformed
+  shapes, kept-depends-on-gated abort (both `inject` and the
+  `<pkg>/client` `external` alias), HTML round-trip (only the global row
+  rewritten; preload/bootstrap/body rows intact; `\u003c` re-escaping
+  round-trips), plus 4 gateway integration tests on a real webserver boot
+  (ordinary user filtered / admin full / `uiRoleGate:false` full /
+  unauthenticated 302).
+- Full suite: **19 files / 232 tests green**; `verify:imports` all ok;
+  `npm run build` exit 0 (`dist/client.js` still 37134 chars — the client
+  half is untouched by the gate, which lives entirely in the Node gateway).
+- Test-time acceptance note: the shipped
+  `@deepseek-ai/dsh-client-modules@0.2.1-alpha.1` lib does **not** export
+  `parseBootManifest` (its `lib/index.js` export list omits it despite
+  `lib/types/index.d.ts:19` promising it), so the spec asserts against
+  `orderByModuleGraph` (the shipped runtime acceptance for dependency edges
+  and cycles) plus the parser invariants encoded in the fixtures. Revisit if
+  a later build exports the parser.

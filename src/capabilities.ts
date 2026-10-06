@@ -105,8 +105,16 @@ export const USER_DOMAINS: readonly string[] = [
   'job',
 ]
 
-/** UI plugin ids hidden from an ordinary user (admin-only surfaces). */
-const ADMIN_ONLY_UI_PLUGINS: readonly string[] = [
+/**
+ * UI plugin ids hidden from an ordinary user (admin-only surfaces).
+ *
+ * Exported because src/ui-gate.ts enforces the same boundary at the boot
+ * graph: an ordinary user's served `window.__DSH_BOOT__` drops these client
+ * bundles so their UI never activates. Keep this list in sync with the
+ * two-segment admin-only domains above — each id here is the client-half
+ * package whose panels drive those domains.
+ */
+export const ADMIN_ONLY_UI_PLUGINS: readonly string[] = [
   '@linxin666/dsh-client-ui-plugin-manager',
   '@linxin666/dsh-client-ui-skill-explorer',
   '@linxin666/dsh-client-ui-skin-center',

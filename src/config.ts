@@ -88,6 +88,18 @@ export interface Config {
    * dsh-login user model).
    */
   apiBridgeAuth: boolean
+  /**
+   * Whole-UI per-role gating (default true). When on, the gateway filters the
+   * served index's `window.__DSH_BOOT__` boot graph for ordinary (non-admin)
+   * users so admin-only client bundles never activate in their shell — the
+   * page mounts exactly the roster a user is allowed to see (see
+   * src/ui-gate.ts; the deny-list is capabilities.ADMIN_ONLY_UI_PLUGINS).
+   * Presentation only: the /api allow-list and the remote isolation guard
+   * remain the security boundary, and a dev-mode rebuild (pnpm run dev:web)
+   * still re-syncs the full roster via HMR. When off, every authenticated
+   * user gets the complete boot graph as before.
+   */
+  uiRoleGate: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -105,4 +117,5 @@ export const Config: z<Config> = z.object({
   remoteWebUiPublicBaseUrl: z.string().default(''),
   quietDenials: z.boolean().default(true),
   apiBridgeAuth: z.boolean().default(true),
+  uiRoleGate: z.boolean().default(true),
 })

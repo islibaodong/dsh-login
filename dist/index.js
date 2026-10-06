@@ -18,7 +18,8 @@ var Config = z.object({
   remoteWebUiCompat: z.boolean().default(true),
   remoteWebUiPublicBaseUrl: z.string().default(""),
   quietDenials: z.boolean().default(true),
-  apiBridgeAuth: z.boolean().default(true)
+  apiBridgeAuth: z.boolean().default(true),
+  uiRoleGate: z.boolean().default(true)
 });
 
 // src/session.ts
@@ -576,188 +577,6 @@ function buildClearCookieHeader() {
   return `${COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
 }
 
-// src/gateway.ts
-function indexRenderer(ctx, distIndex) {
-  return async () => {
-    const body = await readFile(distIndex, "utf8");
-    const webServer = ctx.webServer;
-    const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer);
-    return render.call(webServer, body);
-  };
-}
-function createAuthorizeIndex(ctx) {
-  return (req, res) => {
-    const connection = ctx.get("connection");
-    if (connection === void 0) return true;
-    const auth = connection.browserAuth ?? connection;
-    const hasTokenParam = req.url !== void 0 && /[?&]token=/.test(req.url);
-    if (!hasTokenParam && typeof auth.isAuthenticated === "function" && !auth.isAuthenticated(req) && typeof auth.launchToken === "string" && auth.launchToken.length > 0) {
-      res.writeHead(302, {
-        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
-        "cache-control": "no-store"
-      });
-      res.end();
-      return false;
-    }
-    return connection.authorizeIndex(req, res);
-  };
-}
-function createGatewayHandler(ctx, config, store) {
-  const distRoot = dirname5(config.distIndex);
-  const renderIndex = indexRenderer(ctx, config.distIndex);
-  const authorizeIndex = createAuthorizeIndex(ctx);
-  return async (req, res) => {
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      res.writeHead(405);
-      res.end();
-      return;
-    }
-    const token = extractSessionToken(req.headers.cookie);
-    if (token === void 0 || store.verify(token) === void 0) {
-      res.writeHead(302, { Location: "/login" });
-      res.end();
-      return;
-    }
-    store.cleanup();
-    const rawPath = new URL(req.url ?? "/", "http://x").pathname;
-    await serveStatic(
-      decodeURIComponent(rawPath),
-      res,
-      distRoot,
-      config.distIndex,
-      () => authorizeIndex(req, res),
-      renderIndex
-    );
-  };
-}
-
-// src/api-bridge-auth.ts
-function createApiBridgeAuth(store) {
-  return async (request, response, next) => {
-    const token = extractSessionToken(request.headers.cookie);
-    const session = token === void 0 ? void 0 : store.verify(token);
-    if (session !== void 0) {
-      store.cleanup();
-      return next();
-    }
-    response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
-    response.end("unauthorized");
-  };
-}
-
-// src/http-json.ts
-import { homedir } from "node:os";
-import { join } from "node:path";
-var MAX_JSON_BODY_BYTES = 8192;
-async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    if (Buffer.concat(chunks).length > maxBytes) {
-      throw new Error("body too large");
-    }
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-function sendJson(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
-  res.end(JSON.stringify(body));
-}
-function resolveDshHome() {
-  const env = process.env.DSH_HOME;
-  return env !== void 0 && env.length > 0 ? env : join(homedir(), ".dsh");
-}
-
-// src/login-api.ts
-async function parseCredentials(req) {
-  let body;
-  try {
-    body = await readBody(req);
-  } catch {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return null;
-  }
-  if (typeof parsed.username !== "string" || typeof parsed.password !== "string") return null;
-  return { username: parsed.username, password: parsed.password };
-}
-function learnRequestHost(req, hosts) {
-  const host = req.headers.host;
-  if (typeof host === "string" && host.length > 0) hosts.learn(host);
-}
-function createLoginHandler(deps) {
-  return async (req, res) => {
-    const creds = await parseCredentials(req);
-    if (creds === null) {
-      sendJson(res, 400, { error: "bad request" });
-      return;
-    }
-    if (await deps.users.isEmpty()) {
-      sendJson(res, 500, { error: "no users configured" });
-      return;
-    }
-    const record = await deps.users.verify(creds.username, creds.password);
-    if (record === void 0) {
-      sendJson(res, 401, { error: "invalid credentials" });
-      return;
-    }
-    await deps.users.touchLastLogin(record.username).catch(() => {
-    });
-    const session = deps.store.create(record.username, record.isAdmin);
-    if (deps.autoTrust === true && deps.hosts !== void 0) learnRequestHost(req, deps.hosts);
-    res.setHeader("Set-Cookie", buildCookieHeader(session.token, deps.sessionTtl));
-    sendJson(res, 200, { ok: true });
-  };
-}
-function createLogoutHandler(store) {
-  return async (req, res) => {
-    const token = extractSessionToken(req.headers.cookie);
-    if (token !== void 0) store.revoke(token);
-    res.setHeader("Set-Cookie", buildClearCookieHeader());
-    res.writeHead(200);
-    res.end();
-  };
-}
-function createLogoutRedirectHandler(store) {
-  return async (req, res) => {
-    const token = extractSessionToken(req.headers.cookie);
-    if (token !== void 0) store.revoke(token);
-    res.setHeader("Set-Cookie", buildClearCookieHeader());
-    res.writeHead(302, { Location: "/login" });
-    res.end();
-  };
-}
-function createSetupHandler(deps) {
-  return async (req, res) => {
-    if (!await deps.users.isEmpty()) {
-      sendJson(res, 403, { error: "users already exist" });
-      return;
-    }
-    const creds = await parseCredentials(req);
-    if (creds === null || creds.password.length === 0) {
-      sendJson(res, 400, { error: "bad request" });
-      return;
-    }
-    let record;
-    try {
-      record = await deps.users.create(creds.username, creds.password, true);
-    } catch {
-      sendJson(res, 400, { error: "bad request" });
-      return;
-    }
-    await deps.users.touchLastLogin(record.username).catch(() => {
-    });
-    const session = deps.store.create(record.username, record.isAdmin);
-    if (deps.autoTrust === true && deps.hosts !== void 0) learnRequestHost(req, deps.hosts);
-    res.setHeader("Set-Cookie", buildCookieHeader(session.token, deps.sessionTtl));
-    sendJson(res, 200, { ok: true });
-  };
-}
-
 // src/api-filter.ts
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   "session.list",
@@ -984,6 +803,258 @@ function allDomains() {
 }
 function allUiPlugins() {
   return [...CORE_UI_PLUGINS, ...ADMIN_ONLY_UI_PLUGINS];
+}
+
+// src/ui-gate.ts
+var BOOT_MARKER = '<script>globalThis["__DSH_BOOT__"] = ';
+var DENIED_IDS = new Set(ADMIN_ONLY_UI_PLUGINS);
+function filterBootGraph(graph) {
+  if (typeof graph !== "object" || graph === null) return null;
+  const shape = graph;
+  if (typeof shape.rev !== "string" || !Array.isArray(shape.entries) || !Array.isArray(shape.batches)) {
+    return null;
+  }
+  const kept = [];
+  const removed = /* @__PURE__ */ new Set();
+  for (const row of shape.entries) {
+    if (typeof row !== "object" || row === null) return null;
+    const entry = row;
+    if (typeof entry.id !== "string") return null;
+    if (DENIED_IDS.has(entry.id)) {
+      removed.add(entry.id);
+      continue;
+    }
+    kept.push(row);
+  }
+  const batches = [];
+  for (const row of shape.batches) {
+    if (typeof row !== "object" || row === null) return null;
+    const batch = row;
+    if (!Array.isArray(batch.entries) || batch.entries.some((id) => typeof id !== "string")) return null;
+  }
+  if (removed.size === 0) return graph;
+  for (const row of kept) {
+    for (const field of ["inject", "external"]) {
+      const value = row[field];
+      if (value === void 0) continue;
+      if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;
+      if (value.some((item) => removed.has(item) || removed.has(stripClient(item)))) return null;
+    }
+  }
+  for (const row of shape.batches) {
+    const batch = row;
+    const remaining = batch.entries.filter((id) => typeof id === "string" && !removed.has(id));
+    if (remaining.length === 0) continue;
+    batches.push(
+      remaining.length === batch.entries.length ? row : { ...row, entries: remaining }
+    );
+  }
+  return { ...graph, entries: kept, batches };
+}
+function stripClient(spec) {
+  return spec.endsWith("/client") ? spec.slice(0, -"/client".length) : spec;
+}
+function applyUiGate(html) {
+  const start = html.indexOf(BOOT_MARKER);
+  if (start === -1) return html;
+  const jsonStart = start + BOOT_MARKER.length;
+  const end = html.indexOf("</script>", jsonStart);
+  if (end === -1) return html;
+  const raw = html.slice(jsonStart, end);
+  let graph;
+  try {
+    graph = JSON.parse(raw);
+  } catch {
+    return html;
+  }
+  const filtered = filterBootGraph(graph);
+  if (filtered === null) return html;
+  const rebuilt = JSON.stringify(filtered).replaceAll("<", "\\u003c");
+  return `${html.slice(0, jsonStart)}${rebuilt}${html.slice(end)}`;
+}
+
+// src/gateway.ts
+function indexRenderer(ctx, distIndex) {
+  return async () => {
+    const body = await readFile(distIndex, "utf8");
+    const webServer = ctx.webServer;
+    const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer);
+    return render.call(webServer, body);
+  };
+}
+function createAuthorizeIndex(ctx) {
+  return (req, res) => {
+    const connection = ctx.get("connection");
+    if (connection === void 0) return true;
+    const auth = connection.browserAuth ?? connection;
+    const hasTokenParam = req.url !== void 0 && /[?&]token=/.test(req.url);
+    if (!hasTokenParam && typeof auth.isAuthenticated === "function" && !auth.isAuthenticated(req) && typeof auth.launchToken === "string" && auth.launchToken.length > 0) {
+      res.writeHead(302, {
+        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
+        "cache-control": "no-store"
+      });
+      res.end();
+      return false;
+    }
+    return connection.authorizeIndex(req, res);
+  };
+}
+function createGatewayHandler(ctx, config, store) {
+  const distRoot = dirname5(config.distIndex);
+  const renderIndex = indexRenderer(ctx, config.distIndex);
+  const authorizeIndex = createAuthorizeIndex(ctx);
+  return async (req, res) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.writeHead(405);
+      res.end();
+      return;
+    }
+    const token = extractSessionToken(req.headers.cookie);
+    const session = token === void 0 ? void 0 : store.verify(token);
+    if (session === void 0) {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+      return;
+    }
+    store.cleanup();
+    const rawPath = new URL(req.url ?? "/", "http://x").pathname;
+    const render = config.uiRoleGate && !session.isAdmin ? async () => applyUiGate(await renderIndex()) : renderIndex;
+    await serveStatic(
+      decodeURIComponent(rawPath),
+      res,
+      distRoot,
+      config.distIndex,
+      () => authorizeIndex(req, res),
+      render
+    );
+  };
+}
+
+// src/api-bridge-auth.ts
+function createApiBridgeAuth(store) {
+  return async (request, response, next) => {
+    const token = extractSessionToken(request.headers.cookie);
+    const session = token === void 0 ? void 0 : store.verify(token);
+    if (session !== void 0) {
+      store.cleanup();
+      return next();
+    }
+    response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+    response.end("unauthorized");
+  };
+}
+
+// src/http-json.ts
+import { homedir } from "node:os";
+import { join } from "node:path";
+var MAX_JSON_BODY_BYTES = 8192;
+async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    if (Buffer.concat(chunks).length > maxBytes) {
+      throw new Error("body too large");
+    }
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+function sendJson(res, status, body) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+function resolveDshHome() {
+  const env = process.env.DSH_HOME;
+  return env !== void 0 && env.length > 0 ? env : join(homedir(), ".dsh");
+}
+
+// src/login-api.ts
+async function parseCredentials(req) {
+  let body;
+  try {
+    body = await readBody(req);
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (typeof parsed.username !== "string" || typeof parsed.password !== "string") return null;
+  return { username: parsed.username, password: parsed.password };
+}
+function learnRequestHost(req, hosts) {
+  const host = req.headers.host;
+  if (typeof host === "string" && host.length > 0) hosts.learn(host);
+}
+function createLoginHandler(deps) {
+  return async (req, res) => {
+    const creds = await parseCredentials(req);
+    if (creds === null) {
+      sendJson(res, 400, { error: "bad request" });
+      return;
+    }
+    if (await deps.users.isEmpty()) {
+      sendJson(res, 500, { error: "no users configured" });
+      return;
+    }
+    const record = await deps.users.verify(creds.username, creds.password);
+    if (record === void 0) {
+      sendJson(res, 401, { error: "invalid credentials" });
+      return;
+    }
+    await deps.users.touchLastLogin(record.username).catch(() => {
+    });
+    const session = deps.store.create(record.username, record.isAdmin);
+    if (deps.autoTrust === true && deps.hosts !== void 0) learnRequestHost(req, deps.hosts);
+    res.setHeader("Set-Cookie", buildCookieHeader(session.token, deps.sessionTtl));
+    sendJson(res, 200, { ok: true });
+  };
+}
+function createLogoutHandler(store) {
+  return async (req, res) => {
+    const token = extractSessionToken(req.headers.cookie);
+    if (token !== void 0) store.revoke(token);
+    res.setHeader("Set-Cookie", buildClearCookieHeader());
+    res.writeHead(200);
+    res.end();
+  };
+}
+function createLogoutRedirectHandler(store) {
+  return async (req, res) => {
+    const token = extractSessionToken(req.headers.cookie);
+    if (token !== void 0) store.revoke(token);
+    res.setHeader("Set-Cookie", buildClearCookieHeader());
+    res.writeHead(302, { Location: "/login" });
+    res.end();
+  };
+}
+function createSetupHandler(deps) {
+  return async (req, res) => {
+    if (!await deps.users.isEmpty()) {
+      sendJson(res, 403, { error: "users already exist" });
+      return;
+    }
+    const creds = await parseCredentials(req);
+    if (creds === null || creds.password.length === 0) {
+      sendJson(res, 400, { error: "bad request" });
+      return;
+    }
+    let record;
+    try {
+      record = await deps.users.create(creds.username, creds.password, true);
+    } catch {
+      sendJson(res, 400, { error: "bad request" });
+      return;
+    }
+    await deps.users.touchLastLogin(record.username).catch(() => {
+    });
+    const session = deps.store.create(record.username, record.isAdmin);
+    if (deps.autoTrust === true && deps.hosts !== void 0) learnRequestHost(req, deps.hosts);
+    res.setHeader("Set-Cookie", buildCookieHeader(session.token, deps.sessionTtl));
+    sendJson(res, 200, { ok: true });
+  };
 }
 
 // src/admin-api.ts

@@ -1,5 +1,50 @@
 # Memory Changelog
 
+## 2026-10-06 (later) — 0.3.0: whole-UI per-role gate (uiRoleGate) IMPLEMENTED on the boot-graph lever
+- User selected (ask_user_question) **"实现整 UI 按角色门控"** — ship the
+  2026-10-02/05 "boot-graph lever" as a feature.
+- **Mechanism (verified in harness source at 0.2.1-alpha.1):** the boot roster
+  travels in the rendered index HTML as `window.__DSH_BOOT__`
+  (WebBootGraph `{rev, entries, batches}`); the page activates exactly
+  `graph.entries` and `reconcile` removes bundles absent from the roster —
+  so filtering the graph per role gates which bundles ever mount.
+  `parseBootManifest` requires string ids/urls/revs, unique entry ids and
+  batch URLs, non-empty batches, and every batch entry naming a graph entry.
+  `webServer.renderIndex` renders the global row as
+  `<script>globalThis["__DSH_BOOT__"] = <json></script>` with `<` escaped to
+  `\u003c` inside the value.
+- **New `src/ui-gate.ts`:** `filterBootGraph(graph)` (deny-list =
+  `ADMIN_ONLY_UI_PLUGINS`, now **exported** from `src/capabilities.ts`;
+  patches owning batches, drops emptied batches, fails open on unexpected
+  shapes, aborts if a kept bundle injects/externals a removed id incl. the
+  `<pkg>/client` alias) + `applyUiGate(html)` (splice the decoded→filtered→
+  re-encoded `\u003c`-escaped global row; every failure returns the input).
+  **Config:** `uiRoleGate: boolean` default **true** (`src/config.ts`).
+  **Gateway:** gated `renderIndex` only when `uiRoleGate && !session.isAdmin`
+  — admins/unauthenticated see the graph untouched. Presentation only: the
+  `/api` allow-list stays the security boundary; dev HMR graph push is the
+  documented dev-only bypass.
+- **`tests/ui-gate.spec.ts`** (16 tests): filter semantics, fail-open shapes,
+  kept-depends-on-gated abort, HTML round-trip + `\u003c` re-escaping, and 4
+  gateway integration tests on a REAL webserver boot (user filtered / admin
+  full / off = full / unauthenticated 302). Full suite now **19 files /
+  232 tests green**; `verify:imports` ok; build exit 0 (`dist/client.js`
+  still 37134 chars — the client half is untouched).
+- **New devDep `@deepseek-ai/dsh-client-modules@^0.2.1-alpha.1`** (test-time
+  acceptance). GOTCHA: its shipped lib **omits `parseBootManifest`** from the
+  runtime export list (`lib/index.js:981`) despite
+  `lib/types/index.d.ts:19` promising it — the spec asserts against
+  `orderByModuleGraph` (shipped; throws on cycles/unknown externals) instead.
+- **Gotcha hit:** the no-op fast path (`removed.size === 0`) originally ran
+  BEFORE the batch shape checks, so `batches: [null]` with no denied ids
+  returned the graph instead of failing open — validation now precedes the
+  fast path.
+- **Version 0.3.0** (minor: new feature); package description gained "with
+  per-role whole-UI gating". Docs: `docs/adapt-dsh-0.2.1-alpha.1.md` §6
+  (mechanism + implementation + verification), README/README.zh release +
+  history + RBAC sections rewritten to "SHIPPED", counts 19/232. NOT
+  boot-verified against a real `dsh web` run (like the isolation guard).
+
 ## 2026-10-06 morning — token still 401; no new DSH release; README npm-claim corrected
 - `npm whoami --registry=https://registry.npmjs.org` STILL **401** → 0.2.7
   remains **unpublished** (npm latest 0.2.6). Upstream dist-tags unchanged
