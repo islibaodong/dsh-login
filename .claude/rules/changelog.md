@@ -1,5 +1,22 @@
 # Memory Changelog
 
+## 2026-10-06 (even later) — npm publish COMPLETE: 0.2.7 + 0.3.0 are live, `latest` = 0.3.0
+- User supplied a fresh npm granular token in **`E:\code\dsh-login\.env`** under
+  key **`NPM_ACCESS_TOKENS`** (40 chars, `npm_` prefix). SAFETY: `/.env` is
+  gitignored (checked before any `git add`); the token was never printed to the
+  conversation — handled only inside pwsh (`Select-String` → temp
+  `.npmrc.publish` → `npm whoami` → publish → delete).
+- `npm whoami --registry=https://registry.npmjs.org --userconfig .npmrc.publish`
+  → `islibaodong`. Published from the v0.2.7 git worktree
+  (`E:\code\tmp-dsh-login-027`, tag = 6b35ac6; npm install + prepack build):
+  **`+ @islibaodong/dsh-login@0.2.7`** (31 files, 538.4 kB). Published from the
+  main tree: **`+ @islibaodong/dsh-login@0.3.0`** (32 files, 560.5 kB).
+- Cleanup done: worktree removed, `.npmrc.publish` deleted. Registry CDN lag:
+  `npm view` immediately after publish still showed latest=0.2.6 — re-check
+  before trusting dist-tags.
+- README.md + README.zh.md "npm publish pending" claims replaced with
+  "published on npm — latest = 0.3.0" (README.md:11, :19; README.zh.md:11, :19).
+
 ## 2026-10-06 (later) — 0.3.0: whole-UI per-role gate (uiRoleGate) IMPLEMENTED on the boot-graph lever
 - User selected (ask_user_question) **"实现整 UI 按角色门控"** — ship the
   2026-10-02/05 "boot-graph lever" as a feature.
