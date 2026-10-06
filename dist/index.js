@@ -1,5 +1,5 @@
 // src/index.ts
-import { join as join2 } from "node:path";
+import { join as join3 } from "node:path";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 
 // src/config.ts
@@ -930,23 +930,480 @@ function createGatewayHandler(ctx, config, store) {
   };
 }
 
+// src/bridge-list-filter.ts
+function extractSessionItems(value) {
+  const items = envelopeValue(value);
+  if (items === void 0) return void 0;
+  const record = items;
+  if (!Array.isArray(record.items)) return void 0;
+  const headers = [];
+  for (const item of record.items) {
+    if (typeof item !== "object" || item === null) return void 0;
+    const sessionId = item.sessionId;
+    if (typeof sessionId !== "string" || sessionId === "") return void 0;
+    const parentSessionId = item.parentSessionId;
+    headers.push(
+      typeof parentSessionId === "string" && parentSessionId !== "" ? { sessionId, parentSessionId } : { sessionId }
+    );
+  }
+  return headers;
+}
+function envelopeValue(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const result = value.result;
+  if (typeof result !== "object" || result === null) return value;
+  const record = result;
+  return record.ok === true ? record.value : void 0;
+}
+function ownedSessionClosure(username, items, ownership) {
+  const owned = /* @__PURE__ */ new Set();
+  for (const [sid, owner] of ownership.entries()) {
+    if (owner === username) owned.add(sid);
+  }
+  const byParent = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    if (item.parentSessionId === void 0) continue;
+    const list = byParent.get(item.parentSessionId);
+    if (list === void 0) byParent.set(item.parentSessionId, [item.sessionId]);
+    else list.push(item.sessionId);
+  }
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const sid of [...owned]) {
+      for (const child of byParent.get(sid) ?? []) {
+        if (!owned.has(child)) {
+          owned.add(child);
+          ownership.record(child, username);
+          grew = true;
+        }
+      }
+    }
+  }
+  return owned;
+}
+async function probeOwnedSessionIds(username, ownership, gateway) {
+  let items = [];
+  if (gateway !== void 0) {
+    try {
+      const value = await gateway.invoke({ namespace: "session", method: "list", args: {} });
+      const extracted = extractSessionItems(value);
+      if (extracted !== void 0) items = extracted;
+    } catch {
+    }
+  }
+  return ownedSessionClosure(username, items, ownership);
+}
+function filterSessionItemsValue(value, owned) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const payload = envelopeValue(value);
+  if (payload === void 0) return void 0;
+  const record = payload;
+  if (!Array.isArray(record.items)) return void 0;
+  const items = [];
+  for (const item of record.items) {
+    if (typeof item !== "object" || item === null) return void 0;
+    const sessionId = item.sessionId;
+    if (typeof sessionId !== "string" || sessionId === "") return void 0;
+    if (owned.has(sessionId)) items.push(item);
+  }
+  const filtered = { ...payload, items };
+  if (value.result !== void 0) {
+    return { ...value, result: { ok: true, value: filtered } };
+  }
+  return filtered;
+}
+function filterWorkspaceListValue(value, owned) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const payload = envelopeValue(value);
+  if (payload === void 0) return void 0;
+  const record = payload;
+  if (!Array.isArray(record.items) || !Array.isArray(record.archivedSessionIds)) return void 0;
+  const items = [];
+  for (const workspace of record.items) {
+    if (typeof workspace !== "object" || workspace === null) return void 0;
+    const sessionIds = workspace.sessionIds;
+    if (!Array.isArray(sessionIds)) return void 0;
+    const kept = sessionIds.filter((id) => typeof id === "string" && owned.has(id));
+    if (kept.length > 0) items.push({ ...workspace, sessionIds: kept });
+  }
+  const archivedSessionIds = record.archivedSessionIds.filter(
+    (id) => typeof id === "string" && owned.has(id)
+  );
+  const filtered = { ...payload, items, archivedSessionIds };
+  if (value.result !== void 0) {
+    return { ...value, result: { ok: true, value: filtered } };
+  }
+  return filtered;
+}
+var RECORD_METHODS = /* @__PURE__ */ new Set(["session.create", "session.fork", "workspace.create"]);
+var FILTER_METHODS = /* @__PURE__ */ new Set(["session.list", "session.search", "workspace.list"]);
+function recordOwnershipFromResponse(envelope, username, ownership) {
+  const payload = envelopeValue(envelope);
+  if (typeof payload !== "object" || payload === null) return;
+  const sessionId = payload.sessionId;
+  const id = payload.id;
+  if (typeof sessionId === "string" && sessionId !== "") {
+    ownership.record(sessionId, username);
+    return;
+  }
+  if (typeof id === "string" && id !== "") ownership.record(id, username);
+}
+
 // src/api-bridge-auth.ts
-function createApiBridgeAuth(store) {
+var DENY_BODY_LIMIT_BYTES = 1 << 20;
+function endpointFromUrl(url) {
+  if (url === void 0) return void 0;
+  const path = url.split("?")[0].split("#")[0];
+  if (!path.startsWith("/api/")) return void 0;
+  return path.slice("/api/".length).split("/").join(".");
+}
+function createApiBridgeAuth(deps) {
+  const deny403 = (response) => {
+    response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+    response.end("forbidden");
+  };
+  const denyQuiet = async (request, response) => {
+    const rpcId = await readRequestRpcId(request);
+    if (rpcId === void 0) {
+      deny403(response);
+      return;
+    }
+    const body = JSON.stringify({
+      type: "server-response",
+      rpcId,
+      result: { ok: false, error: { code: "forbidden", message: "not permitted for this user", details: {} } }
+    });
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "content-length": String(Buffer.byteLength(body))
+    });
+    response.end(body);
+  };
   return async (request, response, next) => {
     const token = extractSessionToken(request.headers.cookie);
-    const session = token === void 0 ? void 0 : store.verify(token);
-    if (session !== void 0) {
-      store.cleanup();
+    const session = token === void 0 ? void 0 : store_verify(deps, token);
+    if (session === void 0) {
+      response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+      response.end("unauthorized");
+      return;
+    }
+    deps.store.cleanup();
+    const user = { username: session.user, isAdmin: session.isAdmin };
+    if (request.method !== "POST") return next();
+    if (user.isAdmin) {
+      const adminEndpoint = endpointFromUrl(request.url);
+      if (adminEndpoint !== void 0 && RECORD_METHODS.has(adminEndpoint)) {
+        attachResponseTee(response, {
+          endpoint: adminEndpoint,
+          username: user.username,
+          ownership: deps.ownership,
+          owned: void 0
+        });
+      }
       return next();
     }
-    response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
-    response.end("unauthorized");
+    if (deps.provisioner !== void 0) {
+      void deps.provisioner.ensure(user).catch(() => {
+      });
+    }
+    const endpoint = endpointFromUrl(request.url);
+    if (endpoint === void 0) return next();
+    if (!USER_ALLOWED.has(endpoint)) {
+      if (deps.quietDenials) {
+        await denyQuiet(request, response);
+        return;
+      }
+      deny403(response);
+      return;
+    }
+    if (FILTER_METHODS.has(endpoint) || RECORD_METHODS.has(endpoint)) {
+      const owned = FILTER_METHODS.has(endpoint) ? await resolveOwned(deps, user.username) : void 0;
+      attachResponseTee(response, {
+        endpoint,
+        username: user.username,
+        ownership: deps.ownership,
+        owned
+      });
+    }
+    return next();
+  };
+}
+function store_verify(deps, token) {
+  return deps.store.verify(token);
+}
+async function resolveOwned(deps, username) {
+  if (deps.ownedProvider === void 0) return void 0;
+  try {
+    return await deps.ownedProvider(username);
+  } catch {
+    return void 0;
+  }
+}
+async function readRequestRpcId(request) {
+  try {
+    const chunks = [];
+    let size = 0;
+    request.setEncoding?.("utf8");
+    for await (const chunk of request) {
+      const piece = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
+      size += piece.length;
+      if (size > DENY_BODY_LIMIT_BYTES) return void 0;
+      chunks.push(piece);
+    }
+    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (parsed.type !== "client-request" || typeof parsed.rpcId !== "string" || parsed.rpcId === "") {
+      return void 0;
+    }
+    return parsed.rpcId;
+  } catch {
+    return void 0;
+  }
+}
+function attachResponseTee(response, context) {
+  const raw = response;
+  const rawWriteHead = raw.writeHead.bind(response);
+  const rawSetHeader = raw.setHeader.bind(response);
+  const rawWrite = raw.write.bind(response);
+  const rawEnd = raw.end.bind(response);
+  const headers = {};
+  let status;
+  let statusMessage;
+  const chunks = [];
+  let finalCallback;
+  let flushed = false;
+  const captureHeader = (name2, value) => {
+    headers[String(name2).toLowerCase()] = value;
+  };
+  response.setHeader = function(name2, value) {
+    captureHeader(name2, value);
+    return this;
+  };
+  response.writeHead = function(...args) {
+    const first = args[0];
+    if (typeof first === "number") status = first;
+    for (const arg of args.slice(1)) {
+      if (typeof arg === "string" && statusMessage === void 0 && status !== void 0 && args.length === 2) {
+        statusMessage = arg;
+        continue;
+      }
+      if (typeof arg === "object" && arg !== null) {
+        for (const [key, value] of Object.entries(arg)) {
+          captureHeader(key, value);
+        }
+      }
+    }
+    return this;
+  };
+  response.write = function(...args) {
+    captureChunk(args);
+    return true;
+  };
+  response.end = function(...args) {
+    captureChunk(args);
+    flush();
+    return this;
+  };
+  function captureChunk(args) {
+    let cb;
+    for (let index = args.length - 1; index >= 0; index -= 1) {
+      const arg = args[index];
+      if (typeof arg === "function") {
+        cb = arg;
+        continue;
+      }
+      if (arg !== void 0 && arg !== null && arg !== 0) break;
+    }
+    const first = args[0];
+    if (typeof first === "string" || first instanceof Buffer || first instanceof Uint8Array) {
+      const encoding = typeof args[1] === "string" ? args[1] : "utf8";
+      const data = first instanceof Buffer ? first : Buffer.from(first, encoding);
+      chunks.push({ data, cb });
+    } else if (cb !== void 0 && chunks.length > 0) {
+      chunks[chunks.length - 1].cb = cb;
+    } else if (cb !== void 0) {
+      finalCallback = cb;
+    }
+  }
+  function flush() {
+    if (flushed) return;
+    flushed = true;
+    const original = Buffer.concat(chunks.map((chunk) => chunk.data));
+    let body = original;
+    let replayHeaders = true;
+    try {
+      if (status === 200 && isJsonBody(headers)) {
+        const parsed = JSON.parse(original.toString("utf8"));
+        if (FILTER_METHODS.has(context.endpoint)) {
+          if (context.owned !== void 0) {
+            const filtered = context.endpoint === "workspace.list" ? filterWorkspaceListValue(parsed, context.owned) : filterSessionItemsValue(parsed, context.owned);
+            if (filtered !== void 0) body = Buffer.from(JSON.stringify(filtered), "utf8");
+          }
+        } else {
+          recordOwnershipFromResponse(parsed, context.username, context.ownership);
+        }
+      }
+    } catch {
+    }
+    void replayHeaders;
+    if (!response.headersSent) {
+      const outgoing = {};
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== void 0) outgoing[key] = value;
+      }
+      if (status !== void 0 || chunks.length > 0) {
+        outgoing["content-length"] = String(body.length);
+        delete outgoing["transfer-encoding"];
+      }
+      rawWriteHead(status ?? 200, statusMessage ?? "", outgoing);
+    }
+    if (body !== original) {
+      const last = chunks[chunks.length - 1];
+      if (last?.cb !== void 0) rawWrite(body, last.cb);
+      else rawWrite(body);
+    } else {
+      for (const chunk of chunks) {
+        if (chunk.cb !== void 0) {
+          rawWrite(chunk.data, chunk.cb);
+        } else {
+          rawWrite(chunk.data);
+        }
+      }
+    }
+    if (finalCallback !== void 0) rawEnd(finalCallback);
+    else rawEnd();
+  }
+}
+function isJsonBody(headers) {
+  const type = headers["content-type"];
+  return typeof type === "string" && type.includes("application/json");
+}
+
+// src/provision.ts
+import { mkdir as mkdir5 } from "node:fs/promises";
+import { join } from "node:path";
+function sandboxSegment(username) {
+  return username.split(/[/\\]/).join("_").replace(/\.\.+/g, "_").replace(/^\.+/, "_").replace(/[^A-Za-z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96) || "user";
+}
+var DefaultWorkspaceProvisioner = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  done = /* @__PURE__ */ new Set();
+  /** Workspaces already registered but not yet seeded with a session, by username. */
+  pending = /* @__PURE__ */ new Map();
+  /**
+   * Ensure `user` has a default workspace+sandbox. A no-op for admins and
+   * for users already provisioned this run; skipped (without marking done)
+   * while the toggle is off or no registry is resolvable yet.
+   * Best-effort: any error is swallowed so the triggering request survives;
+   * a partially completed provisioning (workspace created, session seed
+   * failed) stays pending and retries only the missing half.
+   */
+  async ensure(user) {
+    if (user.isAdmin) return;
+    if (this.deps.enabled !== void 0 && !this.deps.enabled()) {
+      this.done.delete(user.username);
+      return;
+    }
+    if (this.done.has(user.username)) return;
+    const registry = this.deps.workspaceRegistry ?? this.deps.getRegistry?.();
+    if (registry === void 0) return;
+    this.done.add(user.username);
+    try {
+      await this.provision(user.username, registry);
+    } catch {
+      this.done.delete(user.username);
+    }
+  }
+  async provision(username, registry) {
+    let workspaceId = this.pending.get(username);
+    if (workspaceId === void 0) {
+      const dir = join(this.deps.workspaceRoot, sandboxSegment(username));
+      await mkdir5(dir, { recursive: true });
+      const workspace = await registry.create(dir, this.deps.title ?? username);
+      workspaceId = workspace.id;
+      this.pending.set(username, workspaceId);
+    }
+    const api = this.deps.getApi();
+    const create = api?.sessions?.create;
+    if (create === void 0) {
+      throw new Error("dsh-login: no session.create adapter available for default-workspace provisioning");
+    }
+    const res = await create({ rpcId: "dsh-login-default-workspace", payload: { workspaceId } });
+    if (res?.result?.ok !== true || typeof res.result.value?.sessionId !== "string") {
+      throw new Error("dsh-login: session.create returned no usable sessionId for default-workspace provisioning");
+    }
+    this.deps.ownership.record(res.result.value.sessionId, username);
+    this.pending.delete(username);
+  }
+};
+
+// src/host-session-access.ts
+function tryGetService(ctx, key) {
+  try {
+    const get = ctx.get;
+    return get.call(ctx, key);
+  } catch {
+    return void 0;
+  }
+}
+function extractSessionId(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const direct = value.sessionId;
+  if (typeof direct === "string" && direct !== "") return direct;
+  for (const level of [value.value, envelopeValue(value)]) {
+    if (typeof level !== "object" || level === null) continue;
+    const sessionId = level.sessionId;
+    if (typeof sessionId === "string" && sessionId !== "") return sessionId;
+  }
+  return void 0;
+}
+async function createSessionValue(ctx, payload) {
+  const controller = tryGetService(ctx, "sessionController");
+  if (typeof controller?.create === "function") {
+    return controller.create(payload);
+  }
+  const gateway = tryGetService(ctx, "typertGateway");
+  if (typeof gateway?.invoke === "function") {
+    return gateway.invoke({ namespace: "session", method: "create", args: payload });
+  }
+  throw new Error("dsh-login: neither sessionController nor typertGateway is available for session.create");
+}
+function createHostSessionApi(ctx) {
+  return () => ({
+    sessions: {
+      create: async (request) => {
+        const value = await createSessionValue(ctx, request.payload);
+        const sessionId = extractSessionId(value);
+        if (sessionId === void 0) {
+          throw new Error("dsh-login: session.create returned no sessionId");
+        }
+        return { result: { ok: true, value: { sessionId } } };
+      }
+    }
+  });
+}
+function createHostSessionSource(ctx) {
+  return {
+    async invoke() {
+      const controller = tryGetService(ctx, "sessionController");
+      if (typeof controller?.list === "function") {
+        return controller.list({}, new AbortController().signal);
+      }
+      const gateway = tryGetService(ctx, "typertGateway");
+      if (typeof gateway?.invoke === "function") {
+        return gateway.invoke({ namespace: "session", method: "list", args: {} });
+      }
+      throw new Error("dsh-login: neither sessionController nor typertGateway is available for session.list");
+    }
   };
 }
 
 // src/http-json.ts
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 var MAX_JSON_BODY_BYTES = 8192;
 async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   const chunks = [];
@@ -964,7 +1421,7 @@ function sendJson(res, status, body) {
 }
 function resolveDshHome() {
   const env = process.env.DSH_HOME;
-  return env !== void 0 && env.length > 0 ? env : join(homedir(), ".dsh");
+  return env !== void 0 && env.length > 0 ? env : join2(homedir(), ".dsh");
 }
 
 // src/login-api.ts
@@ -2008,18 +2465,49 @@ function createRemoteIsolation(options) {
   return { resolveUser, owns };
 }
 
+// src/glue.ts
+var DSH_LOGIN_OWNERSHIP_SERVICE = "dshLoginOwnership";
+function createDshLoginIsolation(deps) {
+  return createRemoteIsolation({
+    ownership: deps.ownership,
+    currentSessionId: deps.currentSessionId ?? (() => void 0),
+    isAdmin: deps.isAdmin
+  });
+}
+function composeGuardedGateway(gateway, isolation) {
+  return wrapRemoteGateway(gateway, isolation.resolveUser, isolation.owns);
+}
+function getDshLoginOwnership(ctx) {
+  try {
+    const get = ctx.get;
+    return get.call(ctx, DSH_LOGIN_OWNERSHIP_SERVICE);
+  } catch {
+    return void 0;
+  }
+}
+function composeDshLoginGuard(ctx, gateway) {
+  const ownership = getDshLoginOwnership(ctx);
+  if (ownership === void 0) return gateway;
+  const agents = ctx.agents;
+  const isolation = createDshLoginIsolation({
+    ownership,
+    currentSessionId: () => agents?.currentInitiator?.()?.id
+  });
+  return composeGuardedGateway(gateway, isolation);
+}
+
 // src/index.ts
 var name = "dsh-login";
 var inject = ["webServer", "credentials"];
 function apply(ctx, config) {
   if (!config.enabled) return;
-  const dataDir = config.dataDir === "" ? join2(resolveDshHome(), ".dsh-login") : config.dataDir;
-  const store = new SessionStore(config.sessionTtl, join2(dataDir, "sessions.json"));
+  const dataDir = config.dataDir === "" ? join3(resolveDshHome(), ".dsh-login") : config.dataDir;
+  const store = new SessionStore(config.sessionTtl, join3(dataDir, "sessions.json"));
   const users = new UserStore(ctx.credentials, credentialRef(`${config.password}_USERS`));
-  const ownership = new OwnershipIndex(join2(dataDir, "ownership.json"));
-  const hosts = new TrustedHosts(join2(dataDir, "trusted-hosts.json"));
-  const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join2(dataDir, "settings.json"), config.defaultWorkspace);
-  const remoteWebUiSetting = new BooleanSetting(join2(dataDir, "settings-remote-web-ui.json"), config.remoteWebUiCompat);
+  const ownership = new OwnershipIndex(join3(dataDir, "ownership.json"));
+  const hosts = new TrustedHosts(join3(dataDir, "trusted-hosts.json"));
+  const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join3(dataDir, "settings.json"), config.defaultWorkspace);
+  const remoteWebUiSetting = new BooleanSetting(join3(dataDir, "settings-remote-web-ui.json"), config.remoteWebUiCompat);
   const remoteWebUiCompat = new RemoteWebUiCompat({
     getSettings: () => ctx.get("settings")
   });
@@ -2027,6 +2515,15 @@ function apply(ctx, config) {
   const gatewayConfig = { ...config, distIndex };
   const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts };
   const runtime = config.takeOverWebRuntime ? provideWebRuntime(ctx, config.trustedHosts) : void 0;
+  const workspaceRoot = config.workspaceRoot === "" ? join3(resolveDshHome(), "workspaces") : config.workspaceRoot;
+  const provisioner = new DefaultWorkspaceProvisioner({
+    workspaceRoot,
+    getApi: createHostSessionApi(ctx),
+    ownership,
+    getRegistry: () => tryGetService(ctx, "workspaceRegistry"),
+    enabled: () => defaultWorkspaceSetting.get()
+  });
+  ctx.provide("dshLoginOwnership", ownership);
   const loginPageRoute = {
     kind: "exact",
     path: "/login",
@@ -2065,8 +2562,15 @@ function apply(ctx, config) {
   void bootCompat;
   ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), "dsh-login: gateway fallback");
   if (config.apiBridgeAuth) {
+    const ownedProvider = (username) => probeOwnedSessionIds(username, ownership, createHostSessionSource(ctx));
     ctx.effect(
-      () => ctx.on("connection/request", createApiBridgeAuth(store), { global: true }),
+      () => ctx.on("connection/request", createApiBridgeAuth({
+        store,
+        ownership,
+        quietDenials: config.quietDenials,
+        ownedProvider,
+        provisioner
+      }), { global: true }),
       "dsh-login: /api bridge auth wall"
     );
   }
@@ -2079,8 +2583,13 @@ function apply(ctx, config) {
 }
 export {
   Config,
+  DSH_LOGIN_OWNERSHIP_SERVICE,
   apply,
+  composeDshLoginGuard,
+  composeGuardedGateway,
+  createDshLoginIsolation,
   createRemoteIsolation,
+  getDshLoginOwnership,
   inject,
   name,
   wrapRemoteGateway

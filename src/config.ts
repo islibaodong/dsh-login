@@ -59,14 +59,13 @@ export interface Config {
    * is not installed. */
   remoteWebUiPublicBaseUrl: string
   /**
-   * Quietly deny side-effect-free discovery probes for ordinary users (default
-   * true). When on, the physical layer answers an unauthorized read probe
-   * (`list`/`status`/`describe`/… or a QUIET_DENY_METHODS method) with 204 No
-   * Content instead of 403, so UI-plugin startup enumeration does not splash
-   * errors into the browser console or trigger retries. Side-effecting writes
-   * always keep 403. When off, every unauthorized method returns 403 as before.
-   * This never loosens authorization — only the shape of the denial for
-   * side-effect-free calls.
+   * Quietly deny methods an ordinary user may not call (default true). When
+   * on, the /api bridge wall answers a denied POST with a wire-correct
+   * `server-response` envelope carrying `{ ok: false, code: 'forbidden' }`
+   * (HTTP 200) — it consumes the request body to echo the caller's rpcId, so
+   * the browser surfaces an ordinary denied-RPC error instead of a
+   * transport-failure splash. When off, the denial is a plain 403. This never
+   * loosens authorization — only the shape of the denial.
    */
   quietDenials: boolean
   /**

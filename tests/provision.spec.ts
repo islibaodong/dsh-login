@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ApiProxy } from '@deepseek-ai/dsh-host-apiproxy'
-import { DefaultWorkspaceProvisioner, sandboxSegment, type WorkspaceRegistryLike } from '../src/provision.ts'
+import { DefaultWorkspaceProvisioner, sandboxSegment, type ProvisionSessionCreateApi, type WorkspaceRegistryLike } from '../src/provision.ts'
 import { OwnershipIndex } from '../src/ownership.ts'
 
 function testRoot(): string {
@@ -24,11 +23,11 @@ function fakeRegistry(): { registry: WorkspaceRegistryLike; created: Array<{ id:
   }
 }
 
-function fakeApi(): { api: ApiProxy; attachRequests: Array<Record<string, unknown>> } {
+function fakeApi(): { api: ProvisionSessionCreateApi; attachRequests: Array<Record<string, unknown>> } {
   const attachRequests: Array<Record<string, unknown>> = []
   return {
     attachRequests,
-    // Simulate only the session.create surface createUserProxy-free provisioning touches.
+    // The minimal session.create adapter the host-session-access shim builds.
     api: {
       sessions: {
         create: async (r: { payload?: Record<string, unknown> }) => {
@@ -36,7 +35,7 @@ function fakeApi(): { api: ApiProxy; attachRequests: Array<Record<string, unknow
           return { rpcId: r?.rpcId, result: { ok: true, value: { sessionId: 'prov-s1' } } }
         },
       },
-    } as unknown as ApiProxy,
+    },
   }
 }
 
@@ -101,7 +100,7 @@ describe('DefaultWorkspaceProvisioner', () => {
     expect(attachRequests).toHaveLength(1)
   })
 
-  it('is a no-op when the workspace registry service is absent', async () => {
+  it('is a no-op when neither workspaceRegistry nor getRegistry yields a registry', async () => {
     const root = testRoot()
     const { api, attachRequests } = fakeApi()
     const ownership = new OwnershipIndex(join(root, 'ownership.json'))
@@ -109,6 +108,26 @@ describe('DefaultWorkspaceProvisioner', () => {
 
     await p.ensure(alice)
     expect(attachRequests).toHaveLength(0)
+  })
+
+  it('resolves the registry lazily via getRegistry and defers while it is unavailable', async () => {
+    const root = testRoot()
+    const { registry, created } = fakeRegistry()
+    const { api, attachRequests } = fakeApi()
+    const ownership = new OwnershipIndex(join(root, 'ownership.json'))
+    let lazy: WorkspaceRegistryLike | undefined
+    const p = new DefaultWorkspaceProvisioner({ workspaceRoot: root, getApi: () => api, ownership, getRegistry: () => lazy })
+
+    // Host rows settle lazily: the first request defers without arming done.
+    await p.ensure(alice)
+    expect(created).toHaveLength(0)
+    expect(attachRequests).toHaveLength(0)
+
+    // Registry appears; the same user is provisioned on the next request.
+    lazy = registry
+    await p.ensure(alice)
+    expect(created).toHaveLength(1)
+    expect(attachRequests).toHaveLength(1)
   })
 
   it('swallows provisioning errors so the triggering request survives, and retries', async () => {
@@ -124,6 +143,68 @@ describe('DefaultWorkspaceProvisioner', () => {
     // On failure the user is re-armed: a retry attempts again.
     await p.ensure(alice)
     expect(fail).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries only the failed session-seed half without re-registering the workspace', async () => {
+    const root = testRoot()
+    const { registry, created } = fakeRegistry()
+    const ownership = new OwnershipIndex(join(root, 'ownership.json'))
+    const attachRequests: Array<Record<string, unknown>> = []
+    let failFirst = true
+    const api: ProvisionSessionCreateApi = {
+      sessions: {
+        create: async (r: { payload?: Record<string, unknown> }) => {
+          attachRequests.push(r?.payload ?? {})
+          if (failFirst) {
+            failFirst = false
+            throw new Error('session seed failed')
+          }
+          return { result: { ok: true, value: { sessionId: 'prov-s1' } } }
+        },
+      },
+    }
+    const p = new DefaultWorkspaceProvisioner({ workspaceRoot: root, getApi: () => api, ownership, workspaceRegistry: registry })
+
+    await p.ensure(alice)
+    // The workspace half succeeded; the session seed threw (getApi re-resolved
+    // and its adapter threw) — the user stays un-provisioned.
+    expect(created).toHaveLength(1)
+    expect(ownership.lookup('prov-s1')).toBeUndefined()
+
+    await p.ensure(alice)
+    // Retry: the remembered workspace id is reused (no second registry.create),
+    // only the session is seeded again, and ownership lands.
+    expect(created).toHaveLength(1)
+    expect(attachRequests).toEqual([{ workspaceId: 'ws-1' }, { workspaceId: 'ws-1' }])
+    expect(ownership.lookup('prov-s1')).toBe('alice')
+  })
+
+  it('keeps retrying when session.create returns an unusable shape', async () => {
+    const root = testRoot()
+    const { registry, created } = fakeRegistry()
+    const ownership = new OwnershipIndex(join(root, 'ownership.json'))
+    const attachRequests: Array<Record<string, unknown>> = []
+    let ok = false
+    const api: ProvisionSessionCreateApi = {
+      sessions: {
+        create: async (r: { payload?: Record<string, unknown> }) => {
+          attachRequests.push(r?.payload ?? {})
+          return ok ? { result: { ok: true, value: { sessionId: 'prov-s1' } } } : { result: { ok: true, value: {} } }
+        },
+      },
+    }
+    const p = new DefaultWorkspaceProvisioner({ workspaceRoot: root, getApi: () => api, ownership, workspaceRegistry: registry })
+
+    await p.ensure(alice)
+    expect(created).toHaveLength(1)
+    expect(ownership.lookup('prov-s1')).toBeUndefined()
+
+    ok = true
+    await p.ensure(alice)
+    expect(ownership.lookup('prov-s1')).toBe('alice')
+    // Both attempts attached to the SAME workspace id — no duplicate workspace.
+    expect(attachRequests.every((r) => r.workspaceId === 'ws-1')).toBe(true)
+    expect(created).toHaveLength(1)
   })
 
   it('skips provisioning while the live toggle is off, then provisions after re-enabling', async () => {

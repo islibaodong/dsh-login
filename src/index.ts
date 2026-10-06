@@ -16,6 +16,9 @@ import { BooleanSetting } from './boolean-setting.ts'
 import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createApiBridgeAuth } from './api-bridge-auth.ts'
+import { DefaultWorkspaceProvisioner, type WorkspaceRegistryLike } from './provision.ts'
+import { createHostSessionApi, createHostSessionSource, tryGetService } from './host-session-access.ts'
+import { probeOwnedSessionIds } from './bridge-list-filter.ts'
 import { createLoginHandler, createLogoutHandler, createLogoutRedirectHandler, createSetupHandler } from './login-api.ts'
 import { createAdminRoutes } from './admin-api.ts'
 import { renderLoginPage, renderSetupPage } from './login-page.ts'
@@ -46,6 +49,18 @@ export type {
   UserResolver,
   OwnedPredicate,
 } from './remote-guard.ts'
+// Deployment-side composition glue (option B): helper + types for wrapping a
+// native `typertGateway` row with dsh-login's per-user isolation guard, keyed
+// to the ownership sidecar dsh-login publishes as the `dshLoginOwnership`
+// service below (see docs/compose-guard.md).
+export {
+  DSH_LOGIN_OWNERSHIP_SERVICE,
+  createDshLoginIsolation,
+  composeGuardedGateway,
+  composeDshLoginGuard,
+  getDshLoginOwnership,
+} from './glue.ts'
+export type { DshLoginIsolationDeps, WrappedRemoteGateway } from './glue.ts'
 
 /**
  * Register the multi-user authentication gateway on the web server:
@@ -99,6 +114,26 @@ export function apply(ctx: Context, config: Config): void {
   // from webRuntime too; dsh-login's own fence used to see only the static
   // config list, which is why LAN IPs and frp public hosts needed hand-listing).
   const runtime = config.takeOverWebRuntime ? provideWebRuntime(ctx, config.trustedHosts) : undefined
+
+  // Per-user default-workspace provisioning: the provisioner resolves the
+  // host session surface lazily (sessionController first, typertGateway as
+  // fallback) and the durable workspace registry lazily, because neither
+  // service is guaranteed to be registered at dsh-login's apply time. It
+  // reads the defaultWorkspace toggle live so the admin switch binds without
+  // a restart.
+  const workspaceRoot = config.workspaceRoot === '' ? join(resolveDshHome(), 'workspaces') : config.workspaceRoot
+  const provisioner = new DefaultWorkspaceProvisioner({
+    workspaceRoot,
+    getApi: createHostSessionApi(ctx),
+    ownership,
+    getRegistry: () => tryGetService<WorkspaceRegistryLike>(ctx, 'workspaceRegistry'),
+    enabled: () => defaultWorkspaceSetting.get(),
+  })
+  // Publish the live ownership sidecar as a service so a deployment row
+  // (docs/compose-guard.md) can compose dsh-login's isolation guard over the
+  // native typertGateway without reaching into dsh-login internals. Declared
+  // in the composing row's `inject` so the composition runs after dsh-login.
+  ctx.provide('dshLoginOwnership', ownership)
 
   const loginPageRoute: WebRoute = {
     kind: 'exact',
@@ -157,8 +192,18 @@ export function apply(ctx: Context, config: Config): void {
   // listener firing regardless of any context filter at the emit site; on
   // DSH < 0.1.6-alpha.2 the event never fires and this is a harmless no-op.
   if (config.apiBridgeAuth) {
+    // Owned-set resolution for response filtering: best-effort probe over the
+    // sidecar closure plus the caller's live session list. A failed probe
+    // degrades to sidecar-only filtering (or none when the sidecar is empty).
+    const ownedProvider = (username: string) => probeOwnedSessionIds(username, ownership, createHostSessionSource(ctx))
     ctx.effect(
-      () => ctx.on('connection/request', createApiBridgeAuth(store), { global: true }),
+      () => ctx.on('connection/request', createApiBridgeAuth({
+        store,
+        ownership,
+        quietDenials: config.quietDenials,
+        ownedProvider,
+        provisioner,
+      }), { global: true }),
       'dsh-login: /api bridge auth wall',
     )
   }
