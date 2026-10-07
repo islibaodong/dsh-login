@@ -1,5 +1,44 @@
 # Memory Changelog
 
+## 2026-10-07 — DSH release watch: no new DSH version; dsh-login 0.3.1 verified green on the latest runtime
+- Routine release-watch session (goal task). Three-source check, all fresh:
+  - npm dist-tags for the **harness** (`Invoke-RestMethod
+    registry.npmjs.org/@deepseek-ai%2fdsh-root` etc.): `alpha=0.2.1-alpha.1`
+    (published 2026-10-03T04:53Z), `next=latest=0.2.0-rc.2`; `modified`
+    2026-10-03 — unchanged since the 0.2.1-alpha.1 release.
+  - `git fetch --tags origin` in `E:\code\deepseek-harness` (succeeded on the
+    1st attempt this time — the TLS-EOF retry dance isn't always needed):
+    newest tag still `dsh-v0.2.1-alpha.1`; `origin/master` = `5badb15009` =
+    the release merge (PR #5648, 2026-10-03); `git rev-list
+    5badb15009..origin/master --count` = **0** (zero post-release commits).
+  - GitHub API tags endpoint now 404s unauthenticated (worked on 10-06) —
+    treat it as an auth-gated fallback, not a required source; the two live
+    sources above already agree.
+- **Conclusion: no new DSH release since 0.2.1-alpha.1 → no compatibility
+  adaptation needed.** dsh-login 0.3.1's last-adapted runtime IS the current
+  latest runtime. Peer tuples already cover it (`>=0.2.1-alpha.1 <0.3.0-0`
+  on all six `@deepseek-ai/dsh-*` peer deps, package.json peerDependencies).
+- Multi-user re-check: `git grep -ilE 'multi.?user|multiuser|role.?based|\brbac\b'`
+  on tag `dsh-v0.2.1-alpha.1` still **0 hits** in packages/ apps/ — upstream
+  still has no native multi-user; dsh-login remains the multi-user layer.
+- `__DSH_BOOT__` boot-graph injection still present at
+  `packages/client/modules/src/index.ts:585` on the tag
+  (`rows.push({ kind: 'global', name: '__DSH_BOOT__', value: graph })`) —
+  the uiRoleGate lever is intact upstream.
+- Test suite: `npm test` = **247/247 passed, 19 files** (vitest, 5.79 s) on
+  the current tree against devDeps `^0.2.1-alpha.1` — green on the latest
+  runtime, no changes required.
+- Local runtime observation: the live `dsh web` (PID 16136, IDEA terminal)
+  runs from the `E:\code\deepseek-harness` checkout (branch `dev`, HEAD
+  `5badb15009` = the release tag) via tsx source execution — so the running
+  instance is exactly 0.2.1-alpha.1. The web profile
+  (`C:\Users\Administrator\.dsh\profiles\web`) has `@islibaodong/dsh-login
+  ^0.3.1` installed; profile `node_modules/@deepseek-ai` contains only
+  cosmokit+schemastery (core packages come from the harness checkout, not
+  the profile).
+- No code changes → no README fix, no commit, no release (per task rule:
+  release only when a new DSH version requires adaptation).
+
 ## 2026-10-06 (final) — 0.3.1 released: bridge-wall per-user enforcement shipped, `latest` = 0.3.1
 - Audit-fix session completed end-to-end: committed the per-user enforcement
   work, split as feature/docs, then released as **0.3.1** on npm + GitHub.
