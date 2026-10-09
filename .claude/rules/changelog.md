@@ -1,5 +1,35 @@
 # Memory Changelog
 
+## 2026-10-09 (12:00 scheduled watch) — no new DSH release; 0.3.1 stays green
+- Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-09T04:00Z).
+  Fresh evidence, all unchanged:
+  - npm official registry `@deepseek-ai/dsh-web-frontend`: dist-tags
+    `alpha=0.2.1-alpha.1`, `next=0.2.0-rc.2`, `latest=0.0.1-rc.5`;
+    `time.modified` 2026-10-03T04:55Z — no publish since 0.2.1-alpha.1.
+    (Broad sweep the same hour: all 14 `@deepseek-ai/dsh-*`/vendor packages
+    in the plugin's dep graph report `time.modified` 2026-10-03 — nothing
+    newer anywhere.)
+  - `git fetch --all --tags` in `E:\code\deepseek-harness` (one TLS-EOF
+    retry needed this time): newest tag still `dsh-v0.2.1-alpha.1`
+    (created 2026-10-03); `origin/master` = `5badb15009` = the release
+    merge (PR #5648); `git rev-list 5badb15009..origin/master --count`
+    = **0**; local `dev` == `origin/master` (0/0).
+  - Multi-user re-check at the tag: `git grep -ilE 'multi.?user|multiuser|
+    role.?based|\brbac\b' -- packages/ apps/` = **0 hits** — upstream
+    still has no native multi-user; dsh-login remains the multi-user
+    layer. `__DSH_BOOT__` boot-graph lever still present
+    (`packages/client/modules/src/index.ts:585`) — uiRoleGate intact.
+- **Conclusion: no new DSH version → no adaptation needed.** dsh-login
+  0.3.1 remains current; peer ranges (`>=0.2.1-alpha.1 <0.3.0-0` on all
+  six dsh peers) already cover the latest runtime. Role-based whole-UI
+  gating stays SHIPPED (0.3.0 uiRoleGate + 0.3.1 bridge-wall
+  enforcement) — evaluation closed, nothing new to assess.
+- Verification: `npm test` = **19 files / 247 tests green** (5.91 s) on
+  the current tree against devDeps `^0.2.1-alpha.1`.
+- No code changes → no README fix, no release (release only when a new
+  DSH version requires adaptation). Changelog entry committed + pushed
+  per the release-watch convention.
+
 ## 2026-10-08 (12:00 scheduled watch) — no new DSH release; 0.3.1 stays green
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-08T04:00Z).
   Fresh evidence, all unchanged:
