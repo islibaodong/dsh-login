@@ -41,8 +41,9 @@
   published 0.2.1-alpha.2 packages; `verify:imports` all ok; `npm run build`
   exit 0.
 - README.md + README.zh.md release quotes/adaptation history/status updated
-  to 0.3.2. Version bumped, tag `v0.3.2`, pushed, npm published, GitHub
-  release created (see the release entry below).
+  to 0.3.2. Version bumped, commit `74ffba3`, tag `v0.3.2` pushed; npm
+  published (`latest` = 0.3.2 after ~1 min propagation); GitHub release
+  https://github.com/islibaodong/dsh-login/releases/tag/v0.3.2 created.
 
 ## 2026-10-09 (12:00 scheduled watch) — no new DSH release; 0.3.1 stays green
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-09T04:00Z).
