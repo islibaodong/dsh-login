@@ -1,5 +1,49 @@
 # Memory Changelog
 
+## 2026-10-10 (12:00 scheduled watch) — NEW DSH 0.2.1-alpha.2 → adapted + RELEASED 0.3.2
+- Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-10T04:00Z).
+  Detection (fresh evidence):
+  - npm official registry `@deepseek-ai/dsh-web-frontend`: dist-tags
+    `alpha=0.2.1-alpha.2` (published 2026-10-09T08:17Z — first publish since
+    10-03), `next=0.2.0-rc.2`, `latest=0.0.1-rc.5` unchanged. Vendored
+    cordis/schemastery NOT re-published (dist-tag `dsh-0-2-1-alpha-1` still
+    4.0.5-alpha.1 / 3.18.5-alpha.1) → vendor pins unchanged.
+  - `git fetch --all --tags` in `E:\code\deepseek-harness` (one TLS-EOF
+    retry): new tag `dsh-v0.2.1-alpha.2`; `origin/master` = `d743267388`
+    (release merge PR #5946); **669 commits** since 5badb15009 (1964 files,
+    +51881/−16126).
+- Compat surface (alpha.1→alpha.2): webserver gains TLS (`Config.tls`,
+  `createSecureServer`, `protocol` getter; deps ipaddr.js/negotiator) and
+  `host` becomes concrete-IP-literal-only (wildcard schema-rejected);
+  connection row trust authorities move to the new `webStartup` service and
+  the **upstream `webRuntime` service is REMOVED** (web-runtime row config =
+  {openBrowser, printUrl, publicUrl, surfaceContext}); BrowserAuth
+  `authorizeIndex`/`isAuthenticated` gain optional trailing `secure` param
+  (HostConnectionService.authorizeIndex stays 2-arg, computes secure
+  internally); new RemoteError code `'session/migration-required'`; NO new
+  wire methods/namespaces → capabilities lists unchanged; session-controller
+  migration-required flow + terminal-controller `workingDirectory` inject
+  are internal; `__DSH_BOOT__` lever intact
+  (`packages/client/modules/src/index.ts:585`); multi-user grep **0 hits**.
+- Adaptation shipped as **0.3.2** (patch):
+  - devDeps: 10 dsh packages → `^0.2.1-alpha.2` (peer tuple
+    `>=0.2.1-alpha.1 <0.3.0-0` already admitted alpha.2 — NO peer retarget).
+  - `src/web-runtime.ts`: `dsh web:` URL line + `DSH_WEB_URL` now spell the
+    actual bind address (`webServer.host`) instead of hardcoded 127.0.0.1,
+    mirroring upstream's new bind-address URL; 0.0.0.0 binds (pre-alpha.2
+    only) still fall back to loopback + LAN suffix. webRuntime takeover kept
+    (compat-only upstream — nothing consumes it anymore; harmless).
+  - gateway.ts needs NO change (2-arg authorizeIndex / 1-arg isAuthenticated
+    remain assignable; secure computed internally).
+  - Fresh reinstall required (node_modules + lockfile deleted — recurring
+    ERESOLVE wedge). `docs/adapt-dsh-0.2.1-alpha.2.md` written.
+- Verification: `npm test` = **19 files / 247 tests green** (7.02 s) on the
+  published 0.2.1-alpha.2 packages; `verify:imports` all ok; `npm run build`
+  exit 0.
+- README.md + README.zh.md release quotes/adaptation history/status updated
+  to 0.3.2. Version bumped, tag `v0.3.2`, pushed, npm published, GitHub
+  release created (see the release entry below).
+
 ## 2026-10-09 (12:00 scheduled watch) — no new DSH release; 0.3.1 stays green
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-09T04:00Z).
   Fresh evidence, all unchanged:

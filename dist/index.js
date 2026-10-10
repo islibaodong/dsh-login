@@ -2326,13 +2326,17 @@ function resolveDistIndex() {
 }
 var DSH_WEB_URL = "DSH_WEB_URL";
 var LOOPBACK_HOST = "127.0.0.1";
+function urlHost(bindHost) {
+  return bindHost === ALL_INTERFACES_HOST ? LOOPBACK_HOST : bindHost;
+}
 function printWebUrl(ctx, runtime) {
   const print = () => {
     const webServer = ctx.get("webServer");
     if (webServer === void 0) return;
+    const host = urlHost(webServer.host);
     const lanCandidate = runtime.lanAddresses[0];
     const suffix = lanCandidate === void 0 ? "" : ` (LAN: http://${lanCandidate}:${String(webServer.port)})`;
-    console.log(`dsh web: http://${LOOPBACK_HOST}:${String(webServer.port)}${suffix}`);
+    console.log(`dsh web: http://${host}:${String(webServer.port)}${suffix}`);
   };
   const settled = ctx.get("loader")?.await();
   if (settled === void 0) print();
@@ -2351,8 +2355,9 @@ function provideWebRuntime(ctx, trustedHosts) {
         [DSH_WEB_URL]: { description: "Canonical local URL of the DeepSeek Harness Web GUI serving this session." }
       },
       resolve: () => {
-        const port = ctx.get("webServer")?.port;
-        return { [DSH_WEB_URL]: port === void 0 ? "" : `http://127.0.0.1:${String(port)}` };
+        const webServer = ctx.get("webServer");
+        if (webServer === void 0) return { [DSH_WEB_URL]: "" };
+        return { [DSH_WEB_URL]: `http://${urlHost(webServer.host)}:${String(webServer.port)}` };
       }
     }), "dsh-login: DSH_WEB_URL shell variable");
   }

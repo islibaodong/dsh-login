@@ -48,18 +48,31 @@ const DSH_WEB_URL = 'DSH_WEB_URL'
 const LOOPBACK_HOST = '127.0.0.1'
 
 /**
+ * The URL host a `dsh web:` line / shell variable should spell. DSH
+ * 0.2.1-alpha.2 makes the webserver bind a concrete IP literal only
+ * (wildcard binds are schema-rejected), so the actual bind address is the
+ * correct advertised URL; on older harness versions a 0.0.0.0 bind still
+ * exists and falls back to loopback (the LAN suffix covers LAN access).
+ */
+function urlHost(bindHost: string): string {
+  return bindHost === ALL_INTERFACES_HOST ? LOOPBACK_HOST : bindHost
+}
+
+/**
  * Print the `dsh web:` URL line once the server is up — the readiness signal
  * dsh-web-app's web-runtime row used to print before dsh-login took it over.
  * Waits for the Loader tree to settle so a sibling failure cannot announce a
- * dead app, exactly like the original row.
+ * dead app, exactly like the original row. Mirrors upstream web-app's
+ * bind-address URL (0.2.1-alpha.2 dropped the loopback-only spelling).
  */
 function printWebUrl(ctx: Context, runtime: WebRuntimeValues): void {
   const print = (): void => {
     const webServer = ctx.get('webServer')
     if (webServer === undefined) return
+    const host = urlHost(webServer.host)
     const lanCandidate = runtime.lanAddresses[0]
     const suffix = lanCandidate === undefined ? '' : ` (LAN: http://${lanCandidate}:${String(webServer.port)})`
-    console.log(`dsh web: http://${LOOPBACK_HOST}:${String(webServer.port)}${suffix}`)
+    console.log(`dsh web: http://${host}:${String(webServer.port)}${suffix}`)
   }
   const settled = ctx.get('loader')?.await()
   if (settled === undefined) print()
@@ -84,8 +97,9 @@ export function provideWebRuntime(ctx: Context, trustedHosts: readonly string[])
         [DSH_WEB_URL]: { description: 'Canonical local URL of the DeepSeek Harness Web GUI serving this session.' },
       },
       resolve: () => {
-        const port = ctx.get('webServer')?.port
-        return { [DSH_WEB_URL]: port === undefined ? '' : `http://127.0.0.1:${String(port)}` }
+        const webServer = ctx.get('webServer')
+        if (webServer === undefined) return { [DSH_WEB_URL]: '' }
+        return { [DSH_WEB_URL]: `http://${urlHost(webServer.host)}:${String(webServer.port)}` }
       },
     }), 'dsh-login: DSH_WEB_URL shell variable')
   }
