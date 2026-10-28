@@ -88,6 +88,13 @@
   added (§5 classification table, §6 RBAC verdict); gotchas devDep pin
   updated. Committed, tagged `v0.3.8`, pushed, npm published (`latest`),
   GitHub release `v0.3.8` created.
+- 15:40 manual re-verification (user-prompted, same day): fresh `git fetch`
+  confirms no DSH release after alpha.2 (`origin/master` == `f3803c9697`, 0
+  commits ahead; npm dist-tags unchanged `alpha=0.2.2-alpha.2`,
+  `next=0.2.1-rc.4`); `npm test` re-run **21 files / 267 tests green** against
+  the published alpha.2 builds; multi-user grep re-checked at the alpha.2 tag
+  = still the single `packages/api/remote-access/README.md` hit (no native
+  accounts). v0.3.8 tag confirmed on origin; nothing left to adapt.
 
 ## 2026-10-26 (12:00 scheduled watch) — no new DSH release; 0.3.7 stays current
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-26T04:00Z).
