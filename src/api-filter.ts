@@ -18,10 +18,13 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.1-rc.3 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 146 in total — byte-identical to 0.2.1-rc.2's registry; rc.3 touched only the
- * client UI, so the classification carries over unchanged). They are a **total,
- * disjoint classification** of that surface:
+ * 0.2.2-alpha.2 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
+ * 199 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
+ * subset of this classification, so one list serves both supported lines; the
+ * 53 alpha-line additions are the forge panel, liveshare share management,
+ * session state/observation, tool-result watch, CUA consent, plugin
+ * detail/update and recommendation surfaces). They are a **total, disjoint
+ * classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
  *   - {@link ADMIN_ONLY_METHODS}  – host configuration, credentials, plugin
@@ -41,7 +44,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.1-rc.3'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-alpha.2'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may
@@ -68,11 +71,13 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // `workspacePathApplications` back the "open folder" flow; `control` is the
   // per-session steering stream; `projections` is the timeline projection.
   'session.attachment', 'session.cancel', 'session.canOpenWorkspacePath',
-  'session.control', 'session.create', 'session.follow', 'session.fork',
-  'session.initializeDefaultModel', 'session.list', 'session.modelCatalog',
-  'session.openWorkspacePath', 'session.page', 'session.projections',
-  'session.prompt', 'session.rename', 'session.search', 'session.selectModel',
-  'session.updateQueue', 'session.workspacePathApplications',
+  'session.control', 'session.create', 'session.events', 'session.follow',
+  'session.fork', 'session.initializeDefaultModel', 'session.list',
+  'session.modelCatalog', 'session.observeEvent', 'session.observeProjections',
+  'session.observeState', 'session.openWorkspacePath', 'session.page',
+  'session.projections', 'session.prompt', 'session.rename', 'session.search',
+  'session.selectModel', 'session.state', 'session.updateQueue', 'session.wait',
+  'session.workspacePathApplications',
   // ── workspace: the sidebar tree (read + the user's own mutations) ─────────
   // `follow` is the tree snapshot stream (the old `workspace.list`); every
   // mutation carries ids the guard ownership-checks.
@@ -85,6 +90,28 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'goals.pause', 'goals.resume',
   // ── subagents: the caller's own agent subtree ─────────────────────────────
   'subagents.interruptByParent', 'subagents.prompt',
+  // ── actionCards: user actions on in-chat cards ─────────────────────────────
+  // `act` applies one verb to one card of the displayed Session; the Gateway
+  // resolves `agent` server-side from the Session id, so it reaches only the
+  // caller's own conversation (same trust shape as `terminal.*`).
+  'actionCards.act',
+  // ── forgePanel: the per-session git worktree / change-request panel ────────
+  // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
+  // resource the Gateway resolves and the remote guard ownership-checks): it
+  // inspects the Session's own checkout, follows or merges the Session's bound
+  // change requests, and creates/enters worktrees for that Session — the same
+  // trust shape as `terminal.*` (the agent can already run git/shell for the
+  // user inside the Session's world). Host-wide secrets are not touched; the
+  // sign-in probe reports only the state of the code host of the Session's
+  // own checkout.
+  'forgePanel.branches', 'forgePanel.cancelWorktree',
+  'forgePanel.changeRequestDiff', 'forgePanel.changeRequestStates',
+  'forgePanel.changeRequestText', 'forgePanel.continueInProject',
+  'forgePanel.dismiss', 'forgePanel.follow', 'forgePanel.localDiff',
+  'forgePanel.localText', 'forgePanel.markReady', 'forgePanel.merge',
+  'forgePanel.refresh', 'forgePanel.requestWorktree',
+  'forgePanel.restoreWorktree', 'forgePanel.retryWorktree',
+  'forgePanel.stopCreation', 'forgePanel.track',
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -140,8 +167,15 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'productAnalytics.enabled', 'productAnalytics.report', 'productAnalytics.watchPolicy',
   // ── chain-of-thought translation (a per-user reading aid) ─────────────────
   'cotTranslation.limits', 'cotTranslation.translate',
+  // ── pluginRecommendations: the enable-official-plugin card's text ──────────
+  // `describe` reads the catalog text behind one logged card; `agent` is
+  // Gateway-resolved and the `callId` must name a live card of that Session,
+  // so it is session-scoped like `actionCards.act`.
+  'pluginRecommendations.describe',
   // ── the agent's ask-the-user dialog ───────────────────────────────────────
   'userQuestions.answer', 'userQuestions.attachWait',
+  // ── toolResults: the Session's own tool-result trajectory stream ──────────
+  'toolResults.watch',
 ])
 
 /**
@@ -160,6 +194,11 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
  *    `pluginRegistryProbe`  – install/enable/remove bundles, rewrite the
  *                             instance-wide market index list, enumerate the
  *                             host's plugin tree.
+ *  - `liveshareShares`      – publishing sessions to external viewers through
+ *                             the Liveshare server, the host's relay
+ *                             connection and owner identity, and the share
+ *                             audit trail (upstream declares the whole surface
+ *                             "owner-only").
  *  - `dynamicCordisRunner`  – runs arbitrary host-side plugin code.
  */
 export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
@@ -181,11 +220,39 @@ export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
   'pluginManager.cancelInstall', 'pluginManager.inspect',
   'pluginManager.installBundle', 'pluginManager.listBundles',
   'pluginManager.listPlugins', 'pluginManager.listVersionExemptions',
+  'pluginManager.listVersions', 'pluginManager.readBundleDetail',
   'pluginManager.registries', 'pluginManager.removeBundle',
   'pluginManager.setBundleEnabled', 'pluginManager.setPluginEnabled',
-  'pluginManager.setVersionExemption', 'pluginManager.waitForInstall',
-  'pluginMarket.listIndexes', 'pluginMarket.search', 'pluginMarket.setIndexes',
+  'pluginManager.setVersionExemption', 'pluginManager.updateBundle', 'pluginManager.waitForInstall',
+  'pluginMarket.listIndexes', 'pluginMarket.readEntryDetail', 'pluginMarket.search', 'pluginMarket.setIndexes',
   'pluginRegistryProbe.fastest',
+  // ── cuaAccess: host-native permission and application consent controls ────
+  // The whole surface drives the HOST machine (macOS privacy prompts through
+  // the native helper, the shared application-consent store, and the
+  // host-wide PTC profile edit behind `enablePersistentPtc`), so it stays
+  // operator territory even though the client page lives in a Session.
+  'cuaAccess.applicationIcons', 'cuaAccess.applications',
+  'cuaAccess.enablePersistentPtc', 'cuaAccess.openSettings',
+  'cuaAccess.ptcConfiguration', 'cuaAccess.requestPermission',
+  'cuaAccess.retryApproval', 'cuaAccess.revoke', 'cuaAccess.systemStatus',
+  // ── liveshareShares: the host's share publishing and relay management ──────
+  // Upstream declares the whole surface the "Owner-only Remote surface over
+  // the share-management operations": publishing Sessions to external viewers
+  // through the Liveshare server, the host's relay connection, its owner
+  // identity and the share audit trail. That is operator territory in a
+  // multi-user deployment (external exposure + host-wide state), so the whole
+  // namespace stays admin-side; a future user-scoped subset would need
+  // per-share ownership checks dsh-login does not model yet.
+  'liveshareShares.audit', 'liveshareShares.capabilities',
+  'liveshareShares.create', 'liveshareShares.identity',
+  'liveshareShares.list', 'liveshareShares.relay',
+  'liveshareShares.setCapabilities', 'liveshareShares.setRelay',
+  'liveshareShares.stop', 'liveshareShares.testPublish',
+  'liveshareShares.testRelay', 'liveshareShares.updatePermissions',
+  // `deleteInactive` sweeps every ended task across the whole Host domain
+  // (no Session scope on the wire), so it is an operator action even though
+  // the rest of `schedule.*` is the caller's own surface.
+  'schedule.deleteInactive',
   'settings.describe', 'settings.mutate', 'settings.openSettingsDocument',
   'settings.replace', 'settings.update',
 ])

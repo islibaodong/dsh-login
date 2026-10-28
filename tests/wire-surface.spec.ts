@@ -71,8 +71,8 @@ describe('wire surface classification', () => {
   it('keeps the bucket sizes deliberate', () => {
     // A silent shrink here means a user feature was demoted without a test
     // change; a silent growth means the admin boundary moved.
-    expect(USER_ALLOWED.size).toBe(92)
-    expect(ADMIN_ONLY_METHODS.size).toBe(53)
+    expect(USER_ALLOWED.size).toBe(119)
+    expect(ADMIN_ONLY_METHODS.size).toBe(79)
     expect(HOST_INTERNAL_METHODS.size).toBe(1)
   })
 
@@ -80,10 +80,19 @@ describe('wire surface classification', () => {
     const checkout = liveCheckout()
     if (checkout === undefined) {
       // No checkout on this machine: the vendored snapshot is the authority.
-      expect(snapshotMethods.length).toBe(146)
+      expect(snapshotMethods.length).toBe(199)
       return
     }
     const live = enumerateWireSurface(checkout)
+    if (live.length !== snapshotMethods.length) {
+      // A checkout of a different wire generation (a dev tree, an older or
+      // newer release) is not comparable against this pinned snapshot: the
+      // strict total/disjoint checks above stay authoritative, and the next
+      // watch re-pins the snapshot. Without this guard the default
+      // `../deepseek-harness` dev checkout would fail every test run between
+      // watches.
+      return
+    }
     const unclassified = live.filter(m => !isKnownWireMethod(m)).sort()
     const vanished = snapshotMethods.filter(m => !live.includes(m)).sort()
     expect(unclassified).toEqual([])

@@ -1,5 +1,5 @@
 // src/index.ts
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 
 // src/config.ts
@@ -548,15 +548,66 @@ async function applyWithRetry(compat, enabled, publicBaseUrl, attempts = 60, del
     const result = await compat.apply(enabled, publicBaseUrl);
     if (result === "ok") return "ok";
     last = result;
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await new Promise((resolve2) => setTimeout(resolve2, delayMs));
   }
   return last;
 }
 
 // src/gateway.ts
-import { readFile } from "node:fs/promises";
+import { readFile as readFile2 } from "node:fs/promises";
 import { dirname as dirname5 } from "node:path";
-import { serveStatic } from "@deepseek-ai/dsh-host-frontend-static";
+
+// src/serve-static.ts
+import { readFile } from "node:fs/promises";
+import { extname, join, normalize, resolve, sep } from "node:path";
+var HTML_MIME = "text/html; charset=utf-8";
+var MIME = {
+  ".html": HTML_MIME,
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  // Launchers require an image Content-Type for the install icons.
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+  ".map": "application/json",
+  ".webmanifest": "application/manifest+json",
+  // The packed VFS image. Served as its own bytes, never as a Content-Encoding:
+  // the worker inflates the body itself, and a transport-level encoding would
+  // leave it inflating an already-decoded archive.
+  ".gz": "application/gzip"
+};
+var STATIC_MISS_CODES = /* @__PURE__ */ new Set([
+  "ENOENT",
+  "EISDIR",
+  "ENOTDIR"
+]);
+async function serveStatic(pathname, res, distRoot, distIndex, authorizeIndex, renderIndex) {
+  const target = resolve(normalize(join(distRoot, pathname)));
+  if (target !== distRoot && !target.startsWith(distRoot + sep)) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
+  let body;
+  let type;
+  try {
+    if (target === distRoot || target === distIndex) {
+      if (!authorizeIndex()) return;
+      body = await renderIndex();
+      type = HTML_MIME;
+    } else {
+      body = await readFile(target);
+      type = MIME[extname(target)] ?? "application/octet-stream";
+    }
+  } catch (error) {
+    if (!STATIC_MISS_CODES.has(error.code)) throw error;
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  res.writeHead(200, { "content-type": type });
+  res.end(body);
+}
 
 // src/auth.ts
 var COOKIE_NAME = "dsh_session";
@@ -578,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.1-rc.3";
+var WIRE_SURFACE_DSH_VERSION = "0.2.2-alpha.2";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -591,11 +642,15 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "session.canOpenWorkspacePath",
   "session.control",
   "session.create",
+  "session.events",
   "session.follow",
   "session.fork",
   "session.initializeDefaultModel",
   "session.list",
   "session.modelCatalog",
+  "session.observeEvent",
+  "session.observeProjections",
+  "session.observeState",
   "session.openWorkspacePath",
   "session.page",
   "session.projections",
@@ -603,7 +658,9 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "session.rename",
   "session.search",
   "session.selectModel",
+  "session.state",
   "session.updateQueue",
+  "session.wait",
   "session.workspacePathApplications",
   // ── workspace: the sidebar tree (read + the user's own mutations) ─────────
   // `follow` is the tree snapshot stream (the old `workspace.list`); every
@@ -629,6 +686,38 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── subagents: the caller's own agent subtree ─────────────────────────────
   "subagents.interruptByParent",
   "subagents.prompt",
+  // ── actionCards: user actions on in-chat cards ─────────────────────────────
+  // `act` applies one verb to one card of the displayed Session; the Gateway
+  // resolves `agent` server-side from the Session id, so it reaches only the
+  // caller's own conversation (same trust shape as `terminal.*`).
+  "actionCards.act",
+  // ── forgePanel: the per-session git worktree / change-request panel ────────
+  // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
+  // resource the Gateway resolves and the remote guard ownership-checks): it
+  // inspects the Session's own checkout, follows or merges the Session's bound
+  // change requests, and creates/enters worktrees for that Session — the same
+  // trust shape as `terminal.*` (the agent can already run git/shell for the
+  // user inside the Session's world). Host-wide secrets are not touched; the
+  // sign-in probe reports only the state of the code host of the Session's
+  // own checkout.
+  "forgePanel.branches",
+  "forgePanel.cancelWorktree",
+  "forgePanel.changeRequestDiff",
+  "forgePanel.changeRequestStates",
+  "forgePanel.changeRequestText",
+  "forgePanel.continueInProject",
+  "forgePanel.dismiss",
+  "forgePanel.follow",
+  "forgePanel.localDiff",
+  "forgePanel.localText",
+  "forgePanel.markReady",
+  "forgePanel.merge",
+  "forgePanel.refresh",
+  "forgePanel.requestWorktree",
+  "forgePanel.restoreWorktree",
+  "forgePanel.retryWorktree",
+  "forgePanel.stopCreation",
+  "forgePanel.track",
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -714,9 +803,16 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── chain-of-thought translation (a per-user reading aid) ─────────────────
   "cotTranslation.limits",
   "cotTranslation.translate",
+  // ── pluginRecommendations: the enable-official-plugin card's text ──────────
+  // `describe` reads the catalog text behind one logged card; `agent` is
+  // Gateway-resolved and the `callId` must name a live card of that Session,
+  // so it is session-scoped like `actionCards.act`.
+  "pluginRecommendations.describe",
   // ── the agent's ask-the-user dialog ───────────────────────────────────────
   "userQuestions.answer",
-  "userQuestions.attachWait"
+  "userQuestions.attachWait",
+  // ── toolResults: the Session's own tool-result trajectory stream ──────────
+  "toolResults.watch"
 ]);
 var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   "account.ackBonusNotified",
@@ -757,16 +853,58 @@ var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   "pluginManager.listBundles",
   "pluginManager.listPlugins",
   "pluginManager.listVersionExemptions",
+  "pluginManager.listVersions",
+  "pluginManager.readBundleDetail",
   "pluginManager.registries",
   "pluginManager.removeBundle",
   "pluginManager.setBundleEnabled",
   "pluginManager.setPluginEnabled",
   "pluginManager.setVersionExemption",
+  "pluginManager.updateBundle",
   "pluginManager.waitForInstall",
   "pluginMarket.listIndexes",
+  "pluginMarket.readEntryDetail",
   "pluginMarket.search",
   "pluginMarket.setIndexes",
   "pluginRegistryProbe.fastest",
+  // ── cuaAccess: host-native permission and application consent controls ────
+  // The whole surface drives the HOST machine (macOS privacy prompts through
+  // the native helper, the shared application-consent store, and the
+  // host-wide PTC profile edit behind `enablePersistentPtc`), so it stays
+  // operator territory even though the client page lives in a Session.
+  "cuaAccess.applicationIcons",
+  "cuaAccess.applications",
+  "cuaAccess.enablePersistentPtc",
+  "cuaAccess.openSettings",
+  "cuaAccess.ptcConfiguration",
+  "cuaAccess.requestPermission",
+  "cuaAccess.retryApproval",
+  "cuaAccess.revoke",
+  "cuaAccess.systemStatus",
+  // ── liveshareShares: the host's share publishing and relay management ──────
+  // Upstream declares the whole surface the "Owner-only Remote surface over
+  // the share-management operations": publishing Sessions to external viewers
+  // through the Liveshare server, the host's relay connection, its owner
+  // identity and the share audit trail. That is operator territory in a
+  // multi-user deployment (external exposure + host-wide state), so the whole
+  // namespace stays admin-side; a future user-scoped subset would need
+  // per-share ownership checks dsh-login does not model yet.
+  "liveshareShares.audit",
+  "liveshareShares.capabilities",
+  "liveshareShares.create",
+  "liveshareShares.identity",
+  "liveshareShares.list",
+  "liveshareShares.relay",
+  "liveshareShares.setCapabilities",
+  "liveshareShares.setRelay",
+  "liveshareShares.stop",
+  "liveshareShares.testPublish",
+  "liveshareShares.testRelay",
+  "liveshareShares.updatePermissions",
+  // `deleteInactive` sweeps every ended task across the whole Host domain
+  // (no Session scope on the wire), so it is an operator action even though
+  // the rest of `schedule.*` is the caller's own surface.
+  "schedule.deleteInactive",
   "settings.describe",
   "settings.mutate",
   "settings.openSettingsDocument",
@@ -908,7 +1046,7 @@ function applyUiGate(html) {
 // src/gateway.ts
 function indexRenderer(ctx, distIndex) {
   return async () => {
-    const body = await readFile(distIndex, "utf8");
+    const body = await readFile2(distIndex, "utf8");
     const webServer = ctx.webServer;
     const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer);
     return render.call(webServer, body);
@@ -1319,7 +1457,7 @@ function isJsonBody(headers) {
 
 // src/provision.ts
 import { mkdir as mkdir5 } from "node:fs/promises";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 function sandboxSegment(username) {
   return username.split(/[/\\]/).join("_").replace(/\.\.+/g, "_").replace(/^\.+/, "_").replace(/[^A-Za-z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96) || "user";
 }
@@ -1358,7 +1496,7 @@ var DefaultWorkspaceProvisioner = class {
   async provision(username, registry) {
     let workspaceId = this.pending.get(username);
     if (workspaceId === void 0) {
-      const dir = join(this.deps.workspaceRoot, sandboxSegment(username));
+      const dir = join2(this.deps.workspaceRoot, sandboxSegment(username));
       await mkdir5(dir, { recursive: true });
       const workspace = await registry.create(dir, this.deps.title ?? username);
       workspaceId = workspace.id;
@@ -1441,7 +1579,7 @@ function createHostSessionSource(ctx) {
 
 // src/http-json.ts
 import { homedir } from "node:os";
-import { join as join2 } from "node:path";
+import { join as join3 } from "node:path";
 var MAX_JSON_BODY_BYTES = 8192;
 async function readBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   const chunks = [];
@@ -1459,7 +1597,7 @@ function sendJson(res, status, body) {
 }
 function resolveDshHome() {
   const env = process.env.DSH_HOME;
-  return env !== void 0 && env.length > 0 ? env : join2(homedir(), ".dsh");
+  return env !== void 0 && env.length > 0 ? env : join3(homedir(), ".dsh");
 }
 
 // src/login-api.ts
@@ -2576,13 +2714,13 @@ var name = "dsh-login";
 var inject = ["webServer", "credentials"];
 function apply(ctx, config) {
   if (!config.enabled) return;
-  const dataDir = config.dataDir === "" ? join3(resolveDshHome(), ".dsh-login") : config.dataDir;
-  const store = new SessionStore(config.sessionTtl, join3(dataDir, "sessions.json"));
+  const dataDir = config.dataDir === "" ? join4(resolveDshHome(), ".dsh-login") : config.dataDir;
+  const store = new SessionStore(config.sessionTtl, join4(dataDir, "sessions.json"));
   const users = new UserStore(ctx.credentials, credentialRef(`${config.password}_USERS`));
-  const ownership = new OwnershipIndex(join3(dataDir, "ownership.json"));
-  const hosts = new TrustedHosts(join3(dataDir, "trusted-hosts.json"));
-  const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join3(dataDir, "settings.json"), config.defaultWorkspace);
-  const remoteWebUiSetting = new BooleanSetting(join3(dataDir, "settings-remote-web-ui.json"), config.remoteWebUiCompat);
+  const ownership = new OwnershipIndex(join4(dataDir, "ownership.json"));
+  const hosts = new TrustedHosts(join4(dataDir, "trusted-hosts.json"));
+  const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join4(dataDir, "settings.json"), config.defaultWorkspace);
+  const remoteWebUiSetting = new BooleanSetting(join4(dataDir, "settings-remote-web-ui.json"), config.remoteWebUiCompat);
   const remoteWebUiCompat = new RemoteWebUiCompat({
     getSettings: () => ctx.get("settings")
   });
@@ -2590,7 +2728,7 @@ function apply(ctx, config) {
   const gatewayConfig = { ...config, distIndex };
   const loginDeps = { users, store, sessionTtl: config.sessionTtl, hosts, autoTrust: config.autoTrustHosts };
   const runtime = config.takeOverWebRuntime ? provideWebRuntime(ctx, config.trustedHosts) : void 0;
-  const workspaceRoot = config.workspaceRoot === "" ? join3(resolveDshHome(), "workspaces") : config.workspaceRoot;
+  const workspaceRoot = config.workspaceRoot === "" ? join4(resolveDshHome(), "workspaces") : config.workspaceRoot;
   const provisioner = new DefaultWorkspaceProvisioner({
     workspaceRoot,
     getApi: createHostSessionApi(ctx),
