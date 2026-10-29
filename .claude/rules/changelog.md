@@ -1,5 +1,41 @@
 # Memory Changelog
 
+## 2026-10-29 (12:00 scheduled watch) — no new DSH release; 0.3.8 stays current
+- Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-29T04:00Z).
+  Detection (fresh evidence, all three channels):
+  - `git fetch --all --tags` in `E:\code\deepseek-harness`: clean, no output —
+    origin unchanged since the 10-28 watch. Newest tag still
+    `dsh-v0.2.2-alpha.2` (→ `f3803c9697`, the release merge PR #7437);
+    `origin/master` tip = `f3803c9697`; `git rev-list
+    dsh-v0.2.2-alpha.2..origin/master --count` = **0** — no commits past the
+    release merge. (Local `dev` branch still parked at `22ddee3792` on the
+    pre-alpha.2 backlog — same as every watch since 10-23; the local checkout
+    is only ever a detection source, never retargeted.)
+  - npm official registry, all 11 `@deepseek-ai/dsh-*` plugin-graph packages
+    (dsh, host-webserver, host-frontend-static, client-connection, settings,
+    web-frontend, client-modules, scope, session, brand, credentials):
+    `alpha=0.2.2-alpha.2` / `next=0.2.1-rc.4` on every row; `time.modified`
+    all within the alpha.2 publish window (2026-10-27T18:46–19:10Z) —
+    **nothing published since**. `@deepseek-ai/dsh` `latest` stays
+    `0.2.1-rc.2`.
+  - Multi-user re-check at `origin/master` (= the tag commit): grep
+    `multi.?user|multiuser|role.?based|\brbac\b` over `packages/ apps/` =
+    **1 hit** — `packages/api/remote-access/README.md` (identical to every
+    watch since alpha.3). No native accounts upstream; dsh-login remains the
+    multi-user layer. `__DSH_BOOT__` lever intact
+    (`packages/client/modules/src/index.ts:633`) — uiRoleGate intact. Role-
+    based whole-UI gating stays SHIPPED (0.3.0 uiRoleGate + 0.3.1
+    bridge-wall enforcement) — evaluation closed.
+- **Conclusion: no new DSH version (0.2.2-alpha.2 remains the newest release,
+  already adapted + released as 0.3.8 yesterday) → no adaptation needed.**
+  dsh-login 0.3.8 stays current; peer ranges (`>=0.2.2-alpha.2 <0.3.0-0` on
+  the prerelease tuple + `>=0.2.1-alpha.1` branches, alpha-line vendor pins)
+  already cover the latest runtime. No code changes → no README fix, no
+  release (release only when a new DSH version requires adaptation).
+- Verification: `npm test` = **21 files / 267 tests green** (6.70 s) on the
+  current tree (commit `7544df9`, master == origin/master, clean).
+- Changelog entry committed + pushed per the release-watch convention.
+
 ## 2026-10-28 (12:00 scheduled watch) — DSH 0.2.1-rc.4 + 0.2.2-alpha.2 released; adapted as 0.3.8
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-28T04:00Z).
   Detection (fresh evidence, all three channels):
