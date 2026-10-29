@@ -1,4 +1,4 @@
-﻿# dsh-login
+# dsh-login
 
 English | [简体中文](./README.zh.md)
 
@@ -226,6 +226,19 @@ hosts bind immediately and removals apply without a restart.
 | Static assets (`/assets/*.js`, `.css`, etc.) | Same gateway check |
 | SPA routes (`/conversations`, `/settings`, etc.) | Same gateway check |
 
+**The process launch token never reaches remote clients (issue #10).** The
+core mints one random launch token per process; `dsh web` prints the
+`/?token=…` URL in the **local console only**, and that token is what mints
+the browser cookie and what `GET /connect` exchanges for an owner-principal
+API credential. Earlier releases bootstrapped a fresh device by bouncing the
+browser to `/?token=<launchToken>`, which exposed the token to the remote
+client (Location header → browser history, proxy access logs) — dsh-login
+0.3.9 instead runs the same exchange server-side and serves the index
+directly with the minted cookie, so the token never appears on the wire. A
+remote user can therefore never reach owner credentials through dsh-login;
+the token remains a local-console-only secret, exactly as upstream delivers
+it.
+
 ### Protected by the bridge wall
 
 | Asset | Protection |
@@ -256,7 +269,7 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (247 tests, green under option A against DSH 0.1.5-alpha.1 through 0.2.1-alpha.2; requires the DSH checkout for package
+# Canonical full suite (269 tests, green under option A against DSH 0.1.5-alpha.1 through 0.2.2-alpha.2; requires the DSH checkout for package
 # resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
 npx vitest run
 ```

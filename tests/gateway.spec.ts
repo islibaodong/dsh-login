@@ -191,6 +191,8 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     coreCookie?: boolean
     /** The process launch token exposed by browserAuth ('' = unusable). */
     launchToken?: string
+    /** Collector for the `secure` argument each isAuthenticated probe saw. */
+    probeSecure?: Array<boolean | undefined>
   }
 
   /**
@@ -203,7 +205,10 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     ctx.provide('connection', {
       browserAuth: {
         launchToken: options.launchToken,
-        isAuthenticated: () => options.coreCookie === true,
+        isAuthenticated: (_request, secure) => {
+          options.probeSecure?.push(secure)
+          return options.coreCookie === true
+        },
       },
       authorizeIndex(req: IncomingMessage, res: ServerResponse): boolean {
         const url = new URL(req.url ?? '/', 'http://dsh.invalid')
@@ -221,7 +226,7 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
   }
 
   /** Boot the gateway over a real webserver with a dist shell and a session. */
-  async function bootGateway(fake: FakeConnectionOptions): Promise<{ port: number; token: string }> {
+  async function bootGateway(fake: FakeConnectionOptions): Promise<{ ctx: Context; port: number; token: string }> {
     const { ctx, port } = await bootServer()
     const dist = join(root!, 'dist')
     await mkdir(dist, { recursive: true })
@@ -232,25 +237,31 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     const handler = createGatewayHandler(ctx, { ...config, distIndex }, store)
     ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
     provideFakeConnection(ctx, fake)
-    return { port, token: session.token }
+    return { ctx, port, token: session.token }
   }
 
-  it('bounces a logged-in fresh device through the launch-token exchange (issue #3)', { timeout: 60_000 }, async () => {
+  it('bootstraps a logged-in fresh device via a server-side exchange (issue #10)', { timeout: 60_000 }, async () => {
     // Fresh device: valid dsh_session, no core browser cookie, no token in
-    // the URL. Forwarding the bare index request lets the core answer with
-    // its plain-text 401 ("dsh web authentication required") right after a
-    // successful login — the gateway must instead bounce the browser through
-    // the core's launch-token exchange so the cookie gets minted.
+    // the URL. The core answers a bare index forward with its plain-text 401
+    // ("dsh web authentication required"), so the gateway must run the
+    // launch-token exchange itself. Issue #10: it must do so SERVER-SIDE —
+    // the old 302 bounce to /?token=<launchToken> handed the process launch
+    // token (which /connect exchanges for an owner-principal API credential)
+    // to the remote client. The index is now served directly with the minted
+    // cookie replayed onto it: no redirect, no token anywhere on the wire.
     const { port, token } = await bootGateway({ coreCookie: false, launchToken: 'test-launch-token' })
     const res = await request(port, '/', { headers: { Cookie: `dsh_session=${token}` } })
-    expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/?token=test-launch-token')
-    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(res.status).toBe(200)
+    expect(res.body).toContain('shell')
+    expect(res.headers.get('set-cookie')).toContain('dsh.browser=core-minted')
+    expect(res.headers.get('location')).toBeNull()
+    expect(res.body).not.toContain('test-launch-token')
   })
 
   it('lets the forwarded token exchange mint the core cookie', { timeout: 60_000 }, async () => {
-    // The follow-up redirect MUST reach the core instead of bouncing again:
+    // A request that already carries the token reaches the core directly:
     // the exchange mints the authority-bound cookie and 303s to clean `./`.
+    // This is the out-of-band console-URL path, unchanged by issue #10.
     const { port, token } = await bootGateway({ coreCookie: false, launchToken: 'test-launch-token' })
     const res = await request(port, '/?token=test-launch-token', { headers: { Cookie: `dsh_session=${token}` } })
     expect(res.status).toBe(303)
@@ -286,11 +297,58 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
   })
 
   it('lets the core answer when no usable launch token is available', { timeout: 60_000 }, async () => {
-    // Without a launch token dsh-login cannot route the exchange; the core's
+    // Without a launch token dsh-login cannot run the exchange; the core's
     // own 401 must pass through untouched instead of a redirect to /?token=.
     const { port, token } = await bootGateway({ coreCookie: false, launchToken: '' })
     const res = await request(port, '/', { headers: { Cookie: `dsh_session=${token}` } })
     expect(res.status).toBe(401)
     expect(res.body).toContain('dsh web authentication required')
+  })
+
+  it('falls back to the core 401 when the server-side exchange mints nothing (issue #10)', { timeout: 60_000 }, async () => {
+    // If the captured exchange produces no cookie (e.g. no usable Host
+    // authority), the gateway must fall through to the connection's own
+    // answer — never back to a redirect that would hand out the token.
+    const { ctx, port } = await bootServer()
+    const dist = join(root!, 'dist')
+    await mkdir(dist, { recursive: true })
+    const distIndex = join(dist, 'index.html')
+    await writeFile(distIndex, '<html><body>shell</body></html>')
+    const store = new SessionStore(3600)
+    const session = store.create('alice', true)
+    const handler = createGatewayHandler(ctx, { ...config, distIndex }, store)
+    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.provide('connection', {
+      browserAuth: {
+        launchToken: 'test-launch-token',
+        isAuthenticated: () => false,
+      },
+      authorizeIndex(_req: IncomingMessage, res: ServerResponse): boolean {
+        res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' })
+        res.end('dsh web authentication required; reopen the URL printed by dsh web.\n')
+        return false
+      },
+    })
+    const res = await request(port, '/', { headers: { Cookie: `dsh_session=${session.token}` } })
+    expect(res.status).toBe(401)
+    expect(res.body).toContain('dsh web authentication required')
+    expect(res.headers.get('location')).toBeNull()
+    expect(res.body).not.toContain('test-launch-token')
+  })
+
+  it('probes the core cookie with the listener protocol (native-TLS authority match)', { timeout: 60_000 }, async () => {
+    // Native-TLS listeners mint cookies bound to the https-origin audience;
+    // probing with secure=false never matches them (0.3.8 bounced forever
+    // there). The probe must receive the listener's own protocol decision —
+    // the same derivation the core's service wrapper applies.
+    const probeSecure: Array<boolean | undefined> = []
+    const { ctx, port, token } = await bootGateway({ coreCookie: false, launchToken: 'test-launch-token', probeSecure })
+    Object.defineProperty(ctx.webServer, 'protocol', { value: 'https:' })
+    const res = await request(port, '/', { headers: { Cookie: `dsh_session=${token}` } })
+    expect(res.status).toBe(200)
+    expect(res.body).toContain('shell')
+    expect(res.headers.get('set-cookie')).toContain('dsh.browser=core-minted')
+    expect(probeSecure.length).toBeGreaterThan(0)
+    expect(probeSecure.every((secure) => secure === true)).toBe(true)
   })
 })

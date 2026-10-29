@@ -43,11 +43,83 @@ function indexRenderer(ctx: Context, distIndex: string): () => Promise<string> {
 interface ConnectionAuth {
   authorizeIndex(req: IncomingMessage, res: ServerResponse): boolean
   browserAuth?: {
-    isAuthenticated?(request: { headers: IncomingMessage['headers'] }): boolean
+    isAuthenticated?(request: { headers: IncomingMessage['headers'] }, secure?: boolean): boolean
     launchToken?: unknown
   }
-  isAuthenticated?(request: { headers: IncomingMessage['headers'] }): boolean
+  isAuthenticated?(request: { headers: IncomingMessage['headers'] }, secure?: boolean): boolean
   launchToken?: unknown
+}
+
+/**
+ * What the core writes during the captured server-side exchange: the status
+ * line and the response headers of a response that is never sent anywhere.
+ */
+interface ExchangeCapture {
+  readonly status: number
+  readonly headers: Record<string, string | string[]>
+}
+
+/**
+ * A minimal ServerResponse stand-in that records what the connection writes
+ * during the server-side launch-token exchange (issue #10). The core (and
+ * the connection surface generally) only calls `writeHead(code, headers)`
+ * and `end(body?)` on it.
+ */
+function createCaptureResponse(): ServerResponse & ExchangeCapture {
+  const headers: Record<string, string | string[]> = {}
+  let status = 0
+  const capture = {
+    get status() {
+      return status
+    },
+    get headers() {
+      return headers
+    },
+    writeHead(code: number, writeHeaders?: Record<string, string | string[]>): void {
+      status = code
+      if (writeHeaders !== undefined) {
+        for (const [name, value] of Object.entries(writeHeaders)) {
+          headers[name.toLowerCase()] = value
+        }
+      }
+    },
+    setHeader(name: string, value: string | string[]): void {
+      headers[name.toLowerCase()] = value
+    },
+    end(..._: unknown[]): void {},
+  }
+  return capture as unknown as ServerResponse & ExchangeCapture
+}
+
+/**
+ * Run the core launch-token exchange server-side (issue #10) and return the
+ * minted browser cookie, or undefined when the exchange did not mint one.
+ *
+ * A synthesized root request carrying the token is fed through the
+ * connection's own `authorizeIndex` — the same entry the browser would hit
+ * at `/?token=…` — with a capture response. The connection therefore owns
+ * the entire cookie format, authority binding, and Secure handling;
+ * dsh-login only replays the resulting `set-cookie`. No redirect and no
+ * token ever reach the client.
+ */
+function mintCoreCookie(
+  connection: ConnectionAuth,
+  launchToken: string,
+  req: IncomingMessage,
+): string | string[] | undefined {
+  const synthesized = {
+    method: 'GET',
+    url: `/?token=${encodeURIComponent(launchToken)}`,
+    headers: req.headers,
+  } as unknown as IncomingMessage
+  const capture = createCaptureResponse()
+  try {
+    connection.authorizeIndex(synthesized, capture)
+  } catch {
+    return undefined
+  }
+  const cookie = capture.headers['set-cookie']
+  return typeof cookie === 'string' || Array.isArray(cookie) ? cookie : undefined
 }
 
 /**
@@ -63,12 +135,26 @@ interface ConnectionAuth {
  * exchange, and dsh-login's login wall never routes the browser through it —
  * a device that just logged in holds only `dsh_session`, so a bare index
  * forward would return the core's plain-text 401 ("dsh web authentication
- * required"). When the core cookie is missing/expired and the request does
- * not already carry the exchange token, bounce it once to `/?token=<token>`:
- * the core mints the cookie and 303s back to the clean `./`, from where the
- * index is served normally. Requests already carrying a token always forward
- * (the core owns the exchange; a second bounce would loop), and connections
- * without the browserAuth surface keep the plain forward semantics.
+ * required").
+ *
+ * Issue #10: the original fix bounced the browser to `/?token=<token>`,
+ * which handed the process launch token to the remote client (Location
+ * header → history, proxy logs) — and the same token is accepted by the
+ * core's `GET /connect` for an owner-principal API credential, so any
+ * logged-in user could escalate. The bootstrap now runs the same exchange
+ * server-side (`mintCoreCookie`): the minted cookie is replayed onto the
+ * index response and no redirect is issued, so the token never leaves the
+ * process (only the local console print, as upstream delivers it). When the
+ * exchange mints nothing the request falls through to the connection's own
+ * answer — never back to a token-bearing redirect.
+ *
+ * The cookie probe receives the listener's own protocol decision
+ * (`webServer.protocol === 'https:'`, the same derivation the core's
+ * service wrapper applies): native-TLS listeners mint cookies bound to the
+ * https-origin audience, which a secure-blind probe would never match.
+ * Requests already carrying a token always forward (the connection owns the
+ * real exchange), and connections without the browserAuth surface keep the
+ * plain forward semantics.
  *
  * @returns true when the SPA index may be served; false when an upstream
  *   redirect/401 has already been written.
@@ -78,20 +164,22 @@ function createAuthorizeIndex(ctx: Context): (req: IncomingMessage, res: ServerR
     const connection = ctx.get('connection') as ConnectionAuth | undefined
     if (connection === undefined) return true
     const auth = connection.browserAuth ?? connection
+    const secure = (ctx.webServer as { protocol?: string } | undefined)?.protocol === 'https:'
     const hasTokenParam = req.url !== undefined && /[?&]token=/.test(req.url)
     if (
       !hasTokenParam &&
       typeof auth.isAuthenticated === 'function' &&
-      !auth.isAuthenticated(req) &&
+      !auth.isAuthenticated(req, secure) &&
       typeof auth.launchToken === 'string' &&
       auth.launchToken.length > 0
     ) {
-      res.writeHead(302, {
-        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
-        'cache-control': 'no-store',
-      })
-      res.end()
-      return false
+      const minted = mintCoreCookie(connection, auth.launchToken, req)
+      if (minted !== undefined) {
+        res.setHeader('set-cookie', minted)
+        return true
+      }
+      // The exchange minted nothing (e.g. no usable Host authority): fall
+      // through to the connection's own answer below.
     }
     return connection.authorizeIndex(req, res)
   }

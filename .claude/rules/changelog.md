@@ -1,5 +1,46 @@
 # Memory Changelog
 
+## 2026-10-29 — 0.3.9: issue #10 fixed (launch-token exposure via fresh-device bounce)
+- Issue #10 (hatsuyuki280/初雪, opened 2026-10-25, framed as spec-deviation
+  not a vuln report): `createAuthorizeIndex` (src/gateway.ts) bounced any
+  logged-in fresh device to `/?token=<launchToken>` — the process launch
+  token reached the remote client (Location header → history, proxy logs),
+  and the SAME token is accepted by the core's `GET /connect` for an
+  owner-principal API credential (`authorizeConnect` validates the same
+  `this.launchToken`; apiBridgeAuth never gates /connect). Multi-user
+  deployments only; also a revocation-boundary violation (token outlives
+  disable/logout until process restart). All claims verified against
+  @deepseek-ai/dsh-client-connection 0.2.2-alpha.2.
+- Fix (server-side virtual exchange, no cookie-format replication): when the
+  probe says the core cookie is missing and the request carries no token,
+  dsh-login synthesizes `GET /?token=<launchToken>` (real request headers)
+  and feeds it through `connection.authorizeIndex` with a capture response;
+  the minted `set-cookie` is replayed onto the real response and the index
+  is served inline (no redirect). Mint failure (e.g. no Host authority)
+  falls through to the core's plain-text 401 — never back to the token URL.
+  The core owns cookie format/authority/Secure via its own service wrapper
+  (`authorizeIndex` derives `secure` from `webServer.protocol === 'https:'`).
+- Drive-by fix (same code path): the `isAuthenticated` probe now receives
+  the listener's `secure` decision. 0.3.8 probed with secure=false, but
+  native-TLS listeners mint cookies bound to the https-origin audience →
+  probe never matched → infinite bounce loop on native-TLS deployments
+  (and a stale http-audience cookie would 401-lock the index after an
+  HTTP→TLS switch). `webServer.protocol` is a getter ("'https:' when tls
+  is configured", dsh-host-webserver lib index.js:350-354).
+- isAdmin gating was considered and rejected: it would break non-admin
+  fresh-device bootstrap (the issue #3 scenario). The virtual exchange
+  preserves bootstrap for everyone while never exposing the token.
+- Long-term upstream suggestion (issue #10): split launch-token scopes —
+  belongs in deepseek-ai/deepseek-harness Discussions, out of dsh-login's
+  control; with this fix the plugin path no longer needs it.
+- Tests: bounce test rewritten as server-side-exchange test (200 + minted
+  cookie + NO location + no token on the wire); added mint-failure → core
+  401 test and HTTPS probe (`secure === true` recorded) test. `npm test` =
+  **21 files / 269 tests green**; `verify:imports` ok.
+- README.md + README.zh.md Security notes: launch-token paragraph added
+  under "Protected by the gateway / 网关保护范围"; test counts 247→269.
+- Version 0.3.8 → 0.3.9; published per the .npmrc.publish procedure.
+
 ## 2026-10-29 (12:00 scheduled watch) — no new DSH release; 0.3.8 stays current
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-29T04:00Z).
   Detection (fresh evidence, all three channels):

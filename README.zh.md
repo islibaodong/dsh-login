@@ -208,6 +208,8 @@ npm run build:client   # node scripts/build-client.mjs
 | 静态资源 (`/assets/*.js`、`.css` 等) | 同样的网关检查 |
 | SPA 路由 (`/conversations`、`/settings` 等) | 同样的网关检查 |
 
+**进程 launch token 绝不会到达远程客户端（issue #10）。** 核心为每个进程铸造一个随机 launch token；`dsh web` 只把 `/?token=…` URL 打印在**本地控制台**，该令牌既用于铸造浏览器 Cookie，也是 `GET /connect` 兑换 owner 主体 API 凭据的凭据。早期版本通过把浏览器 302 到 `/?token=<launchToken>` 来引导新设备，这会把令牌暴露给远程客户端（Location 头 → 浏览器历史、代理访问日志）——dsh-login 0.3.9 改为在服务端完成同样的交换，直接带着铸造好的 Cookie 返回 index，令牌从此不出现在线路上。因此远程用户无法再经由 dsh-login 触达 owner 凭据；令牌保持为仅本地控制台可知的秘密，与上游的交付方式一致。
+
 ### 桥墙保护范围
 
 | 资产 | 保护方式 |
@@ -238,7 +240,7 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（247 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.1-alpha.2 上全绿——
+# 标准全量测试（269 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.2-alpha.2 上全绿——
 # 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
 npx vitest run
 ```
