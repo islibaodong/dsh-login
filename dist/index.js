@@ -1052,19 +1052,60 @@ function indexRenderer(ctx, distIndex) {
     return render.call(webServer, body);
   };
 }
+function createCaptureResponse() {
+  const headers = {};
+  let status = 0;
+  const capture = {
+    get status() {
+      return status;
+    },
+    get headers() {
+      return headers;
+    },
+    writeHead(code, writeHeaders) {
+      status = code;
+      if (writeHeaders !== void 0) {
+        for (const [name2, value] of Object.entries(writeHeaders)) {
+          headers[name2.toLowerCase()] = value;
+        }
+      }
+    },
+    setHeader(name2, value) {
+      headers[name2.toLowerCase()] = value;
+    },
+    end(..._) {
+    }
+  };
+  return capture;
+}
+function mintCoreCookie(connection, launchToken, req) {
+  const synthesized = {
+    method: "GET",
+    url: `/?token=${encodeURIComponent(launchToken)}`,
+    headers: req.headers
+  };
+  const capture = createCaptureResponse();
+  try {
+    connection.authorizeIndex(synthesized, capture);
+  } catch {
+    return void 0;
+  }
+  const cookie = capture.headers["set-cookie"];
+  return typeof cookie === "string" || Array.isArray(cookie) ? cookie : void 0;
+}
 function createAuthorizeIndex(ctx) {
   return (req, res) => {
     const connection = ctx.get("connection");
     if (connection === void 0) return true;
     const auth = connection.browserAuth ?? connection;
+    const secure = ctx.webServer?.protocol === "https:";
     const hasTokenParam = req.url !== void 0 && /[?&]token=/.test(req.url);
-    if (!hasTokenParam && typeof auth.isAuthenticated === "function" && !auth.isAuthenticated(req) && typeof auth.launchToken === "string" && auth.launchToken.length > 0) {
-      res.writeHead(302, {
-        Location: `/?token=${encodeURIComponent(auth.launchToken)}`,
-        "cache-control": "no-store"
-      });
-      res.end();
-      return false;
+    if (!hasTokenParam && typeof auth.isAuthenticated === "function" && !auth.isAuthenticated(req, secure) && typeof auth.launchToken === "string" && auth.launchToken.length > 0) {
+      const minted = mintCoreCookie(connection, auth.launchToken, req);
+      if (minted !== void 0) {
+        res.setHeader("set-cookie", minted);
+        return true;
+      }
     }
     return connection.authorizeIndex(req, res);
   };

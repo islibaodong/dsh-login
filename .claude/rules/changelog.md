@@ -1,5 +1,63 @@
 # Memory Changelog
 
+## 2026-10-30 (12:00 scheduled watch) — DSH 0.2.1-rc.5 released; verified compatible, NO adaptation, 0.3.9 stays current
+- Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-30T04:00:01Z).
+  Detection (all three channels):
+  - `git fetch --all --tags` in `E:\code\deepseek-harness` (retry with
+    `git -c http.version=HTTP/1.1 fetch --tags origin` on TLS eof): NEW tag
+    since the 10-29 noon watch — `dsh-v0.2.1-rc.5` → `b830ec950f` (merge PR
+    #7572 `worktree/release-dsh-0.2.1-rc.5`; release commit `31cfe2aafe`),
+    tagged 2026-10-29 21:01:28 +0800, npm published 2026-10-29T14:15:23Z
+    (22:15 +0800 — after the 10-29 watch). rc.4 IS an ancestor of rc.5;
+    alpha.2 is NOT (separate 0.2.2 line). rc.4..rc.5 = **4 commits**, the
+    only functional one PR #7484 (customize thinking-block rendering, ui-chat
+    only). Local `dev` still parked at `22ddee3792` (rc.3+1533), HEAD does not
+    contain rc.5 — detection source only, never retargeted.
+  - npm dist-tags, all 11 plugin-graph packages re-published at 0.2.1-rc.5
+    (`next`=rc.5 on every row; `@deepseek-ai/dsh` `latest` **promoted from
+    rc.2 to rc.5** — first stable-channel move since 10-17; the other rows'
+    `latest` dist-tags are stale 0.0.1-rc.*, use `next`); `alpha` stays
+    0.2.2-alpha.2 everywhere.
+  - Multi-user grep at the rc.5 tag (`multi.?user|multiuser|role.?based|\brbac\b`
+    over `packages/`): still exactly **1 hit** —
+    `packages/api/remote-access/README.md`. No native accounts upstream;
+    dsh-login remains the account/authn layer.
+- Adapter-surface verification (all against the rc.5 TAG, never the stale
+  tree): `git diff dsh-v0.2.1-rc.4..dsh-v0.2.1-rc.5 -- packages/host/webserver
+  packages/client/connection packages/host-frontend-static
+  packages/client/modules packages/api packages/boot apps/web apps/web-app
+  ui-slots ...` = 24 files, +41/−29, ALL package.json — zero source change on
+  the rc line (wire registry stays at the 146 rc-line methods). Direct tag
+  greps: `authorizeIndex(req, res, secure = false)` present at
+  `packages/client/connection/src/browser-auth.ts:263` and the core's
+  rpc-host already passes `webServer.protocol === 'https:'` (rpc-host.ts:194);
+  `get protocol(): 'http:' | 'https:'` at
+  `packages/host/webserver/src/index.ts:341` (src/, NOT src/lib/ — the 0.3.9
+  HTTPS-probe surface exists at rc.5); `__DSH_BOOT__` boot-graph lever intact
+  (`packages/client/modules/src/index.ts:592`,
+  `rows.push({kind:'global', name:'__DSH_BOOT__', value: graph})`).
+- Method-wall subset proof: all 146 rc-line methods as classified by v0.3.7
+  (`git show v0.3.7:src/api-filter.ts`) keep their EXACT bucket in HEAD's
+  199-method classification (92/53/1 ⊂ 119/79/1, checked per method via the
+  `new Set([...])` extraction). Combined with the zero-diff integration
+  layer, rc.5 needs no re-classification.
+- Decision: peers already admit rc.5 (`>=0.2.1-alpha.1 <0.3.0-0` branch,
+  semver prerelease tuple rule) and devDeps stay pinned to `^0.2.2-alpha.2`
+  (newer-generation line; same treatment rc.4 received on 10-28). **No
+  adapter release — 0.3.9 stays current.**
+- Verification: `npm test` = **21 files / 269 tests green** (12:12 +0800).
+- Repo-hygiene fix in the same pass: HEAD's `dist/index.js` was missing the
+  0.3.9 mintCoreCookie rebuild (the published v0.3.9 tarball DOES contain it
+  — verified by `npm pack @islibaodong/dsh-login@0.3.9` extraction) — the
+  working-tree dist (identical to the published tarball) is now committed so
+  HEAD == published state.
+- README.md + README.zh.md: banner/status updated 0.3.8 → 0.3.9 (they were
+  never updated at the 0.3.9 release and still claimed `latest` = 0.3.8);
+  0.3.9 added to both adaptation-history lines; 2026-10-30 rc.5 watch
+  paragraph added to both banners; multi-user/RBAC evaluation headers and
+  no-native-accounts rows extended with the rc.5 re-check (2026-10-30).
+- Changelog entry committed + pushed per the release-watch convention.
+
 ## 2026-10-29 — 0.3.9: issue #10 fixed (launch-token exposure via fresh-device bounce)
 - Issue #10 (hatsuyuki280/初雪, opened 2026-10-25, framed as spec-deviation
   not a vuln report): `createAuthorizeIndex` (src/gateway.ts) bounced any
