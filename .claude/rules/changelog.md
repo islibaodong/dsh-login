@@ -1,5 +1,63 @@
 # Memory Changelog
 
+## 2026-11-02 (scheduled watch) — no new DSH release; 0.3.9 stays current, no adaptation, no publish
+- Scheduled watch (cron `0 12 * * *` Asia/Shanghai family; run 2026-11-02 ~16:35 +0800).
+  Detection (all three channels):
+  - `git fetch --tags` in `E:\code\deepseek-harness`: no new objects. Newest
+    tags remain `dsh-v0.2.1-rc.5` (2026-10-29 21:01 +0800, `b830ec950f` /
+    `31cfe2aafe`) > `dsh-v0.2.2-alpha.2` (2026-10-28, `f3803c9697`). Local
+    `master` == `origin/master` == `ce7073d512` (2026-10-30 00:13, PR #7552)
+    — unchanged since the 10-30 watch.
+  - npm dist-tags unchanged: `@deepseek-ai/dsh-host-webserver` and
+    `dsh-web-frontend` both `next`=0.2.1-rc.5 / `alpha`=0.2.2-alpha.2;
+    `time.modified` = 2026-10-29T13:50:52Z (the rc.5 publish window) — no
+    registry activity since.
+  - Multi-user grep at the rc.5 tag (`multi.?user|multiuser|role.?based|\brbac\b`
+    over `packages/ apps/`): still exactly **1 hit** —
+    `packages/api/remote-access/README.md`. No native accounts upstream;
+    dsh-login remains the account/authn layer. Role-based whole-UI control
+    remains delivered in-plugin (0.3.0 `uiRoleGate` + 0.3.1 bridge wall);
+    evaluation stays closed.
+- Dev-tree observations recorded for the NEXT re-pin (unreleased; NO action
+  taken — the vendored fixture keeps tracking the newest RELEASE line):
+  - Wire surface drift: `node scripts/dump-wire-surface.mjs --checkout` on the
+    dev tree (HEAD `ce7073d512`) dumps **204 methods** vs the vendored 199
+    (0.2.2-alpha.2). Added: `forgePanel.changeRequestChecks`,
+    `forgePanel.submitReview`, `schedule.create`, `schedule.deliveryLimits`,
+    `schedule.edit`, `schedule.run`, `schedule.view`. Removed:
+    `schedule.update`, `schedule.delete` (dev-tree `ScheduleService` @Remote
+    methods are now deliveryLimits/create/list/catalog/view/history/run/
+    deleteInactive/edit; "Host-wide durable reminders"; no resource
+    declarations → global resource). Decision: **reverted
+    `tests/fixtures/wire-surface.json` to the vendored 199** — the fixture
+    pins a released wire generation, and `tests/wire-surface.spec.ts:79-100`
+    already no-ops its strict cross-check when the live checkout's length
+    differs from the snapshot's (vendored snapshot is authoritative; "next
+    watch re-pins" when a release lands). The 7 new methods are unclassified
+    in `src/api-filter.ts` → denied by default on dev trees (harmless; not a
+    released line).
+  - remote-access evolution (rc.5..HEAD diff, unreleased): new
+    `packages/api/remote-access/src/client/when-allowed.ts`
+    (`whenAllowed(ctx, answer, callback, label)` effect controller) and
+    `client/mount.ts` `ClientRemoteAccess.source(kind, id, action)` /
+    `whenAccess`; README adds session/attachment whole-library-read warnings;
+    the `__DSH_REMOTE_ACCESS__` snapshot became per-Peer
+    (`snapshotFor(peer.principal)`). Liveshare non-owner-Peer authorization —
+    a future native substrate if dsh-login ever mints non-owner principals;
+    no impact on the current owner-principal model.
+- Environment note: `npm run verify:imports` currently fails on node
+  v24.20.0 + tsx 4.23.15 — "TypeScript parameter property is not supported in
+  strip-only mode" for 9 src files using TS parameter properties
+  (admin-api/boolean-setting/hosts/index/ownership/provision/
+  remote-web-ui-compat/session/users/workspace-setting.ts). Reproduces on
+  unmodified HEAD → environment issue, not a code regression (the 10-29 run
+  was clean); `npm test` and the esbuild `build` are unaffected.
+- Verification: clean tree `npm test` = 21 files / 269 tests green
+  (2026-11-02 16:37 +0800). Docs updated (README.md / README.zh.md watch
+  paragraph + multi-user/RBAC and per-identity-UI-gate re-verification
+  dates). **No npm publish** — no new DSH release, no adaptation; 0.3.9
+  stays current.
+
 ## 2026-10-30 (12:00 scheduled watch) — DSH 0.2.1-rc.5 released; verified compatible, NO adaptation, 0.3.9 stays current
 - Scheduled cron run (`0 12 * * *` Asia/Shanghai, trigger 2026-10-30T04:00:01Z).
   Detection (all three channels):
