@@ -1,5 +1,29 @@
 # Memory Changelog
 
+## 2026-11-03 (scheduled watch) — no new DSH release; 0.3.9 stays current, no adaptation, no publish
+- Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-03T04:00:00Z / 12:00 +0800).
+  Detection (all three channels):
+  - `git fetch --tags` in `E:\code\deepseek-harness`: no new objects. Newest tags remain
+    `dsh-v0.2.1-rc.5` (2026-10-29 21:01 +0800, `b830ec950f`/`31cfe2aafe`) > `dsh-v0.2.2-alpha.2`
+    (2026-10-28, `f3803c9697`). Local `master` == `origin/master` == `ce7073d512` — unchanged
+    since the 10-30 watch; nothing new landed upstream, so the 11-02 dev-tree observations
+    (wire surface drift 199 → 204; remote-access `whenAccess`/`whenAllowed`/per-Peer
+    `snapshotFor`) remain the latest and still carry no action.
+  - npm dist-tags unchanged: `@deepseek-ai/dsh` `latest`/`next` = 0.2.1-rc.5, `alpha` =
+    0.2.2-alpha.2 (`time.modified` 2026-10-29T16:01:42Z); `dsh-web-frontend` (`next` rc.5 /
+    `alpha` alpha.2, `time.modified` 2026-10-29T14:13:50Z) and `dsh-host-webserver` (same
+    dist-tags, `time.modified` 2026-10-29T13:50:52Z) — no registry activity since the 10-29
+    rc.5 publish window.
+  - Multi-user grep at the rc.5 tag (`multi.?user|multiuser|role.?based|\brbac\b` over
+    `packages/ apps/`): still exactly **1 hit** — `packages/api/remote-access/README.md`.
+    No native accounts upstream; dsh-login remains the account/authn layer. Role-based
+    whole-UI control remains delivered in-plugin (0.3.0 `uiRoleGate` + 0.3.1 bridge wall);
+    evaluation stays closed.
+- Verification: clean tree `npm test` = 21 files / 269 tests green (2026-11-03 12:01 +0800).
+  Docs updated (README.md / README.zh.md new watch paragraph + multi-user/RBAC and
+  per-identity-UI-gate re-verification dates). **No npm publish** — no new DSH release, no
+  adaptation; 0.3.9 stays current.
+
 ## 2026-11-02 (scheduled watch) — no new DSH release; 0.3.9 stays current, no adaptation, no publish
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai family; run 2026-11-02 ~16:35 +0800).
   Detection (all three channels):
