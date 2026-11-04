@@ -53,6 +53,19 @@
   main checkout. `tests/wire-surface.spec.ts` live cross-check is
   generation-guarded (strict comparison only when live registry size ==
   fixture size) — an older checkout no longer false-positives.
+- Worktree CLEANUP trap: `git worktree remove` can fail on ONE file —
+  `@koromix+koffi-win32-x64`'s `koffi.node` (loaded by the koromix typert
+  toolchain during `pnpm run typecheck`) intermittently returns raw Win32
+  "Access denied" on DELETE (and sometimes even on OPEN), while RENAME of
+  the same file and deleting sibling files work; no module/handle holder is
+  findable (happened twice: post-0.3.8 and post-0.3.10). Fix: rename the
+  locked file's ancestor directory out of the worktree into
+  `E:\koffi-locked-remnant\` (e.g. `wt-022a3-node_modules`), then delete the
+  rest normally — renaming an ancestor only touches that dir entry, not the
+  locked file. Do NOT try to delete `E:\koffi-locked-remnant` contents; the
+  file there is the same un-deletable hardlink (links: pnpm store
+  `E:\dev-cache\pnpm-store\v11\files\…`, main checkout node_modules, and
+  each quarantine copy).
 - Upgrading to 0.1.7+ hits TWO ERESOLVE traps (2026-09-23): (1) the plugin's
   OWN peerDependencies must gain the new tuple branch BEFORE installing
   (`0.1.7-alpha.2` does not satisfy `>=0.1.6-alpha.1` — node-semver prerelease
