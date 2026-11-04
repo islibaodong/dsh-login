@@ -28,7 +28,8 @@
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
 - vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
-  tarballs, devDeps pinned to `^0.2.2-alpha.2` since 2026-10-28, before that
+  tarballs, devDeps pinned to `^0.2.2-alpha.3` since 2026-11-04, before that
+  `^0.2.2-alpha.2` since 2026-10-28, before that
   `^0.2.1-rc.3` since 2026-10-24, before that
   `^0.2.1-rc.2` since 2026-10-18; before that
   `^0.2.1-alpha.4`, and `^0.1.7-alpha.2` before 2026-09-23) — there are
@@ -47,7 +48,8 @@
   (`pnpm run typecheck` = `tsx scripts/build.ts --scope typecheck` in the dsh
   repo) and are NOT shipped in npm tarballs — dumping from an unpacked
   tarball yields 0 methods. Use the detached worktree
-  `E:\code\deepseek-harness-wt-022a2` (@ dsh-v0.2.2-alpha.2) or build the
+  `E:\code\deepseek-harness-wt-022a3` (@ dsh-v0.2.2-alpha.3; before that
+  `wt-022a2` @ dsh-v0.2.2-alpha.2, cleaned post-0.3.10) or build the
   main checkout. `tests/wire-surface.spec.ts` live cross-check is
   generation-guarded (strict comparison only when live registry size ==
   fixture size) — an older checkout no longer false-positives.
@@ -84,11 +86,20 @@
   `dsh-client-connection` client half is unchanged alpha.4→rc.2, so a rebuild
   reproduces `dist/*` byte-identical — no re-stamp churn. rc.3 note
   (2026-10-24): unchanged again rc.2→rc.3 (`dist/client.js` byte-identical;
-  only `dist/index.js` re-stamps `WIRE_SURFACE_DSH_VERSION`).
+  only `dist/index.js` re-stamps `WIRE_SURFACE_DSH_VERSION`). alpha.3 note
+  (2026-11-04): connection/modules/ui-slots are package.json-bump-only vs
+  alpha.2, so the rebuild is byte-identical again (`dist/client.js` 37134
+  chars, banner-only re-stamp); only `dist/index.js`/`.map` carry the new
+  204-method buckets.
 - **rc.2 moved the vendored packages to STABLE** (2026-10-18): pin cordis
   `~4.0.5`, schemastery `~3.18.5`, include `~1.0.10`, loader `~1.0.6` — the
   npm `dsh-0-2-1-alpha-3` vendor dist-tags still point at the alpha vintages
-  and are the wrong pins now. Also at rc.2 `dsh-client-connection` peers only
+  and are the wrong pins now. REVERSED on the 0.2.2 line: alpha.2 re-issued
+  vendor ALPHAS (cordis 4.0.6-alpha.1 etc.) and alpha.3 re-issued them again
+  (cordis `4.0.6-alpha.2`, schemastery `3.18.6-alpha.2`, include
+  `1.0.11-alpha.2`, loader `1.0.7-alpha.2` — 0.3.9/0.3.10 pin those), so the
+  "STABLE pin" guidance applies only to the 0.2.1 line. Also at rc.2
+  `dsh-client-connection` peers only
   `cordis ~4.0.5` + `dsh-scope 0.2.1-rc.2` (no longer direct `dsh-session` /
   `dsh-brand` peers), so the "exact-pins NEW peers" ERESOLVE trap below has a
   different shape than at 0.1.7.

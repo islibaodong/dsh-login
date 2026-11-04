@@ -1,5 +1,44 @@
 # Memory Changelog
 
+## 2026-11-04 (scheduled watch) — DSH 0.2.2-alpha.3 released; adapted + released as **0.3.10**
+- Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-04T04:00:00Z / 12:00 +0800).
+  Detection: `dsh-v0.2.2-alpha.3` tag → `05b1cae8db` ("release(vendor): cordis 4.0.6-alpha.2,
+  cosmokit 1.8.7-alpha.2, group 1.0.6-alpha.2, hmr 1.0.21-alpha.2, include 1.0.11-alpha.2,
+  loader 1.0.7-alpha.2, logger-console 1.0.6-alpha.2, schemastery 3.18.6-alpha.2,
+  timer 1.1.8-alpha.2"), tagged 2026-11-03 14:19:06 +0800; **111 commits** past
+  `ce7073d512`; npm `alpha` = 0.2.2-alpha.3 (published 2026-11-03T07:48:26Z), `latest`/`next`
+  stay 0.2.1-rc.5; all ten peer packages verified published at 0.2.2-alpha.3.
+- Adapter surface: `packages/api` sees **only** the session-controller projection rework
+  (~130 src lines: `ApiSessionList` keeps a `ProjectionHandle<SessionListMetadata>`;
+  `cachedSnapshot` → `snapshot`; **`SessionProjectionUpdate` wire shape changed**
+  `{sessionId, key, value, seq}` → `{sessionId, seq, changes: {key, val}[]}` — one update
+  per committed event). `@Remote` method names unchanged → method walls untouched; frame
+  payload rides inside session-scoped streams already gated by ownership. Client packages
+  (`connection`/`modules`/`ui-slots`) and host (`webserver`/`frontend-static`): package.json
+  bumps only → `dist/client.js` banner-only re-stamp (byte-identical, 37134 chars).
+- **Wire surface re-pinned 199 → 204** (the 11-02 dev-tree observation released):
+  `schedule.update`/`schedule.delete` folded into `schedule.edit`; + `schedule.create`/
+  `deliveryLimits`/`run`/`view` + `forgePanel.changeRequestChecks`/`submitReview`, all
+  classified **user** (schedule CRUD = caller's own surface, same trust shape as the
+  already-admitted schedule reads — shared host schedule domain, no per-task ownership
+  upstream; forge pair session-scoped via `this.bound(session, url)`, `submitReview` =
+  same trust shape as `merge`/`markReady`). Buckets **124 / 79 / 1**.
+- Files: `package.json` (v0.3.10, devDeps → alpha.3 + vendor alphas, **peers unchanged** —
+  `>=0.2.2-alpha.2 <0.3.0-0` admits alpha.3 via same-tuple rule), `src/api-filter.ts`,
+  `tests/fixtures/wire-surface.json` (re-dumped from a **built** alpha.3 worktree
+  `E:\code\deepseek-harness-wt-022a3` @ `05b1cae8db`: `pnpm install` + `pnpm run typecheck`,
+  5 gates pass in 191.20s, 36 typert files), `tests/wire-surface.spec.ts` (pins 124/79/1,
+  no-checkout expects 204), `dist/*` rebuilt, `docs/adapt-dsh-0.2.2-alpha.3.md` (new),
+  README.md / README.zh.md (banner + 11-04 watch + history + tracking/eval dates).
+- Verification: `npm install` clean (30 packages); `npm test` = 21 files / 269 tests green;
+  strict live cross-check 204 == 204 vs the checkout; `npm run build` exit 0;
+  `verify:imports` still fails on node v24.20.0 tsx strip-only (pre-existing env issue).
+- Multi-user grep at the alpha.3 tag: still exactly **1 hit** —
+  `packages/api/remote-access/README.md`. `__DSH_BOOT__` lever intact
+  (`packages/client/modules/src/index.ts:635`). No native accounts; dsh-login remains the
+  account layer; uiRoleGate unaffected. Release: commit + tag `v0.3.10` + push + npm
+  publish + gh release (see git/npm for the record).
+
 ## 2026-11-03 (scheduled watch) — no new DSH release; 0.3.9 stays current, no adaptation, no publish
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-03T04:00:00Z / 12:00 +0800).
   Detection (all three channels):

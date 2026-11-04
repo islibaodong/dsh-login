@@ -18,12 +18,15 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.2-alpha.2 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 199 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
+ * 0.2.2-alpha.3 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
+ * 204 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
  * subset of this classification, so one list serves both supported lines; the
- * 53 alpha-line additions are the forge panel, liveshare share management,
+ * alpha-line additions are the forge panel, liveshare share management,
  * session state/observation, tool-result watch, CUA consent, plugin
- * detail/update and recommendation surfaces). They are a **total, disjoint
+ * detail/update and recommendation surfaces, plus the 0.2.2-alpha.3 schedule
+ * CRUD split (`create`/`edit`/`run`/`view`/`deliveryLimits` replacing the
+ * retired `update`/`delete` pair) and the forge review surface
+ * (`changeRequestChecks`, `submitReview`)). They are a **total, disjoint
  * classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
@@ -44,7 +47,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-alpha.2'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-alpha.3'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may
@@ -98,20 +101,25 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // ── forgePanel: the per-session git worktree / change-request panel ────────
   // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
   // resource the Gateway resolves and the remote guard ownership-checks): it
-  // inspects the Session's own checkout, follows or merges the Session's bound
-  // change requests, and creates/enters worktrees for that Session — the same
+  // inspects the Session's own checkout, follows, reviews or merges the
+  // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
+  // `changeRequestChecks` and the review publisher `submitReview` — the same
+  // trust shape as the already-admitted `merge`/`markReady`, since publishing
+  // a review acts on the Session's own code host exactly like merging does),
+  // and creates/enters worktrees for that Session — the same
   // trust shape as `terminal.*` (the agent can already run git/shell for the
   // user inside the Session's world). Host-wide secrets are not touched; the
   // sign-in probe reports only the state of the code host of the Session's
   // own checkout.
   'forgePanel.branches', 'forgePanel.cancelWorktree',
-  'forgePanel.changeRequestDiff', 'forgePanel.changeRequestStates',
+  'forgePanel.changeRequestChecks', 'forgePanel.changeRequestDiff',
+  'forgePanel.changeRequestStates',
   'forgePanel.changeRequestText', 'forgePanel.continueInProject',
   'forgePanel.dismiss', 'forgePanel.follow', 'forgePanel.localDiff',
   'forgePanel.localText', 'forgePanel.markReady', 'forgePanel.merge',
   'forgePanel.refresh', 'forgePanel.requestWorktree',
   'forgePanel.restoreWorktree', 'forgePanel.retryWorktree',
-  'forgePanel.stopCreation', 'forgePanel.track',
+  'forgePanel.stopCreation', 'forgePanel.submitReview', 'forgePanel.track',
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -146,8 +154,17 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'speech.cancelPreparation', 'speech.catalog', 'speech.configure',
   'speech.follow', 'speech.prepare', 'speech.transcribe',
   // ── schedule: the user's own scheduled runs ───────────────────────────────
-  'schedule.catalog', 'schedule.delete', 'schedule.history', 'schedule.list',
-  'schedule.update',
+  // 0.2.2-alpha.3 reshaped the surface: the retired `update`/`delete` pair is
+  // folded into `edit` (one call updates or deletes a task), and `create`,
+  // `run` (deliver one task now), `view` (read one task) and `deliveryLimits`
+  // (the recurrence picker's interval constraint) join the already-admitted
+  // `catalog`/`list`/`history` reads. Same trust shape as before: tasks are
+  // addressed by id on the Host's shared schedule domain (upstream models no
+  // per-task ownership — the pre-existing reads already expose it), and the
+  // host-wide sweep `deleteInactive` stays admin-only.
+  'schedule.catalog', 'schedule.create', 'schedule.deliveryLimits',
+  'schedule.edit', 'schedule.history', 'schedule.list', 'schedule.run',
+  'schedule.view',
   // ── composer + pickers the GUI calls on ordinary-user pages ───────────────
   // `directoryPicker.*` is the "add workspace" directory chooser
   // (`ui-workspace/src/client/navigation.ts`), i.e. issue #4 symptom 1. It is

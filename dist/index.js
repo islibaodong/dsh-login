@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.2-alpha.2";
+var WIRE_SURFACE_DSH_VERSION = "0.2.2-alpha.3";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -694,14 +694,19 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── forgePanel: the per-session git worktree / change-request panel ────────
   // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
   // resource the Gateway resolves and the remote guard ownership-checks): it
-  // inspects the Session's own checkout, follows or merges the Session's bound
-  // change requests, and creates/enters worktrees for that Session — the same
+  // inspects the Session's own checkout, follows, reviews or merges the
+  // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
+  // `changeRequestChecks` and the review publisher `submitReview` — the same
+  // trust shape as the already-admitted `merge`/`markReady`, since publishing
+  // a review acts on the Session's own code host exactly like merging does),
+  // and creates/enters worktrees for that Session — the same
   // trust shape as `terminal.*` (the agent can already run git/shell for the
   // user inside the Session's world). Host-wide secrets are not touched; the
   // sign-in probe reports only the state of the code host of the Session's
   // own checkout.
   "forgePanel.branches",
   "forgePanel.cancelWorktree",
+  "forgePanel.changeRequestChecks",
   "forgePanel.changeRequestDiff",
   "forgePanel.changeRequestStates",
   "forgePanel.changeRequestText",
@@ -717,6 +722,7 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "forgePanel.restoreWorktree",
   "forgePanel.retryWorktree",
   "forgePanel.stopCreation",
+  "forgePanel.submitReview",
   "forgePanel.track",
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
@@ -770,11 +776,22 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "speech.prepare",
   "speech.transcribe",
   // ── schedule: the user's own scheduled runs ───────────────────────────────
+  // 0.2.2-alpha.3 reshaped the surface: the retired `update`/`delete` pair is
+  // folded into `edit` (one call updates or deletes a task), and `create`,
+  // `run` (deliver one task now), `view` (read one task) and `deliveryLimits`
+  // (the recurrence picker's interval constraint) join the already-admitted
+  // `catalog`/`list`/`history` reads. Same trust shape as before: tasks are
+  // addressed by id on the Host's shared schedule domain (upstream models no
+  // per-task ownership — the pre-existing reads already expose it), and the
+  // host-wide sweep `deleteInactive` stays admin-only.
   "schedule.catalog",
-  "schedule.delete",
+  "schedule.create",
+  "schedule.deliveryLimits",
+  "schedule.edit",
   "schedule.history",
   "schedule.list",
-  "schedule.update",
+  "schedule.run",
+  "schedule.view",
   // ── composer + pickers the GUI calls on ordinary-user pages ───────────────
   // `directoryPicker.*` is the "add workspace" directory chooser
   // (`ui-workspace/src/client/navigation.ts`), i.e. issue #4 symptom 1. It is
