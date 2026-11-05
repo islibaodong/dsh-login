@@ -57,10 +57,13 @@ authenticated sessions.
   `dsh.client` declaration + `dist/client.js` (the settings-panel half).
 
 ## External Dependencies (peers)
-`@deepseek-ai/cordis`, `dsh-client-connection`, `dsh-credentials`,
+`@deepseek-ai/cordis`, `@deepseek-ai/schemastery`, `dsh-client-connection`,
+`dsh-credentials`,
 `dsh-host-frontend-static`, `dsh-host-webserver`, `dsh-settings`,
-`dsh-web-frontend`, `schemastery` (see `package.json` peerDependencies).
-Tests resolve `@deepseek-ai/*` at RUNTIME from `node_modules` (there are **no**
+`dsh-web-frontend` (see `package.json` peerDependencies; since 0.3.11 /
+DSH 0.2.2-rc.1 the cordis peer also carries `|| ~4.1.0` and schemastery
+`|| ~3.19.0`). Tests resolve `@deepseek-ai/*` at RUNTIME from `node_modules`
+(there are **no**
 vitest aliases — `vitest.config.ts` is bare); only tsconfig `paths` map them to
 the harness checkout (`E:/code/deepseek-harness`) for TYPES.
 **Corrected 2026-10-02:** the old note that tests/build "additionally resolve

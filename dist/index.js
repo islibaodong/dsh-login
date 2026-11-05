@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.2-alpha.3";
+var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.1";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced

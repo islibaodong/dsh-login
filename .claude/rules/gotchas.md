@@ -28,7 +28,8 @@
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
 - vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
-  tarballs, devDeps pinned to `^0.2.2-alpha.3` since 2026-11-04, before that
+  tarballs, devDeps pinned to `^0.2.2-rc.1` since 2026-11-05, before that
+  `^0.2.2-alpha.3` since 2026-11-04, before that
   `^0.2.2-alpha.2` since 2026-10-28, before that
   `^0.2.1-rc.3` since 2026-10-24, before that
   `^0.2.1-rc.2` since 2026-10-18; before that
@@ -50,7 +51,9 @@
   tarball yields 0 methods. Use the detached worktree
   `E:\code\deepseek-harness-wt-022a3` (@ dsh-v0.2.2-alpha.3; before that
   `wt-022a2` @ dsh-v0.2.2-alpha.2, cleaned post-0.3.10) or build the
-  main checkout. `tests/wire-surface.spec.ts` live cross-check is
+  main checkout. NOTE (2026-11-05): rc.1 needed NO new worktree — its range
+  is package.json-only, so the alpha.3-built worktree remains the newest
+  valid dump source (registries byte-identical). `tests/wire-surface.spec.ts` live cross-check is
   generation-guarded (strict comparison only when live registry size ==
   fixture size) — an older checkout no longer false-positives.
 - Worktree CLEANUP trap: `git worktree remove` can fail on ONE file —
@@ -103,7 +106,20 @@
   (2026-11-04): connection/modules/ui-slots are package.json-bump-only vs
   alpha.2, so the rebuild is byte-identical again (`dist/client.js` 37134
   chars, banner-only re-stamp); only `dist/index.js`/`.map` carry the new
-  204-method buckets.
+  204-method buckets. rc.1 note (2026-11-05): same again alpha.3→rc.1
+  (`dist/client.js` byte-identical, SHA-256 verified; `dist/index.js`
+  stamp-only).
+- Incremental `npm install` on a STALE lockfile tree can ERESOLVE-wedge even
+  when package.json is consistent (2026-11-05, alpha.3→rc.1: old
+  `cordis-plugin-group` peer from the alpha.3 `dsh-app-boot` chain blocked
+  resolution). Fix: delete `node_modules` + `package-lock.json` and clean
+  install (resolved 111 packages in 10s). Don't burn time debugging peer
+  math first — if the tree predates the devDep retarget, just clean-install.
+- **`verify:imports` tsx strip-only failure is RESOLVED (2026-11-05):** the
+  pre-existing environment issue recorded since 0.3.9 (node v24.20.0 +
+  tsx failing 9 src files with a strip-only parameter-property error) no
+  longer reproduces — `npm run verify:imports` exits 0 after the rc.1 clean
+  install. If it resurfaces, treat as environment, not regression.
 - **rc.2 moved the vendored packages to STABLE** (2026-10-18): pin cordis
   `~4.0.5`, schemastery `~3.18.5`, include `~1.0.10`, loader `~1.0.6` — the
   npm `dsh-0-2-1-alpha-3` vendor dist-tags still point at the alpha vintages

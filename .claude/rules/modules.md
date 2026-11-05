@@ -34,7 +34,8 @@
 
 ## src/api-filter.ts
 - `USER_ALLOWED` physical allow-list + `isUserAllowed` (exact RpcMethodMap
-  keys). alpha.3 surface: `terminal.attach` (bidirectional stream; the removed
+  keys). Surface unchanged since alpha.3 (rc.1 added none): `terminal.attach`
+  (bidirectional stream; the removed
   `terminal.follow`/`terminal.write`/`terminal.resize` are gone) and
   `remoteAccess.follow` (native remote-access snapshot stream; gateway always
   allows it, it answers with only the caller's own grants; kept on the list so

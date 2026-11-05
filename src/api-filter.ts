@@ -26,8 +26,11 @@
  * detail/update and recommendation surfaces, plus the 0.2.2-alpha.3 schedule
  * CRUD split (`create`/`edit`/`run`/`view`/`deliveryLimits` replacing the
  * retired `update`/`delete` pair) and the forge review surface
- * (`changeRequestChecks`, `submitReview`)). They are a **total, disjoint
- * classification** of that surface:
+ * (`changeRequestChecks`, `submitReview`)). **0.2.2-rc.1 carries this registry
+ * byte-identical** — the alpha.3 → rc.1 release range touches package.json
+ * files only (vendor stable re-issue: cordis 4.1.0, schemastery 3.19.0), so
+ * the version pin below moves while the method lists stay untouched. They are
+ * a **total, disjoint classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
  *   - {@link ADMIN_ONLY_METHODS}  – host configuration, credentials, plugin
@@ -47,7 +50,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-alpha.3'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.1'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may

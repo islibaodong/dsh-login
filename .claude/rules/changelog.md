@@ -1,5 +1,38 @@
 # Memory Changelog
 
+## 2026-11-05 (scheduled watch) — DSH 0.2.2-rc.1 released; adapted + released as **0.3.11**
+- Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-05T04:00:01.859Z / 12:00 +0800).
+  Detection: every peer package's npm `next` dist-tag moved to **0.2.2-rc.1** (published from
+  tag commit `2f97f60455` "release(dsh): 0.2.2-rc.1", 2026-11-04 15:50 +0800); `alpha` stays
+  0.2.2-alpha.3. Git tag `dsh-v0.2.2-rc.1` → `66491b05e3` (merge PR #7870); range
+  `dsh-v0.2.2-alpha.3..dsh-v0.2.2-rc.1` = **2 content commits**: `60d811de43` "release(vendor):
+  cordis 4.1.0, cosmokit 1.9.0, group 1.1.0, hmr 1.1.0, include 1.1.0, loader 1.1.0,
+  logger-console 1.1.0, schemastery 3.19.0, timer 1.2.0" (vendor **stable** re-issue) + the
+  version-bump release commit. **387 files changed, all package.json — zero source changes**,
+  so the 204-method wire registry is provably identical → no re-dump (only version-pin moves).
+- Files: `package.json` (v0.3.11; devDeps → `^0.2.2-rc.1` + vendor stable cordis `~4.1.0` /
+  schemastery `~3.19.0` / include `~1.1.0` / loader `~1.1.0`; **peers +=** cordis `|| ~4.1.0`,
+  schemastery `|| ~3.19.0` — the old `^4.0.1-rc.1`/`^3.18.1-rc.1` branches cannot admit the
+  new `[4,1,0]`/`[3,19,0]` tuples under npm's install-time prerelease rule; DSH-package peer
+  branches unchanged), `src/api-filter.ts` (`WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.1'` + header
+  note; method lists untouched, buckets stay 124/79/1), `tests/fixtures/wire-surface.json`
+  (`dshVersion` → 0.2.2-rc.1, methods unchanged), `dist/*` rebuilt (`client.js` byte-identical
+  37134 chars, SHA-256 verified; `index.js` stamp-only), `docs/adapt-dsh-0.2.2-rc.1.md` (new),
+  README.md / README.zh.md (banner + 11-05 watch + history + tracking/eval dates).
+- **Install trap (new lesson):** incremental `npm install` on the stale alpha.3 lockfile tree
+  ERESOLVE-wedged (old `cordis-plugin-group` peer from the alpha.3 `dsh-app-boot` chain) —
+  fixed by **clean install** (delete `node_modules` + `package-lock.json`; 111 packages in 10s,
+  all resolved at rc.1/stable line). See gotchas.md.
+- Verification: `npm test` = 21 files / 269 tests green (incl. strict live cross-check
+  204==204); `npm run build` exit 0; **`verify:imports` exit 0 — the tsx strip-only failure
+  recorded since 0.3.9 no longer reproduces** (env issue resolved, drop it from future
+  verification tables).
+- Multi-user grep at the rc.1 tag: still exactly **1 hit** —
+  `packages/api/remote-access/README.md`. `__DSH_BOOT__` lever intact
+  (`packages/client/modules/src/index.ts:635`). No native accounts; dsh-login remains the
+  account layer; uiRoleGate unaffected. Release: commit + tag `v0.3.11` + push + npm publish
+  (see git/npm for the record).
+
 ## 2026-11-04 (scheduled watch) — DSH 0.2.2-alpha.3 released; adapted + released as **0.3.10**
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-04T04:00:00Z / 12:00 +0800).
   Detection: `dsh-v0.2.2-alpha.3` tag → `05b1cae8db` ("release(vendor): cordis 4.0.6-alpha.2,
