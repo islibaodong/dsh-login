@@ -91,22 +91,22 @@ const { SessionStore } = await import('./../src/session.ts')
 {
   const store = new SessionStore(3600)
   const session = store.create('alice', false)
-  assertEqual(store.verify(session.token) !== undefined, 'verify fresh session')
+  assert(store.verify(session.token) !== undefined, 'verify fresh session')
 }
 {
   const store = new SessionStore(3600)
-  assertEqual(store.verify('deadbeef') === undefined, 'reject unknown token')
+  assert(store.verify('deadbeef') === undefined, 'reject unknown token')
 }
 {
   const store = new SessionStore(3600)
-  assertEqual(store.verify('') === undefined, 'reject empty token')
+  assert(store.verify('') === undefined, 'reject empty token')
 }
 {
   const store = new SessionStore(3600)
   const session = store.create('alice', false)
-  assertEqual(store.verify(session.token) !== undefined, 'verify before revoke')
+  assert(store.verify(session.token) !== undefined, 'verify before revoke')
   store.revoke(session.token)
-  assertEqual(store.verify(session.token) === undefined, 'verify after revoke')
+  assert(store.verify(session.token) === undefined, 'verify after revoke')
 }
 {
   const store = new SessionStore(3600)
@@ -116,7 +116,7 @@ const { SessionStore } = await import('./../src/session.ts')
   const store = new SessionStore(0)
   const session = store.create('alice', false)
   await new Promise(r => setTimeout(r, 10))
-  assertEqual(store.verify(session.token) === undefined, 'reject expired session')
+  assert(store.verify(session.token) === undefined, 'reject expired session')
 }
 {
   const store = new SessionStore(0)
