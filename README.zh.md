@@ -254,12 +254,15 @@ WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无
 ## 运行测试
 
 ```bash
-# 标准全量测试（269 项；option A 下在 DSH 0.1.5-alpha.1 至 0.2.2-alpha.2 上全绿——
-# 设置 DSH_HARNESS_CHECKOUT，或在默认路径旁运行）
-npx vitest run
+# DSH 0.2.2-rc.1 组合使用 Node >=24.9.0。
+# 按 lockfile 安装已发布的 DSH 依赖，无需另行检出 DSH 源码。
+npm ci
+npm test
+npm run verify:imports
+npm run build
 ```
 
-`.spec.ts` 文件是标准的 vitest 测试定义，含纯逻辑/多用户相关套件（`users`、`ownership`、`hosts`、`session`、`gateway`、`admin-api`、`capabilities`、`remote-guard`、`remote-web-ui-compat`、`client-bundle`、`settings-panel`、`plugin-entry`、`bridge-list-filter` 等）。`connection`/`api-filter`/`multiuser-e2e` 三个 spec 已在 option A 适配时移除（它们测试的是已删除的 `dsh-host-apiproxy` `/api` 接管）；`remote-guard.spec.ts` 覆盖了 REMOTE 层隔离守卫（含所有权收窄与管理员放行），桥墙（401 + 方法门 + 静默拒绝 + record/filter tee + 供给触发）由 `tests/api-bridge-auth.spec.ts` 覆盖。`tests/runner.mjs` 和 `tests/integration-runner.mjs` 是针对原单密码核心的沙箱兼容运行器，未随多用户功能扩展。
+`.spec.ts` 文件是标准的 vitest 测试定义，含纯逻辑/多用户相关套件（`users`、`ownership`、`hosts`、`session`、`gateway`、`admin-api`、`capabilities`、`remote-guard`、`remote-web-ui-compat`、`client-bundle`、`settings-panel`、`plugin-entry`、`bridge-list-filter` 等）。`connection`/`api-filter`/`multiuser-e2e` 三个 spec 已在 option A 适配时移除（它们测试的是已删除的 `dsh-host-apiproxy` `/api` 接管）；`remote-guard.spec.ts` 覆盖了 REMOTE 层隔离守卫（含所有权收窄与管理员放行），桥墙（401 + 方法门 + 静默拒绝 + record/filter tee + 供给触发）由 `tests/api-bridge-auth.spec.ts` 覆盖。CI 在 Node 24.9.0 与最新 Node 24.x 上运行全量测试、旧单测冒烟、源码导入检查、构建及已提交产物一致性检查。`node --import tsx/esm tests/runner.mjs` 保留为轻量单测冒烟入口；`node tests/integration-runner.mjs` 直接执行标准网关、多用户登录/初始化/退出和完整插件 HTTP 集成用例。
 
 ## 项目结构
 

@@ -283,12 +283,15 @@ The WebServer has a single fallback seat. dsh-web-app's `web-runtime` row mounts
 ## Running tests
 
 ```bash
-# Canonical full suite (269 tests, green under option A against DSH 0.1.5-alpha.1 through 0.2.2-alpha.2; requires the DSH checkout for package
-# resolution — set DSH_HARNESS_CHECKOUT or run beside the default path)
-npx vitest run
+# Use Node >=24.9.0 with DSH 0.2.2-rc.1.
+# Install the released DSH dependencies pinned in the lockfile; no checkout required.
+npm ci
+npm test
+npm run verify:imports
+npm run build
 ```
 
-The `.spec.ts` files are the canonical vitest definitions, including the pure/multi-user-adjacent suites (`users`, `ownership`, `hosts`, `admin-api`, `session`, `gateway`, `capabilities`, `remote-web-ui-compat`, `client-bundle`, `settings-panel`, `plugin-entry`, `bridge-list-filter`, …). The `connection` / `api-filter` / `multiuser-e2e` specs were **removed** in the option-A adaptation (they tested the deleted `dsh-host-apiproxy` `/api` takeover); the REMOTE-layer isolation guard is covered by `tests/remote-guard.spec.ts` (ownership scoping, admin passthrough, array/nested id-arg ownership) and the bridge wall (401 + method gate + quiet denials + record/filter tee + provisioning trigger) by `tests/api-bridge-auth.spec.ts`. `tests/runner.mjs` and `tests/integration-runner.mjs` are sandbox-compatible harnesses for the original single-password core only; they were not extended for the multi-user feature. The live two-browser isolation sign-off (§B of `docs/verify-option-A.md`) still requires a booted deployment.
+The `.spec.ts` files are the canonical vitest definitions, including the pure/multi-user-adjacent suites (`users`, `ownership`, `hosts`, `admin-api`, `session`, `gateway`, `capabilities`, `remote-web-ui-compat`, `client-bundle`, `settings-panel`, `plugin-entry`, `bridge-list-filter`, …). The `connection` / `api-filter` / `multiuser-e2e` specs were **removed** in the option-A adaptation (they tested the deleted `dsh-host-apiproxy` `/api` takeover); the REMOTE-layer isolation guard is covered by `tests/remote-guard.spec.ts` (ownership scoping, admin passthrough, array/nested id-arg ownership) and the bridge wall (401 + method gate + quiet denials + record/filter tee + provisioning trigger) by `tests/api-bridge-auth.spec.ts`. CI runs the full suite on Node 24.9.0 and the latest Node 24.x, plus the legacy unit smoke tests, source-import checks, builds, and a committed-bundle freshness check. `node --import tsx/esm tests/runner.mjs` remains a lightweight unit smoke test. `node tests/integration-runner.mjs` runs the canonical gateway, multi-user login/setup/logout, and full-plugin HTTP integration specs. The live two-browser isolation sign-off (§B of `docs/verify-option-A.md`) still requires a booted deployment.
 
 ## Project structure
 

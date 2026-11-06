@@ -25,11 +25,14 @@ function indexRenderer(ctx: Context, distIndex: string): () => Promise<string> {
   return async (): Promise<string> => {
     const body = await readFile(distIndex, 'utf8')
     const webServer = ctx.webServer as {
-      renderIndex?: (html: string) => string
+      renderIndex?: (html: string, peer: { principal: { kind: 'owner' } }) => string
       applyIndexTaps: (html: string) => string
     }
     const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer)
-    return render.call(webServer, body)
+    // DSH 0.2.2 index-inject listeners require the page's peer principal.
+    // Native browser connections use owner principals for all dsh-login
+    // users; the plugin's own login, API and UI gates enforce their roles.
+    return render.call(webServer, body, { principal: { kind: 'owner' } })
   }
 }
 
