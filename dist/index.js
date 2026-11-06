@@ -1066,7 +1066,7 @@ function indexRenderer(ctx, distIndex) {
     const body = await readFile2(distIndex, "utf8");
     const webServer = ctx.webServer;
     const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer);
-    return render.call(webServer, body);
+    return render.call(webServer, body, { principal: { kind: "owner" } });
   };
 }
 function createCaptureResponse() {

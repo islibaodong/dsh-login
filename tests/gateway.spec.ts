@@ -176,6 +176,41 @@ describe('gateway handler', () => {
     expect(res.body).toContain('shell')
     expect(res.body).toContain('<html')
   })
+
+  it.each([true, false])('supplies the owner principal to index injections (isAdmin=%s)', async (isAdmin) => {
+    const { ctx, port } = await bootServer()
+    const dist = join(root!, 'dist')
+    await mkdir(dist, { recursive: true })
+    const distIndex = join(dist, 'index.html')
+    await writeFile(distIndex, '<html><head></head><body>shell</body></html>')
+    const store = new SessionStore(3600)
+    const session = store.create('alice', isAdmin)
+    const handler = createGatewayHandler(ctx, { ...config, distIndex, uiRoleGate: true }, store)
+    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    const principals: unknown[] = []
+    ctx.on('webserver/index-inject', (table, peer) => {
+      // DSH 0.2.2's remote-access listener reads peer.principal here.
+      // Omitting the peer makes authenticated index requests return 400.
+      principals.push(peer.principal)
+      table.push({ kind: 'global', name: '__DSH_REMOTE_ACCESS__', value: { kind: peer.principal.kind } })
+    })
+
+    const anonymous = await request(port, '/')
+    expect(anonymous.status).toBe(302)
+    expect(anonymous.headers.get('location')).toBe('/login')
+    expect(principals).toEqual([])
+
+    for (const path of ['/', '/index.html']) {
+      const res = await request(port, path, {
+        headers: { Cookie: `dsh_session=${session.token}` },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body).toContain('shell')
+      expect(res.body).toContain('globalThis["__DSH_REMOTE_ACCESS__"]')
+      expect(res.body).toContain('"kind":"owner"')
+    }
+    expect(principals).toEqual([{ kind: 'owner' }, { kind: 'owner' }])
+  })
 })
 
 /**
