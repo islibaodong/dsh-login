@@ -1,5 +1,15 @@
 # Memory Changelog
 
+## 2026-11-06 (scheduled watch) — no new DSH release; 0.3.11 stays current, no adaptation, no publish
+- Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-06T04:00:00.005Z / 12:00 +0800).
+  Detection (all three channels):
+  - `git fetch origin --tags --prune` in `E:\code\deepseek-harness`: no new objects. Newest tag still `dsh-v0.2.2-rc.1` (no `dsh-v0.2.2` stable tag, no 0.2.3/0.3 line). origin/master tip = `fcc0ad4621` (2026-11-04 16:40 +0800, PR #7873) — unchanged since the 11-04 state; `rev-list --count dsh-v0.2.2-rc.1..origin/master` = **811** — unreleased backlog on master (long-running branch merges), no release cut. Local checkout `dev` == `origin/master` == `fcc0ad4621`, dirty only CLAUDE.md + untracked agent dirs (known noise).
+  - npm dist-tags: `@deepseek-ai/dsh` `latest`/`next` = **0.2.2-rc.1**, `alpha` = 0.2.2-alpha.3 — `latest` has now ALSO moved onto rc.1 (the stable channel caught up with `next`; on 11-05 only `next` had moved). `dsh-host-webserver`/`dsh-web-frontend`: `next` = 0.2.2-rc.1, `alpha` = 0.2.2-alpha.3. `@islibaodong/dsh-login` `latest` = 0.3.11 (the 11-05 release; nothing newer). No publish beyond rc.1 anywhere.
+  - Multi-user grep at the rc.1 tag AND the master tip (`multi.?user|multiuser|role.?based|\brbac\b` over `packages/ apps/`): still exactly **1 hit** — `packages/api/remote-access/README.md`. `__DSH_BOOT__` lever intact at the master tip (`packages/client/modules/src/index.ts:635`). No native accounts; dsh-login remains the account layer; uiRoleGate unaffected. Evaluation stays closed.
+- **Conclusion: no new DSH version (0.2.2-rc.1 remains the newest release, already adapted + released as 0.3.11 yesterday) → no adaptation needed.** dsh-login 0.3.11 stays current; peer ranges already cover the latest runtime. No code changes → no version bump, no release (release only when a new DSH version requires adaptation).
+- Verification: clean tree `npm test` = **21 files / 269 tests green** (2026-11-06 12:04 +0800, 5.83 s) on commit `9350e05` (master == origin/master == tag `v0.3.11`).
+- Docs updated (README.md / README.zh.md new watch paragraph + multi-user/RBAC and per-identity-UI-gate re-verification dates). Changelog entry committed + pushed per the release-watch convention.
+
 ## 2026-11-05 (scheduled watch) — DSH 0.2.2-rc.1 released; adapted + released as **0.3.11**
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-05T04:00:01.859Z / 12:00 +0800).
   Detection: every peer package's npm `next` dist-tag moved to **0.2.2-rc.1** (published from
