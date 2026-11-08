@@ -1,3 +1,8 @@
+## 2026-11-08 (0.3.12 released) — streaming-method isolation fix (issue #11) + gateway owner-peer fix (PR #12) shipped to npm
+- npm latest = 0.3.12 (shasum 50e306f343c1a3df1d7eaa4171073766476014bd, 38 files, published 2026-11-08 via temp-npmrc flow, token deleted after). Git tag v0.3.12 on release commit 4e562e4 (master chain: 8a48aa3 fix → 1e6aa8f ci → 58b9990 docs → 4e562e4 release).
+- README/README.zh release lines updated to 0.3.12 (22 files / 291 tests green); prepack rebuild during publish reproduced committed dist byte-identically (git status clean after publish — the .gitattributes LF fix holds across the real publish path).
+- Issue #11 closed (completed) with release note comment (6722606506); main reply 6722514256.
+
 # Memory Changelog
 
 ## 2026-11-08 (issue #11 fix) — dispatch-seam guard: streaming methods now isolated per user (workspace.follow tree + id args); 20 new tests; no release
