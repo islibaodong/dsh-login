@@ -6,62 +6,43 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22]
+        node-version: ['24.9.0', '24.x']
     steps:
       - name: Checkout dsh-login
         uses: actions/checkout@v4
 
-      # The unit tests (tests/runner.mjs) have no DSH dependency; they run
-      # without the harness checkout. tsx is fetched via npx into its own
-      # cache -- `npm install` here would try to resolve the @deepseek-ai/*
-      # peerDependencies, which are not on the public npm registry.
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          check-latest: true
+          cache: npm
 
-      - name: Run unit tests
-        run: npx --yes tsx@4 tests/runner.mjs
+      # Use the released DSH dependencies pinned in package-lock.json.
+      # The Vitest suite includes real HTTP and full-plugin integration tests.
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
 
-  integration:
-    runs-on: ubuntu-latest
-    continue-on-error: true # requires the deepseek-harness checkout for package resolution
-    steps:
-      - name: Checkout dsh-login
-        uses: actions/checkout@v4
+      - name: Run unit and integration tests
+        run: npm test
 
-      - name: Checkout deepseek-harness (package resolution source)
-        uses: actions/checkout@v4
-        with:
-          repository: deepseek-ai/deepseek-harness
-          path: dsh-deps/deepseek-harness
+      - name: Run legacy unit smoke tests
+        run: node --import tsx/esm tests/runner.mjs
 
-      - name: Use Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Verify source imports
+        run: npm run verify:imports
 
-      # The project tsconfig.json maps @deepseek-ai/* packages to a local
-      # DSH checkout via Windows-absolute paths (for the dev machine).
-      # Rewrite them to the CI checkout location; tsx needs these paths to
-      # resolve the DSH workspace sources against each other.
-      - name: Point tsconfig paths at the CI DSH checkout
-        run: sed -i "s|E:/code/deepseek-harness|${DSH_ROOT}|g" tsconfig.json
-        env:
-          DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness
+      - name: Build plugin bundles
+        run: npm run build
 
-      # The vendored DSH sources import these public npm packages; the CI
-      # checkout has no installed node_modules, so provide them here.
-      - name: Install vendored packages' public npm dependencies
-        run: npm install --no-save --no-package-lock --legacy-peer-deps js-yaml@4 @standard-schema/spec
-
-      - name: Run integration tests
-        env:
-          DSH_ROOT: ${{ github.workspace }}/dsh-deps/deepseek-harness
-        run: npx --yes tsx@4 tests/integration-runner.mjs
+      - name: Verify committed bundles are current
+        run: git diff --exit-code -- dist/
