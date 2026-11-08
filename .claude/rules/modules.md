@@ -3,8 +3,37 @@
 ## src/index.ts
 - Plugin entry. `apply()`: wires SessionStore, UserStore, OwnershipIndex,
   credentialRef, all routes + fallback + the connection child plugin via
-  `ctx.effect` for clean teardown. Optional `provideWebRuntime`. Teardown
-  flushes pending ownership writes.
+  `ctx.effect` for clean teardown. Optional `provideWebRuntime`. When
+  `config.apiBridgeAuth` is on, ALSO installs the dispatch-seam guard
+  (`ctx.inject(['connection','typertGateway'], fork => fork.effect(...))`):
+  `installAdmitShadow(fork.connection)` + `installDispatchShadows` on
+  `typertGateway`. Teardown flushes pending ownership writes.
+
+## src/dispatch-guard.ts (issue #11)
+- Streaming-method isolation at the dispatch seam (the bridge wall only sees
+  HTTP POST; streams ride `/api/remote.mux` whose upgrade has no per-request
+  hook, and every dsh-login browser shares upstream's owner-principal
+  `browserPeer`). Three own-property shadows, all feature-detected +
+  uninstallable:
+  - `installAdmitShadow(connection, deps, warn)`: shadows `admit(request)` —
+    browser-path (`browserPeer`) admissions REQUIRE a live dsh-login session
+    (401 otherwise; closes the "WS upgrade skips the wall" gap) and return a
+    TAGGED wrapper peer (`Object.create(peer)` + non-enumerable symbol,
+    cached per `peer.id|token` so `$events` result identity checks hold);
+    v2/CLI peers untouched unless a dsh-login session rides along.
+  - `installDispatchShadows(gateway, deps, warn)`: shadows
+    `dispatchRpc(endpoint,payload,signal,peer)` + `openWireStream(...)` —
+    untagged peers pass (CLI/SDK/owner), admins pass, `$events`(+`/result`)
+    pass, non-`ns/method` shapes pass; tagged non-admins get
+    `classifyWireMethod` gating (deny = the wall's forbidden envelope /
+    forbidden stream error; unknown = fail closed + warn once) and every
+    `GUARDED_ID_FIELDS` id in `payload.args` must be owned (ownership index);
+    `workspace/follow` streams are wrapped in
+    `filterWorkspaceFollowFrames` (upstream-mirroring delivered-set filter:
+    baseline/replace narrowing, upsert/remove/order bookkeeping + replace
+    resyncs, archived/pinned narrowing, unknown frames dropped; owned set
+    re-probed per frame).
+  - `peerUser(peer)` / `userFromRequest(request, store)` exported for reuse.
 
 ## src/config.ts
 - `Config` interface + schemastery schema. Fields: `password` (credential ref

@@ -16,6 +16,7 @@ import { BooleanSetting } from './boolean-setting.ts'
 import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
 import { createApiBridgeAuth } from './api-bridge-auth.ts'
+import { installAdmitShadow, installDispatchShadows, type DispatchGuardDeps } from './dispatch-guard.ts'
 import { WIRE_SURFACE_DSH_VERSION } from './api-filter.ts'
 import { DefaultWorkspaceProvisioner, type WorkspaceRegistryLike } from './provision.ts'
 import { createHostSessionApi, createHostSessionSource, tryGetService } from './host-session-access.ts'
@@ -221,6 +222,39 @@ export function apply(ctx: Context, config: Config): void {
       }), { global: true }),
       'dsh-login: /api bridge auth wall',
     )
+  }
+
+  // Issue #11: streaming methods (`workspace.follow`, `session.follow`, …)
+  // ride the Remote stream mux WebSocket, which the bridge wall above never
+  // sees. The dispatch-seam guard shadows the connection service's `admit`
+  // (so the mux upgrade requires a live dsh-login session too) and the
+  // gateway's `dispatchRpc` / `openWireStream` (so tagged browser peers are
+  // checked against the wire surface and per-id ownership, and
+  // `workspace.follow` trees are filtered per user). Untagged peers —
+  // launch-token CLI/SDK sessions and host-internal callers — pass through
+  // untouched. Same feature gate as the wall: this is the isolation
+  // boundary, not a standalone feature.
+  if (config.apiBridgeAuth) {
+    const warnLog = (message: string): void => {
+      const logger = (ctx as unknown as { logger?: { warn?: (msg: string) => void } }).logger
+      if (typeof logger?.warn === 'function') logger.warn(message)
+      else console.warn(message)
+    }
+    const guardDeps = {
+      store,
+      ownership,
+      sessionSource: () => createHostSessionSource(ctx),
+    }
+    ctx.inject(['connection', 'typertGateway'], (fork) => {
+      fork.effect(() => {
+        const uninstallAdmit = installAdmitShadow(fork.connection, guardDeps, warnLog)
+        const uninstallDispatch = installDispatchShadows(tryGetService(fork, 'typertGateway'), guardDeps, warnLog)
+        return () => {
+          uninstallAdmit()
+          uninstallDispatch()
+        }
+      }, 'dsh-login: dispatch-seam guard')
+    })
   }
 
   // Per-identity capability baseline, injected at render time. index-inject

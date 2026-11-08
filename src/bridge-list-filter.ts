@@ -199,9 +199,10 @@ export const RECORD_METHODS: ReadonlySet<string> = new Set(['session.create', 's
 export const FILTER_METHODS: ReadonlySet<string> = new Set(['session.list', 'session.search', 'workspace.list'])
 
 /**
- * Attribute a created resource: pull the `sessionId` (session.create/fork) or
- * `id` (workspace.create) out of a wire response envelope and record it. No-op
- * (never throws) on anything else.
+ * Attribute a created resource: pull the `sessionId` (session.create/fork),
+ * `id` (workspace.create), or `workspace.workspaceId` (workspace.create's
+ * nested WorkspaceView shape) out of a wire response envelope and record it.
+ * No-op (never throws) on anything else.
  */
 export function recordOwnershipFromResponse(
   envelope: unknown,
@@ -217,4 +218,9 @@ export function recordOwnershipFromResponse(
     return
   }
   if (typeof id === 'string' && id !== '') ownership.record(id, username)
+  const workspace = (payload as { workspace?: unknown }).workspace
+  if (typeof workspace === 'object' && workspace !== null) {
+    const workspaceId = (workspace as { workspaceId?: unknown }).workspaceId
+    if (typeof workspaceId === 'string' && workspaceId !== '') ownership.record(workspaceId, username)
+  }
 }

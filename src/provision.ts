@@ -146,6 +146,11 @@ export class DefaultWorkspaceProvisioner {
       workspaceId = workspace.id
       this.pending.set(username, workspaceId)
     }
+    // Attribute the workspace itself (issue #11): the streaming guard checks
+    // `workspaceId` args against the ownership index, so a provisioned
+    // workspace must be recorded for its owner or `session.create` on it
+    // would be refused. Recording is idempotent.
+    this.deps.ownership.record(workspaceId, username)
     // Half 2 — seed one attached session through the workspaceId shape (the
     // GUI's own path) so it is grouped into the workspace's sessionIds and
     // ownership can be attributed to this user. The api accessor re-resolves

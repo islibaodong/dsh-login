@@ -936,6 +936,12 @@ var WIRE_SURFACE = /* @__PURE__ */ new Set([
   ...ADMIN_ONLY_METHODS,
   ...HOST_INTERNAL_METHODS
 ]);
+function classifyWireMethod(method) {
+  if (USER_ALLOWED.has(method)) return "user";
+  if (ADMIN_ONLY_METHODS.has(method)) return "admin";
+  if (HOST_INTERNAL_METHODS.has(method)) return "host-internal";
+  return "unknown";
+}
 function isKnownWireMethod(method) {
   return WIRE_SURFACE.has(method);
 }
@@ -1276,6 +1282,11 @@ function recordOwnershipFromResponse(envelope, username, ownership) {
     return;
   }
   if (typeof id === "string" && id !== "") ownership.record(id, username);
+  const workspace = payload.workspace;
+  if (typeof workspace === "object" && workspace !== null) {
+    const workspaceId = workspace.workspaceId;
+    if (typeof workspaceId === "string" && workspaceId !== "") ownership.record(workspaceId, username);
+  }
 }
 
 // src/api-bridge-auth.ts
@@ -1513,6 +1524,436 @@ function isJsonBody(headers) {
   return typeof type === "string" && type.includes("application/json");
 }
 
+// src/remote-guard.ts
+var ADMIN_ONLY_NAMESPACES = /* @__PURE__ */ new Set([
+  "credentials",
+  "settings",
+  "agentPresets",
+  // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
+  // and removes profile bundles — never reachable by an ordinary user.
+  "pluginManager",
+  // DSH 0.1.7-alpha.2: the account controller (`namespace: 'account'`) drives
+  // the process-wide upstream DeepSeek Platform grant — startSignIn/signOut/
+  // cancelSignIn rebind or revoke THE instance's account — and even the read
+  // projections (getState/getProfile/getBalance) expose the operator's
+  // profile and recharge-wallet balance. Entire namespace is admin-only;
+  // ordinary users are denied by default (absent from USER_ALLOWED), this is
+  // defense-in-depth, and capabilities.ts mirrors it in the two-segment deny
+  // list and the quiet-deny set.
+  "account",
+  // DSH 0.2.1-alpha.4: the plugin market (`namespace: 'pluginMarket'`) reads
+  // and WRITES the instance-wide market index list — `setIndexes` reconfigures
+  // which registries every install resolves against — and the same posture as
+  // pluginManager applies. Ordinary users are denied by default (absent from
+  // USER_ALLOWED), this is defense-in-depth, and capabilities.ts mirrors it in
+  // the two-segment deny list and the quiet-deny set.
+  "pluginMarket",
+  // DSH 0.2.1-rc.2 (dsh-login 0.3.6, issue #4): namespaces the real wire
+  // registry carries that the pre-rename allow-list never mentioned. Their
+  // methods are admin-only by construction (and already absent from
+  // USER_ALLOWED); listing the namespaces keeps this seam explicit so a future
+  // USER_ALLOWED edit cannot quietly open host-side code execution
+  // (`dynamicCordisRunner` runs plugin code on the host, `claudeCodeMods`
+  // toggles host integrations, `pluginInventory` enumerates the host plugin
+  // tree, `pluginRegistryProbe` is the plugin manager's probe).
+  "pluginInventory",
+  "pluginRegistryProbe",
+  "dynamicCordisRunner",
+  "claudeCodeMods"
+]);
+var GUARDED_ID_FIELDS = [
+  "sessionId",
+  "sessionIds",
+  "parentSessionId",
+  "parentSessionIds",
+  "childSessionId",
+  "childSessionIds",
+  "agentId",
+  "workspaceId",
+  "beforeSessionId",
+  // DSH 0.1.6-alpha.2: the scoped session identity the Gateway's
+  // workspaceFileScope lookup resolves for the document-preview surface
+  // (`workspaceFiles.*`, `officeToPdf.render`) — carries a SessionId on the
+  // wire exactly like `sessionId`.
+  "workspaceFileScopeId"
+];
+function collectIds(value) {
+  if (typeof value === "string") return value === "" ? [] : [value];
+  if (Array.isArray(value)) return value.flatMap(collectIds);
+  if (typeof value === "object" && value !== null) {
+    const record = value;
+    for (const key of ["id", "sessionId", "sessionIds", "agentId", "workspaceId"]) {
+      const nested = record[key];
+      if (nested !== void 0) return collectIds(nested);
+    }
+    for (const [k, v] of Object.entries(record)) {
+      if (GUARDED_ID_FIELDS.includes(k)) {
+        return collectIds(v);
+      }
+    }
+  }
+  return [];
+}
+function forbidden(namespace, method) {
+  return Object.assign(new Error(`dsh-login: forbidden: ${namespace}.${method}`), { code: "forbidden" });
+}
+function wrapRemoteGateway(gateway, resolveUser, owns = () => false) {
+  const allowed = (user, namespace, method) => {
+    if (user.isAdmin) return true;
+    if (ADMIN_ONLY_NAMESPACES.has(namespace)) return false;
+    return USER_ALLOWED.has(`${namespace}.${method}`);
+  };
+  const ownershipGuarded = (user, request) => {
+    if (user.isAdmin) return true;
+    for (const field of GUARDED_ID_FIELDS) {
+      for (const id of collectIds(request.args[field])) {
+        if (id !== "" && !owns(id)) return false;
+      }
+    }
+    return true;
+  };
+  const refuse = (user, request) => user === void 0 || !allowed(user, request.namespace, request.method) || !ownershipGuarded(user, request);
+  return {
+    // Forward every non-dispatch member of the live gateway unchanged
+    // (e.g. DSH 0.2.0-rc.2's `hasLiveClient()`), then override the two
+    // dispatch methods with the guarded implementations.
+    ...gateway,
+    async invoke(request) {
+      if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method);
+      return gateway.invoke(request);
+    },
+    async stream(request) {
+      if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method);
+      return gateway.stream(request);
+    }
+  };
+}
+function createRemoteIsolation(options) {
+  const resolveUser = () => {
+    const sid = options.currentSessionId();
+    if (sid === void 0) return void 0;
+    const adminUser = options.isAdminSession?.(sid);
+    if (adminUser !== void 0 && adminUser !== "") {
+      return { username: adminUser, isAdmin: true };
+    }
+    const username = options.ownership.lookup(sid);
+    if (username === void 0 || username === "") return void 0;
+    return { username, isAdmin: options.isAdmin?.(username) ?? false };
+  };
+  const owns = (id) => {
+    const user = resolveUser();
+    if (user === void 0) return false;
+    if (user.isAdmin) return true;
+    return options.ownership.lookup(id) === user.username;
+  };
+  return { resolveUser, owns };
+}
+
+// src/dispatch-guard.ts
+var REMOTE_EVENT_STREAM_ENDPOINT = "$events";
+var REMOTE_EVENT_RESULT_ENDPOINT = "$events/result";
+var WORKSPACE_FOLLOW_ENDPOINT = "workspace/follow";
+var WRAPPER_CACHE_LIMIT = 1024;
+var PEER_USER = /* @__PURE__ */ Symbol("dsh-login.peer-user");
+function deniedRpc() {
+  return { ok: false, error: { code: "forbidden", message: "not permitted for this user", details: {} } };
+}
+function deniedStreamError(endpoint) {
+  return Object.assign(new Error(`dsh-login: forbidden stream: ${endpoint}`), { code: "forbidden" });
+}
+function peerUser(peer) {
+  if (typeof peer !== "object" || peer === null) return void 0;
+  const tagged = peer;
+  const user = tagged[PEER_USER];
+  if (typeof user !== "object" || user === null) return void 0;
+  const username = user.username;
+  if (typeof username !== "string" || username === "") return void 0;
+  return { username, isAdmin: user.isAdmin === true };
+}
+function installAdmitShadow(connection, deps, warn) {
+  const target = connection;
+  if (typeof target.admit !== "function") {
+    warn("dsh-login: stream guard skipped \u2014 connection service has no admit(request) surface");
+    return () => {
+    };
+  }
+  const original = target.admit;
+  const hadOwnAdmit = Object.prototype.hasOwnProperty.call(target, "admit");
+  const browserPeer = target.browserPeer;
+  const wrappers = /* @__PURE__ */ new Map();
+  const shadow = function admit(request) {
+    const admission = original.call(this, request);
+    if (typeof admission !== "object" || admission === null) return admission;
+    if (admission.peer === void 0 || admission.peer === null) return admission;
+    const isBrowser = browserPeer !== void 0 && admission.peer === browserPeer;
+    const token = extractSessionToken(request.headers?.cookie);
+    if (token !== void 0) {
+      const session = deps.store.verify(token);
+      if (session !== void 0) {
+        return { ...admission, peer: wrapTagged(admission.peer, { username: session.user, isAdmin: session.isAdmin }, token, wrappers) };
+      }
+    }
+    return isBrowser ? { rejection: 401 } : admission;
+  };
+  target.admit = shadow;
+  return () => {
+    if (target.admit !== shadow) return;
+    if (hadOwnAdmit) target.admit = original;
+    else delete target.admit;
+  };
+}
+function wrapTagged(peer, user, token, cache) {
+  const key = `${peer.id}|${token}`;
+  const existing = cache.get(key);
+  if (existing !== void 0) return existing;
+  const wrapper = Object.create(peer);
+  Object.defineProperty(wrapper, PEER_USER, { value: user, enumerable: false, writable: false, configurable: false });
+  cache.set(key, wrapper);
+  if (cache.size > WRAPPER_CACHE_LIMIT) {
+    const oldest = cache.keys().next();
+    if (!oldest.done) cache.delete(oldest.value);
+  }
+  return wrapper;
+}
+function installDispatchShadows(gateway, deps, warn) {
+  if (gateway === void 0) {
+    warn("dsh-login: stream guard skipped \u2014 typertGateway service is unavailable");
+    return () => {
+    };
+  }
+  const target = gateway;
+  const uninstalls = [];
+  if (typeof target.dispatchRpc === "function") {
+    uninstalls.push(shadowRpc(target, deps, warn));
+  } else {
+    warn("dsh-login: stream guard skipped \u2014 gateway service has no dispatchRpc surface");
+  }
+  if (typeof target.openWireStream === "function") {
+    uninstalls.push(shadowStream(target, deps, warn));
+  } else {
+    warn("dsh-login: stream guard skipped \u2014 gateway service has no openWireStream surface (streaming methods stay unguarded)");
+  }
+  return () => {
+    for (const uninstall of uninstalls) uninstall();
+  };
+}
+function shadowRpc(target, deps, warn) {
+  const original = target.dispatchRpc;
+  const hadOwn = Object.prototype.hasOwnProperty.call(target, "dispatchRpc");
+  const warnedUnknown = /* @__PURE__ */ new Set();
+  const shadow = function dispatchRpc(...args) {
+    if (dispatchVerdict(args[0], args[1], args[3], deps, warnedUnknown, warn) === "deny") return deniedRpc();
+    return original.apply(this, args);
+  };
+  target.dispatchRpc = shadow;
+  return () => {
+    if (target.dispatchRpc !== shadow) return;
+    if (hadOwn) target.dispatchRpc = original;
+    else delete target.dispatchRpc;
+  };
+}
+function shadowStream(target, deps, warn) {
+  const original = target.openWireStream;
+  const hadOwn = Object.prototype.hasOwnProperty.call(target, "openWireStream");
+  const warnedUnknown = /* @__PURE__ */ new Set();
+  const shadow = async function openWireStream(...args) {
+    const endpoint = args[0];
+    if (dispatchVerdict(endpoint, args[1], args[3], deps, warnedUnknown, warn) === "deny") {
+      throw deniedStreamError(typeof endpoint === "string" ? endpoint : "stream");
+    }
+    const result = await original.apply(this, args);
+    if (endpoint === WORKSPACE_FOLLOW_ENDPOINT) {
+      return wrapFollowSource(result, args[3], deps, warn);
+    }
+    return result;
+  };
+  target.openWireStream = shadow;
+  return () => {
+    if (target.openWireStream !== shadow) return;
+    if (hadOwn) target.openWireStream = original;
+    else delete target.openWireStream;
+  };
+}
+function dispatchVerdict(endpoint, payload, peer, deps, warnedUnknown, warn) {
+  const user = peerUser(peer);
+  if (user === void 0) return "pass";
+  if (user.isAdmin) return "pass";
+  if (typeof endpoint !== "string" || endpoint === "") return "pass";
+  if (endpoint === REMOTE_EVENT_STREAM_ENDPOINT || endpoint === REMOTE_EVENT_RESULT_ENDPOINT) return "pass";
+  const parts = endpoint.split("/");
+  if (parts.length !== 2) return "pass";
+  const dotted = `${parts[0]}.${parts[1]}`;
+  const classification = classifyWireMethod(dotted);
+  if (classification !== "user") {
+    if (classification === "unknown" && !warnedUnknown.has(dotted)) {
+      warnedUnknown.add(dotted);
+      warn(`dsh-login: stream guard denied unknown wire method '${dotted}' \u2014 upstream may have renamed it; refresh src/api-filter.ts`);
+    }
+    return "deny";
+  }
+  const args = readDispatchArgs(payload);
+  for (const id of guardedIds(args)) {
+    if (deps.ownership.lookup(id) !== user.username) return "deny";
+  }
+  return "pass";
+}
+function readDispatchArgs(payload) {
+  if (typeof payload !== "object" || payload === null) return void 0;
+  return payload.args;
+}
+function guardedIds(args) {
+  if (typeof args !== "object" || args === null) return [];
+  const ids = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (!GUARDED_ID_FIELDS.includes(key)) continue;
+    for (const id of collectIds(value)) ids.push(id);
+  }
+  return ids;
+}
+function wrapFollowSource(source, peer, deps, warn) {
+  const user = peerUser(peer);
+  if (user === void 0 || user.isAdmin) return source;
+  if (typeof source !== "object" || source === null) return source;
+  if (typeof source[Symbol.asyncIterator] !== "function") {
+    warn("dsh-login: workspace.follow guard skipped \u2014 upstream stream handle is not async-iterable");
+    return source;
+  }
+  return filterWorkspaceFollowFrames(source, deps, user);
+}
+async function* filterWorkspaceFollowFrames(source, deps, user) {
+  const model = /* @__PURE__ */ new Map();
+  const delivered = /* @__PURE__ */ new Set();
+  let order = [];
+  let archived = [];
+  let pinned = [];
+  const stringList = (value) => Array.isArray(value) ? value.filter((entry) => typeof entry === "string" && entry !== "") : [];
+  const ownsWorkspace = (item, owned) => {
+    const workspaceId = item.workspaceId;
+    if (typeof workspaceId !== "string" || workspaceId === "") return false;
+    if (deps.ownership.lookup(workspaceId) === user.username) return true;
+    for (const sessionId of stringList(item.sessionIds)) {
+      if (owned.has(sessionId)) return true;
+    }
+    return false;
+  };
+  const narrowItem = (item, owned) => ({
+    ...item,
+    sessionIds: stringList(item.sessionIds).filter((sessionId) => owned.has(sessionId))
+  });
+  const filteredBaseline = (owned) => {
+    const ids = order.length > 0 ? order : [...model.keys()];
+    const items = [];
+    for (const id of ids) {
+      const item = model.get(id);
+      if (item !== void 0 && ownsWorkspace(item, owned)) items.push(narrowItem(item, owned));
+    }
+    return {
+      type: "replace",
+      value: {
+        items,
+        archivedSessionIds: archived.filter((sessionId) => owned.has(sessionId)),
+        pinnedSessionIds: pinned.filter((sessionId) => owned.has(sessionId))
+      }
+    };
+  };
+  const visibleId = (id, owned) => {
+    const item = model.get(id);
+    return item !== void 0 && ownsWorkspace(item, owned);
+  };
+  for await (const raw of source) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const frame = raw;
+    const owned = await probeOwnedSessionIds(user.username, deps.ownership, deps.sessionSource());
+    switch (frame.type) {
+      case "baseline":
+      case "replace": {
+        const value = frame.value;
+        if (typeof value !== "object" || value === null || !Array.isArray(value.items)) continue;
+        const baseline = value;
+        model.clear();
+        delivered.clear();
+        archived = stringList(baseline.archivedSessionIds);
+        pinned = stringList(baseline.pinnedSessionIds);
+        const items = [];
+        for (const entry of baseline.items) {
+          if (typeof entry !== "object" || entry === null) continue;
+          const item = entry;
+          const workspaceId = item.workspaceId;
+          if (typeof workspaceId !== "string" || workspaceId === "") continue;
+          model.set(workspaceId, item);
+          if (ownsWorkspace(item, owned)) {
+            delivered.add(workspaceId);
+            items.push(narrowItem(item, owned));
+          }
+        }
+        yield {
+          type: frame.type,
+          value: {
+            ...baseline,
+            items,
+            archivedSessionIds: archived.filter((sessionId) => owned.has(sessionId)),
+            pinnedSessionIds: pinned.filter((sessionId) => owned.has(sessionId))
+          }
+        };
+        break;
+      }
+      case "upsert": {
+        const workspace = frame.workspace;
+        if (typeof workspace !== "object" || workspace === null) continue;
+        const item = workspace;
+        const workspaceId = item.workspaceId;
+        if (typeof workspaceId !== "string" || workspaceId === "") continue;
+        model.set(workspaceId, item);
+        if (ownsWorkspace(item, owned)) {
+          delivered.add(workspaceId);
+          yield { type: "upsert", workspace: narrowItem(item, owned) };
+        } else if (delivered.has(workspaceId)) {
+          delivered.delete(workspaceId);
+          yield filteredBaseline(owned);
+        }
+        break;
+      }
+      case "remove": {
+        const workspaceId = frame.workspaceId;
+        if (typeof workspaceId !== "string" || workspaceId === "") continue;
+        model.delete(workspaceId);
+        if (delivered.delete(workspaceId)) yield frame;
+        break;
+      }
+      case "order": {
+        order = stringList(frame.workspaceIds);
+        if (delivered.size === 0) break;
+        let lost = false;
+        for (const id of delivered) {
+          if (!visibleId(id, owned)) {
+            lost = true;
+            break;
+          }
+        }
+        if (lost) {
+          yield filteredBaseline(owned);
+          break;
+        }
+        const ids = order.length > 0 ? order : [...model.keys()];
+        yield { type: "order", workspaceIds: ids.filter((id) => visibleId(id, owned)) };
+        break;
+      }
+      case "archived": {
+        archived = stringList(frame.archivedSessionIds);
+        yield { type: "archived", archivedSessionIds: archived.filter((sessionId) => owned.has(sessionId)) };
+        break;
+      }
+      case "pinned": {
+        pinned = stringList(frame.pinnedSessionIds);
+        yield { type: "pinned", pinnedSessionIds: pinned.filter((sessionId) => owned.has(sessionId)) };
+        break;
+      }
+      default:
+        continue;
+    }
+  }
+}
+
 // src/provision.ts
 import { mkdir as mkdir5 } from "node:fs/promises";
 import { join as join2 } from "node:path";
@@ -1560,6 +2001,7 @@ var DefaultWorkspaceProvisioner = class {
       workspaceId = workspace.id;
       this.pending.set(username, workspaceId);
     }
+    this.deps.ownership.record(workspaceId, username);
     const api = this.deps.getApi();
     const create = api?.sessions?.create;
     if (create === void 0) {
@@ -2611,131 +3053,6 @@ function provideWebRuntime(ctx, trustedHosts) {
   return runtime;
 }
 
-// src/remote-guard.ts
-var ADMIN_ONLY_NAMESPACES = /* @__PURE__ */ new Set([
-  "credentials",
-  "settings",
-  "agentPresets",
-  // DSH 0.1.6-alpha.2: the native plugin manager installs, enables, disables,
-  // and removes profile bundles — never reachable by an ordinary user.
-  "pluginManager",
-  // DSH 0.1.7-alpha.2: the account controller (`namespace: 'account'`) drives
-  // the process-wide upstream DeepSeek Platform grant — startSignIn/signOut/
-  // cancelSignIn rebind or revoke THE instance's account — and even the read
-  // projections (getState/getProfile/getBalance) expose the operator's
-  // profile and recharge-wallet balance. Entire namespace is admin-only;
-  // ordinary users are denied by default (absent from USER_ALLOWED), this is
-  // defense-in-depth, and capabilities.ts mirrors it in the two-segment deny
-  // list and the quiet-deny set.
-  "account",
-  // DSH 0.2.1-alpha.4: the plugin market (`namespace: 'pluginMarket'`) reads
-  // and WRITES the instance-wide market index list — `setIndexes` reconfigures
-  // which registries every install resolves against — and the same posture as
-  // pluginManager applies. Ordinary users are denied by default (absent from
-  // USER_ALLOWED), this is defense-in-depth, and capabilities.ts mirrors it in
-  // the two-segment deny list and the quiet-deny set.
-  "pluginMarket",
-  // DSH 0.2.1-rc.2 (dsh-login 0.3.6, issue #4): namespaces the real wire
-  // registry carries that the pre-rename allow-list never mentioned. Their
-  // methods are admin-only by construction (and already absent from
-  // USER_ALLOWED); listing the namespaces keeps this seam explicit so a future
-  // USER_ALLOWED edit cannot quietly open host-side code execution
-  // (`dynamicCordisRunner` runs plugin code on the host, `claudeCodeMods`
-  // toggles host integrations, `pluginInventory` enumerates the host plugin
-  // tree, `pluginRegistryProbe` is the plugin manager's probe).
-  "pluginInventory",
-  "pluginRegistryProbe",
-  "dynamicCordisRunner",
-  "claudeCodeMods"
-]);
-var GUARDED_ID_FIELDS = [
-  "sessionId",
-  "sessionIds",
-  "parentSessionId",
-  "parentSessionIds",
-  "childSessionId",
-  "childSessionIds",
-  "agentId",
-  "workspaceId",
-  "beforeSessionId",
-  // DSH 0.1.6-alpha.2: the scoped session identity the Gateway's
-  // workspaceFileScope lookup resolves for the document-preview surface
-  // (`workspaceFiles.*`, `officeToPdf.render`) — carries a SessionId on the
-  // wire exactly like `sessionId`.
-  "workspaceFileScopeId"
-];
-function collectIds(value) {
-  if (typeof value === "string") return value === "" ? [] : [value];
-  if (Array.isArray(value)) return value.flatMap(collectIds);
-  if (typeof value === "object" && value !== null) {
-    const record = value;
-    for (const key of ["id", "sessionId", "sessionIds", "agentId", "workspaceId"]) {
-      const nested = record[key];
-      if (nested !== void 0) return collectIds(nested);
-    }
-    for (const [k, v] of Object.entries(record)) {
-      if (GUARDED_ID_FIELDS.includes(k)) {
-        return collectIds(v);
-      }
-    }
-  }
-  return [];
-}
-function forbidden(namespace, method) {
-  return Object.assign(new Error(`dsh-login: forbidden: ${namespace}.${method}`), { code: "forbidden" });
-}
-function wrapRemoteGateway(gateway, resolveUser, owns = () => false) {
-  const allowed = (user, namespace, method) => {
-    if (user.isAdmin) return true;
-    if (ADMIN_ONLY_NAMESPACES.has(namespace)) return false;
-    return USER_ALLOWED.has(`${namespace}.${method}`);
-  };
-  const ownershipGuarded = (user, request) => {
-    if (user.isAdmin) return true;
-    for (const field of GUARDED_ID_FIELDS) {
-      for (const id of collectIds(request.args[field])) {
-        if (id !== "" && !owns(id)) return false;
-      }
-    }
-    return true;
-  };
-  const refuse = (user, request) => user === void 0 || !allowed(user, request.namespace, request.method) || !ownershipGuarded(user, request);
-  return {
-    // Forward every non-dispatch member of the live gateway unchanged
-    // (e.g. DSH 0.2.0-rc.2's `hasLiveClient()`), then override the two
-    // dispatch methods with the guarded implementations.
-    ...gateway,
-    async invoke(request) {
-      if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method);
-      return gateway.invoke(request);
-    },
-    async stream(request) {
-      if (refuse(resolveUser(), request)) throw forbidden(request.namespace, request.method);
-      return gateway.stream(request);
-    }
-  };
-}
-function createRemoteIsolation(options) {
-  const resolveUser = () => {
-    const sid = options.currentSessionId();
-    if (sid === void 0) return void 0;
-    const adminUser = options.isAdminSession?.(sid);
-    if (adminUser !== void 0 && adminUser !== "") {
-      return { username: adminUser, isAdmin: true };
-    }
-    const username = options.ownership.lookup(sid);
-    if (username === void 0 || username === "") return void 0;
-    return { username, isAdmin: options.isAdmin?.(username) ?? false };
-  };
-  const owns = (id) => {
-    const user = resolveUser();
-    if (user === void 0) return false;
-    if (user.isAdmin) return true;
-    return options.ownership.lookup(id) === user.username;
-  };
-  return { resolveUser, owns };
-}
-
 // src/glue.ts
 var DSH_LOGIN_OWNERSHIP_SERVICE = "dshLoginOwnership";
 function createDshLoginIsolation(deps) {
@@ -2854,6 +3171,28 @@ function apply(ctx, config) {
       }), { global: true }),
       "dsh-login: /api bridge auth wall"
     );
+  }
+  if (config.apiBridgeAuth) {
+    const warnLog = (message) => {
+      const logger = ctx.logger;
+      if (typeof logger?.warn === "function") logger.warn(message);
+      else console.warn(message);
+    };
+    const guardDeps = {
+      store,
+      ownership,
+      sessionSource: () => createHostSessionSource(ctx)
+    };
+    ctx.inject(["connection", "typertGateway"], (fork) => {
+      fork.effect(() => {
+        const uninstallAdmit = installAdmitShadow(fork.connection, guardDeps, warnLog);
+        const uninstallDispatch = installDispatchShadows(tryGetService(fork, "typertGateway"), guardDeps, warnLog);
+        return () => {
+          uninstallAdmit();
+          uninstallDispatch();
+        };
+      }, "dsh-login: dispatch-seam guard");
+    });
   }
   const cap = deriveCapabilities({ username: "", isAdmin: false });
   const sessionBaselineScript = `window.__DSH_SESSION__={username:null,isAdmin:false,capabilities:${JSON.stringify(cap)}};`;

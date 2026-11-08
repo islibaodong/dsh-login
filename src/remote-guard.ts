@@ -97,7 +97,7 @@ const ADMIN_ONLY_NAMESPACES = new Set([
  * agent-keyed isolation — a deployment composing the guard MAY extend the set
  * to match its live REMOTE method signatures.
  */
-const GUARDED_ID_FIELDS = [
+export const GUARDED_ID_FIELDS = [
   'sessionId', 'sessionIds',
   'parentSessionId', 'parentSessionIds',
   'childSessionId', 'childSessionIds',
@@ -116,7 +116,7 @@ const GUARDED_ID_FIELDS = [
  * contribute nothing (a missing id is not an authorization grant — the owned-set
  * check still fails closed on any id actually present).
  */
-function collectIds(value: unknown): string[] {
+export function collectIds(value: unknown): string[] {
   if (typeof value === 'string') return value === '' ? [] : [value]
   if (Array.isArray(value)) return value.flatMap(collectIds)
   if (typeof value === 'object' && value !== null) {
