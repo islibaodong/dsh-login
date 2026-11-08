@@ -1,0 +1,5 @@
+# LF everywhere (including on Windows checkouts) so local builds are
+# byte-identical to CI builds — the dist/ freshness gate in CI rebuilds the
+# bundles and diff-compares them; CRLF smudged sources would end up embedded
+# in dist/index.js.map's sourcesContent and fail the gate.
+* text=auto eol=lf
