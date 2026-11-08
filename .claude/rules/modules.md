@@ -81,7 +81,10 @@
 
 ## src/gateway.ts
 - `createGatewayHandler`: fallback handler. Non-GET/HEAD → 405; no/invalid
-  session → 302 `/login`; else `serveStatic` + `applyIndexTaps` on index HTML.
+  session → 302 `/login`; else `serveStatic` + `webServer.renderIndex(html,
+  { principal: { kind: 'owner' } })` (PR #12: DSH 0.2.2 index-inject listeners
+  read `peer.principal`; owner snapshot is just `{type:'baseline',owner:true}`
+  — roles stay plugin-gated). Falls back to `applyIndexTaps` on old DSH.
 
 ## src/login-api.ts
 - POST `/api/auth/login`: JSON `{username,password}` vs UserStore → session
