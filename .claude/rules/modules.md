@@ -68,10 +68,30 @@
   `terminal.follow`/`terminal.write`/`terminal.resize` are gone) and
   `remoteAccess.follow` (native remote-access snapshot stream; gateway always
   allows it, it answers with only the caller's own grants; kept on the list so
-  the client mount stays silent — both the bridge wall and the remote guard
+  the client mount stays silent — both the bridge wall and the dispatch-seam guard
+(dispatch-guard.ts, issue #11) sit on the same `connection/request` / admit+dispatch
+path and only act on wire-method traffic, never on the plugin's own routes.
+**dispatch-guard.ts (issue #11, 2026-11-08):** streaming methods (`workspace.follow`,
+`session.follow`, …) ride the `/api/remote.mux` WebSocket which the bridge wall never
+sees. The guard shadows `connection.admit(request)` (browser-path admissions require a
+live dsh-login session — closes the WS-upgrade wall gap — and tag the peer with the
+dsh-login user via `Object.create(peer)` + non-enumerable symbol wrapper, cached per
+`peer.id|token`) and `gateway.dispatchRpc`/`openWireStream` (tagged non-admin peers are
+checked against `classifyWireMethod` + `GUARDED_ID_FIELDS` ids against the ownership
+index; `workspace.follow` streams are filtered frame-by-frame mirroring upstream's
+per-principal follow filter). Untagged peers (launch-token CLI/SDK, host-internal)
+pass untouched. Gated on `config.apiBridgeAuth`; installed via
+`ctx.inject(['connection','typertGateway'], fork => fork.effect(...))`. Residuals
+(disclosed in issue #11): `$events` broadcast frames unfiltered; `terminal.attach`
+and `job.follow` are id-free; `/api/file` has no per-user check. NOTE:
+`glue.ts`/`docs/compose-guard.md` option B (`wrapRemoteGateway`) only swaps the
+gateway's public `invoke`/`stream` — browser traffic flows through internal
+`dispatchRpc`/`openWireStream`, so deployment-side composition never covered real
+browser calls; the dispatch seam is the effective hook.
   consult this list). `ownedSessionIds` (direct index hits + lineage closure
   over a session.list snapshot). `frameVisible` (mux/host frame predicate).
-  `createUserProxy`: per-user ApiProxy decorator — filters session/subagent/
+  `createUserProxy`: per-user ApiProxy decorator (STALE — option A removed the
+  user proxy layer; kept here until this section is rewritten) — filters session/subagent/
   workspace listings by ownership, guards session-addressed methods (every
   sessionId-bearing payload field must be owned), records ownership on
   create/fork, wraps admin-only domains (`credentials`/`settings`/
