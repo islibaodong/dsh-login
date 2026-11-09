@@ -1,3 +1,8 @@
+## 2026-11-09 — README/README.zh reorganized (removed stale watch banners and duplicated release prose)
+- Both READMEs trimmed 334→161 / 307→137 lines: the six timed watch banners, duplicated 0.3.8/0.3.11 release prose, the adaptation-history wall, and the two-browser sign-off narrative are gone; replaced by a compact status block (0.3.12 summary + compatibility table 0.3.6-0.3.12 + upstream multi-user watch).
+- Technical sections corrected to the 0.3.12 reality: permission model rewritten around the three seams (bridge wall / dispatch-seam guard automatic / REMOTE guard optional), bucket numbers 204/124/79/1, WS paths /api/events.mux|host → /api/remote.mux, upgrade fenced by the dispatch-seam guard, project structure adds api-bridge-auth.ts + dispatch-guard.ts, tests 22/291, troubleshooting compressed.
+- 291 tests green after the edit (README-only change).
+
 ## 2026-11-09 (scheduled watch) — no new DSH release; 0.3.12 stays current, no adaptation, no publish
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-09T04:00:00.016Z / 12:00 +0800).
   Detection (all three channels):
