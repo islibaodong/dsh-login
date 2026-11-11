@@ -207,3 +207,14 @@
   unexpected eof while reading" (2026-09-19); retrying with
   `git -c http.version=HTTP/1.1 fetch --tags origin` succeeded. Treat a bare
   tag list BEFORE a successful fetch as stale data, not release evidence.
+- `scripts/dump-wire-surface.mjs` **writes** `tests/fixtures/wire-surface.json`
+  when run from the CLI (it exists to regenerate the vendored snapshot), so it
+  is the wrong tool for the pre-release drift radar — running it with a dev
+  checkout that is 811 commits past the tag silently replaces the pinned 204
+  snapshot with the WIP 210 and dirties the tree (2026-11-11: had to
+  `git checkout -- tests/fixtures/wire-surface.json`). Probe through its
+  exported `enumerateWireSurface(checkout)` instead and diff against the
+  fixture in memory:
+  `node -e "import('./scripts/dump-wire-surface.mjs').then(m=>{const live=m.enumerateWireSurface('E:/code/deepseek-harness');const snap=JSON.parse(require('fs').readFileSync('tests/fixtures/wire-surface.json','utf8')).methods;…})"`.
+  Note `tests/wire-surface.spec.ts` deliberately tolerates a size mismatch
+  (returns early), so a dev checkout never reds the suite.

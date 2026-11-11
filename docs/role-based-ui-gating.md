@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -74,3 +74,24 @@ explicitly paused waiting for upstream per-role UI control. Revisit when either
 non-owner identity, or (b) a deployment needs more than admin/ordinary (e.g.
 per-team plugin visibility). At that point the change is the five items in §2,
 with `rolePolicy.ts` as the one source of truth for all three seams.
+
+## 5. Re-verification log
+
+**2026-11-11 (scheduled watch)** — re-checked against upstream master tip
+`fcc0ad4621` (still 811 commits past the newest tag `dsh-v0.2.2-rc.1`; still no
+`dsh-v0.2.2` stable tag, no new release on npm):
+
+| Claim in §2 | Re-verified evidence at the master tip |
+|---|---|
+| Page gate is a per-request transform | `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`; the graph row `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` at `packages/client/modules/src/index.ts:635`; `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139` |
+| No upstream role model to reuse | `git grep -nEi 'multi.?user\|multiuser\|role.?based\|\brbac\b' origin/master -- packages apps` = 1 hit, `packages/api/remote-access/README.md:2`; that engine "never checks" the owner principal, and every dsh-login user is an owner |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.12: 124 / 79 / 1 of 204 (`src/api-filter.ts`) |
+| No upstream RFC pending | upstream repo public, 0 open issues, `pushed_at` 2026-11-04T13:06:39Z; issue search for multi-user / rbac / login+accounts = 0 hits |
+
+One new observation: upstream now renders index pages **per Peer**
+(`snapshotFor(peer.principal)`, so a liveshare viewer page opens with that
+viewer's grants). That makes the page-render seam peer-aware, which is the shape
+a future role model would ride — but dsh-login identities are owner principals,
+so it carries no role for them today. Verdict and effort estimate in §3/§4
+stand; do not implement until (a) or (b) in §4 fires.
+
