@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.1";
+var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.2";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -684,8 +684,15 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "goals.pause",
   "goals.resume",
   // ── subagents: the caller's own agent subtree ─────────────────────────────
-  "subagents.interruptByParent",
+  // 0.2.2-rc.2 renames `interruptByParent` → `interruptByUser` (the human
+  // interrupting their own tree; same session scope).
+  "subagents.interruptByUser",
   "subagents.prompt",
+  // ── agentTeams: the caller's own root session's Team mode ─────────────────
+  // 0.2.2-rc.2 adds the single-method namespace: toggling Team tools for the
+  // root Session (`agentId: SessionId`, resolved and ownership-checked like
+  // `session.*`; descendants are rejected server-side).
+  "agentTeams.setEnabled",
   // ── actionCards: user actions on in-chat cards ─────────────────────────────
   // `act` applies one verb to one card of the displayed Session; the Gateway
   // resolves `agent` server-side from the Session id, so it reaches only the
@@ -696,9 +703,12 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // resource the Gateway resolves and the remote guard ownership-checks): it
   // inspects the Session's own checkout, follows, reviews or merges the
   // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
-  // `changeRequestChecks` and the review publisher `submitReview` — the same
-  // trust shape as the already-admitted `merge`/`markReady`, since publishing
-  // a review acts on the Session's own code host exactly like merging does),
+  // `changeRequestChecks` and the review publisher `submitReview`; 0.2.2-rc.2
+  // adds the commit/review/diff-base/reviewer reads, the review writer
+  // `changeRequestReviewWrite`, the branch update, rerun-checks, per-file
+  // viewed state and worktree cleanup — the same trust shape as the
+  // already-admitted `merge`/`markReady`/`submitReview`, since they act on the
+  // Session's own code host exactly like merging does),
   // and creates/enters worktrees for that Session — the same
   // trust shape as `terminal.*` (the agent can already run git/shell for the
   // user inside the Session's world). Host-wide secrets are not touched; the
@@ -707,23 +717,35 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "forgePanel.branches",
   "forgePanel.cancelWorktree",
   "forgePanel.changeRequestChecks",
+  "forgePanel.changeRequestCommits",
   "forgePanel.changeRequestDiff",
+  "forgePanel.changeRequestReview",
+  "forgePanel.changeRequestReviewWrite",
   "forgePanel.changeRequestStates",
   "forgePanel.changeRequestText",
+  "forgePanel.changeRequestViewed",
   "forgePanel.continueInProject",
+  "forgePanel.diffBases",
   "forgePanel.dismiss",
   "forgePanel.follow",
+  "forgePanel.localCommits",
   "forgePanel.localDiff",
   "forgePanel.localText",
   "forgePanel.markReady",
   "forgePanel.merge",
   "forgePanel.refresh",
+  "forgePanel.requestReviews",
   "forgePanel.requestWorktree",
   "forgePanel.restoreWorktree",
   "forgePanel.retryWorktree",
+  "forgePanel.rerunChecks",
+  "forgePanel.reviewerCandidates",
+  "forgePanel.setFileViewed",
   "forgePanel.stopCreation",
   "forgePanel.submitReview",
   "forgePanel.track",
+  "forgePanel.updateBranch",
+  "forgePanel.worktreeCleanup",
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -753,20 +775,24 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "terminal.rename",
   "terminal.retain",
   "terminal.shells",
+  "terminal.watch",
   // ── remoteAccess: the client's own grant snapshot stream ──────────────────
   // The gateway always allows it and it answers with only the caller's own
   // grants, so admitting it keeps the mount silent on every page load.
   "remoteAccess.follow",
-  // ── document preview: read-only Files surface + Office→PDF ────────────────
+  // ── document preview: read-only Files surface + Office rendering kit ───────
   // Each call carries the scoped session identity (workspaceFileScopeId),
   // resolved and ownership-checked by the Gateway. No write method is exposed.
+  // 0.2.2-rc.2 renames `officeToPdf` → `officeKit` (same two methods, same
+  // `workspaceFileScopeId` scope).
   "workspaceFiles.changes",
   "workspaceFiles.list",
   "workspaceFiles.read",
   "workspaceFiles.readBytes",
+  "workspaceFiles.search",
   "workspaceFiles.stat",
-  "officeToPdf.generation",
-  "officeToPdf.render",
+  "officeKit.generation",
+  "officeKit.render",
   // ── speech: per-user dictation preferences + transcription ────────────────
   // `configure` persists the caller's own recognizer settings.
   "speech.cancelPreparation",
@@ -832,13 +858,14 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "toolResults.watch"
 ]);
 var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
-  "account.ackBonusNotified",
   "account.cancelSignIn",
   "account.getBalance",
+  "account.getNotificationContent",
+  "account.getNotifications",
   "account.getProfile",
   "account.getState",
-  "account.getUnnotifiedBonuses",
   "account.hasRunningAccountTasks",
+  "account.reportNotificationEvent",
   "account.signOut",
   "account.startSignIn",
   "account.watch",
@@ -863,6 +890,18 @@ var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   "dynamicCordisRunner.stopFromPanel",
   "dynamicCordisRunner.syncInspectManifest",
   "dynamicCordisRunner.undefineFromPanel",
+  // ── mcpManager: host-wide MCP server lifecycle (0.2.2-rc.2) ────────────────
+  // Probe by server name, restart, and watch every managed server's view.
+  // MCP servers are instance configuration, so the whole namespace is
+  // operator territory (same reasoning as `settings.*`).
+  "mcpManager.probe",
+  "mcpManager.restart",
+  "mcpManager.watch",
+  // ── web: the host's search/fetch provider registry (0.2.2-rc.2) ────────────
+  // `listProviders` is read-only, but it enumerates the instance's registered
+  // web providers — a host configuration view; the selection itself lives in
+  // settings, which is already admin-only.
+  "web.listProviders",
   "pluginInventory.list",
   "pluginManager.cancelInstall",
   "pluginManager.inspect",
@@ -906,6 +945,7 @@ var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   // multi-user deployment (external exposure + host-wide state), so the whole
   // namespace stays admin-side; a future user-scoped subset would need
   // per-share ownership checks dsh-login does not model yet.
+  "liveshareShares.addSessions",
   "liveshareShares.audit",
   "liveshareShares.capabilities",
   "liveshareShares.create",
@@ -2223,9 +2263,12 @@ function requireAdmin(deps, req, res) {
   return session;
 }
 function createAdminRoutes(deps) {
+  const sidebarSetting = deps.sidebarSetting;
   const me = { kind: "exact", path: "/api/auth/me", handler: async (req, res) => {
     const session = requireSession(deps, req);
     if (session === void 0) return sendJson(res, 401, { error: "authentication required" });
+    const visible = sidebarSetting?.get() !== false;
+    if (session.isAdmin) return sendJson(res, 200, { username: session.user, isAdmin: session.isAdmin, usersSidebarVisible: visible });
     return sendJson(res, 200, { username: session.user, isAdmin: session.isAdmin });
   } };
   const capabilitiesRoute = { kind: "exact", path: "/api/auth/capabilities", handler: async (req, res) => {
@@ -2369,10 +2412,20 @@ function createAdminRoutes(deps) {
     if (deps.onRemoteWebUiApply !== void 0) applied = await deps.onRemoteWebUiApply(body.enabled);
     return sendJson(res, 200, { ok: true, enabled: remoteSetting.get(), applied });
   } };
+  const sidebarRoute = sidebarSetting === void 0 ? void 0 : { kind: "exact", path: "/api/auth/admin/settings/sidebar", handler: async (req, res) => {
+    if (requireAdmin(deps, req, res) === void 0) return;
+    if (req.method === "GET") return sendJson(res, 200, { enabled: sidebarSetting.get() });
+    if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+    const body = await readJsonObject(req);
+    if (body === null || typeof body.enabled !== "boolean") return sendJson(res, 400, { error: "bad request" });
+    sidebarSetting.set(body.enabled);
+    return sendJson(res, 200, { ok: true, enabled: sidebarSetting.get() });
+  } };
   const routes = [me, capabilitiesRoute, usersRoute, userPassword, userRemove, userDisable];
   if (hostsRoute !== void 0) routes.push(hostsRoute);
   if (settingRoute !== void 0) routes.push(settingRoute);
   if (remoteSettingRoute !== void 0) routes.push(remoteSettingRoute);
+  if (sidebarRoute !== void 0) routes.push(sidebarRoute);
   return routes;
 }
 
@@ -3096,6 +3149,7 @@ function apply(ctx, config) {
   const hosts = new TrustedHosts(join4(dataDir, "trusted-hosts.json"));
   const defaultWorkspaceSetting = new DefaultWorkspaceSetting(join4(dataDir, "settings.json"), config.defaultWorkspace);
   const remoteWebUiSetting = new BooleanSetting(join4(dataDir, "settings-remote-web-ui.json"), config.remoteWebUiCompat);
+  const sidebarSetting = new BooleanSetting(join4(dataDir, "settings-sidebar.json"), true);
   const remoteWebUiCompat = new RemoteWebUiCompat({
     getSettings: () => ctx.get("settings")
   });
@@ -3143,7 +3197,7 @@ function apply(ctx, config) {
     path: "/logout",
     handler: createLogoutRedirectHandler(store)
   }), "dsh-login: /logout");
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, sidebarSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`);
   }
   const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get(), config.remoteWebUiPublicBaseUrl);
@@ -3199,7 +3253,7 @@ function apply(ctx, config) {
   ctx.effect(() => ctx.on("webserver/index-inject", (table) => {
     table.push({ kind: "script", placement: "head", text: sessionBaselineScript });
   }), "dsh-login: capability baseline injection");
-  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush()]), "dsh-login: sessions + ownership + hosts + settings flush");
+  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()]), "dsh-login: sessions + ownership + hosts + settings flush");
 }
 export {
   Config,

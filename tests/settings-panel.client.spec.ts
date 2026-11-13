@@ -46,12 +46,13 @@ function makeRequire() {
 
 interface RegisteredSection {
   options: { id: string; order: number; label: () => string }
-  component: (props: unknown) => { type: unknown }
+  render: (props: unknown) => unknown
 }
 
 function makeCtx() {
   const sections: RegisteredSection[] = []
   const disposers: Array<() => void> = []
+  const stats = { registered: 0, unregistered: 0 }
   const base = {
     effect(fn: () => (() => void) | undefined): (() => void) | undefined {
       const dispose = fn()
@@ -63,12 +64,22 @@ function makeCtx() {
       bind: () => (key: string) => key,
     },
     slots: {
-      inject: (_slot: string, register: () => unknown) => {
-        const entry = register() as { options: RegisteredSection['options']; render: unknown }
-        sections.push({ options: entry.options, component: entry as never })
+      // The inject factory evaluates a sync() state machine that (de)registers
+      // entries live; its return value is the face dispose, not an entry.
+      inject: (_slot: string, factory: () => unknown) => {
+        void factory()
         return () => {}
       },
-      register: (options: RegisteredSection['options'], render: unknown) => ({ options, render }),
+      register: (options: RegisteredSection['options'], render: unknown) => {
+        const entry = { options, render } as unknown as RegisteredSection
+        sections.push(entry)
+        stats.registered++
+        return () => {
+          const index = sections.indexOf(entry)
+          if (index >= 0) sections.splice(index, 1)
+          stats.unregistered++
+        }
+      },
     },
   }
   // Cordis dependency-fiber shape: ctx.inject(deps, callback) starts the
@@ -82,7 +93,7 @@ function makeCtx() {
       return Promise.resolve()
     },
   }
-  return { ctx, sections, disposers }
+  return { ctx, sections, stats, disposers }
 }
 
 const fetchMock = vi.fn()
@@ -156,7 +167,7 @@ describe('settings-panel client factory', () => {
     expect(sections[0]!.options.order).toBe(25)
     expect(sections[0]!.options.label()).toBe('users.nav')
     // The wrapped component renders an element tree without throwing.
-    const element = (sections[0]!.component as unknown as { render: (props: unknown) => unknown }).render(undefined)
+    const element = (sections[0]!.render as (props: unknown) => unknown)(undefined)
     expect(element).toBeTypeOf('object')
   })
 
@@ -169,7 +180,7 @@ describe('settings-panel client factory', () => {
     expect(sections).toHaveLength(1)
     expect(sections[0]!.options.id).toBe('account')
     expect(sections[0]!.options.label()).toBe('account.nav')
-    const element = (sections[0]!.component as unknown as { render: (props: unknown) => unknown }).render(undefined)
+    const element = (sections[0]!.render as (props: unknown) => unknown)(undefined)
     expect(element).toBeTypeOf('object')
   })
 
@@ -180,5 +191,98 @@ describe('settings-panel client factory', () => {
     factory(makeRequire()).apply(ctx)
     await flush()
     expect(sections).toHaveLength(0)
+  })
+})
+
+/** Expand function-typed component elements in place (the h() stub does not invoke them). */
+function deepRender(node: unknown, depth = 0): unknown {
+  if (depth > 12 || node === null || node === undefined || typeof node !== 'object') return node
+  if (Array.isArray(node)) return node.map(c => deepRender(c, depth + 1))
+  const el = node as { type: unknown; props: Record<string, unknown>; children?: unknown[] }
+  const children = Array.isArray(el.children) ? el.children.map(c => deepRender(c, depth + 1)) : el.children
+  if (typeof el.type === 'function') {
+    const sub = (el.type as (props: unknown) => unknown)(el.props)
+    return { type: el.type, props: el.props, children: [deepRender(sub, depth + 1)] }
+  }
+  return { type: el.type, props: el.props, children }
+}
+
+type El = { type: unknown; props: Record<string, unknown>; children?: unknown[] }
+function collect(node: unknown, pred: (el: El) => boolean, out: El[] = []): El[] {
+  if (node === null || node === undefined || typeof node !== 'object') return out
+  if (Array.isArray(node)) {
+    for (const c of node) collect(c, pred, out)
+    return out
+  }
+  const el = node as El
+  if (pred(el)) out.push(el)
+  if (Array.isArray(el.children)) for (const c of el.children) collect(c, pred, out)
+  return out
+}
+
+function sidebarInputs(tree: unknown): El[] {
+  return collect(tree, el => el.type === 'input' && el.props['data-switch'] === 'sidebar')
+}
+
+describe('sidebar visibility toggle (侧边栏显示)', () => {
+  it('hides 用户管理 and falls back to the 账户 section when usersSidebarVisible is false', async () => {
+    const { ctx, sections } = makeCtx()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true, usersSidebarVisible: false }) })
+    factory(makeRequire()).apply(ctx)
+    await flush()
+    expect(sections).toHaveLength(1)
+    expect(sections[0]!.options.id).toBe('account')
+    expect(sections[0]!.options.label()).toBe('account.nav')
+    // The admin fallback account panel carries the re-enable switch, initially off.
+    const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
+    const inputs = sidebarInputs(tree)
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]!.props.checked).toBe(false)
+  })
+
+  it('renders the 侧边栏显示 switch inside the admin users panel, never for ordinary users', async () => {
+    const { ctx, sections } = makeCtx()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true }) })
+    factory(makeRequire()).apply(ctx)
+    await flush()
+    expect(sections).toHaveLength(1)
+    const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
+    const inputs = sidebarInputs(tree)
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]!.props.checked).toBe(true)
+    // Ordinary users never get the switch.
+    const bob = makeCtx()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'bob', isAdmin: false }) })
+    factory(makeRequire()).apply(bob.ctx)
+    await flush()
+    const bobTree = deepRender((bob.sections[0]!.render as (p: unknown) => unknown)(undefined))
+    expect(sidebarInputs(bobTree)).toHaveLength(0)
+  })
+
+  it('toggling the switch off unregisters 用户管理 and registers the 账户 fallback', async () => {
+    const { ctx, sections, stats } = makeCtx()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockImplementation(async (url: unknown, init?: { method?: string }) => {
+      const path = String(url)
+      if (path === '/api/auth/me') return { ok: true, json: async () => ({ username: 'root', isAdmin: true }) }
+      if (path === '/api/auth/admin/settings/sidebar' && (init?.method ?? 'GET') === 'POST') {
+        // api() reads res.text() and parses JSON itself.
+        return { ok: true, text: async () => JSON.stringify({ ok: true, enabled: false }) }
+      }
+      throw new Error('unexpected fetch: ' + path)
+    })
+    factory(makeRequire()).apply(ctx)
+    await flush()
+    expect(sections.map(s => s.options.id)).toEqual(['users'])
+    const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
+    const input = sidebarInputs(tree)[0]!
+    ;(input.props.onChange as (e: unknown) => void)({ target: { checked: false } })
+    await flush()
+    expect(sections.map(s => s.options.id)).toEqual(['account'])
+    expect(stats.registered).toBe(2)
+    expect(stats.unregistered).toBe(1)
   })
 })

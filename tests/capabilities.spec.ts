@@ -67,12 +67,13 @@ describe('capabilities', () => {
     // explicitly (ownership-guarded like terminal.list).
     expect(USER_ALLOWED.has('terminal.retain')).toBe(true)
     // The right Sidebar's document preview: the read-only workspaceFiles
-    // surface plus the Office→PDF converter. Every wire call carries the
+    // surface plus the Office rendering kit (0.2.2-rc.2 renames the
+    // `officeToPdf` namespace to `officeKit`). Every wire call carries the
     // scoped session identity (workspaceFileScopeId) the guard checks.
     for (const m of [
       'workspaceFiles.read', 'workspaceFiles.readBytes',
       'workspaceFiles.stat', 'workspaceFiles.list',
-      'workspaceFiles.changes', 'officeToPdf.render', 'officeToPdf.generation',
+      'workspaceFiles.changes', 'officeKit.render', 'officeKit.generation',
     ]) {
       expect(USER_ALLOWED.has(m)).toBe(true)
     }
@@ -84,7 +85,7 @@ describe('capabilities', () => {
   it('exposes the alpha.2 document-preview domains to ordinary users', () => {
     const caps = deriveCapabilities({ username: 'alice', isAdmin: false })
     expect(caps.domains).toContain('workspaceFiles')
-    expect(caps.domains).toContain('officeToPdf')
+    expect(caps.domains).toContain('officeKit')
     // ...while the native plugin manager stays admin-only.
     expect(caps.domains).not.toContain('pluginManager')
   })

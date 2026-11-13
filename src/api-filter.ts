@@ -18,19 +18,15 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.2-alpha.3 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 204 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
+ * 0.2.2-rc.2 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
+ * 225 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
  * subset of this classification, so one list serves both supported lines; the
- * alpha-line additions are the forge panel, liveshare share management,
- * session state/observation, tool-result watch, CUA consent, plugin
- * detail/update and recommendation surfaces, plus the 0.2.2-alpha.3 schedule
- * CRUD split (`create`/`edit`/`run`/`view`/`deliveryLimits` replacing the
- * retired `update`/`delete` pair) and the forge review surface
- * (`changeRequestChecks`, `submitReview`)). **0.2.2-rc.1 carries this registry
- * byte-identical** — the alpha.3 → rc.1 release range touches package.json
- * files only (vendor stable re-issue: cordis 4.1.0, schemastery 3.19.0), so
- * the version pin below moves while the method lists stay untouched. They are
- * a **total, disjoint classification** of that surface:
+ * 0.2.2-line additions are the forge panel review/commits/reviewers surface,
+ * the `officeToPdf`→`officeKit` rename, the DeepSeek Platform account
+ * notification trio, the agent-team mode toggle, host MCP-server management,
+ * the web search/fetch provider list, `terminal.watch`,
+ * `workspaceFiles.search` and the `subagents.interruptByUser` rename). They
+ * are a **total, disjoint classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
  *   - {@link ADMIN_ONLY_METHODS}  – host configuration, credentials, plugin
@@ -50,7 +46,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.1'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.2'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may
@@ -95,7 +91,14 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'goals.clear', 'goals.complete', 'goals.create', 'goals.edit', 'goals.get',
   'goals.pause', 'goals.resume',
   // ── subagents: the caller's own agent subtree ─────────────────────────────
-  'subagents.interruptByParent', 'subagents.prompt',
+  // 0.2.2-rc.2 renames `interruptByParent` → `interruptByUser` (the human
+  // interrupting their own tree; same session scope).
+  'subagents.interruptByUser', 'subagents.prompt',
+  // ── agentTeams: the caller's own root session's Team mode ─────────────────
+  // 0.2.2-rc.2 adds the single-method namespace: toggling Team tools for the
+  // root Session (`agentId: SessionId`, resolved and ownership-checked like
+  // `session.*`; descendants are rejected server-side).
+  'agentTeams.setEnabled',
   // ── actionCards: user actions on in-chat cards ─────────────────────────────
   // `act` applies one verb to one card of the displayed Session; the Gateway
   // resolves `agent` server-side from the Session id, so it reaches only the
@@ -106,23 +109,32 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // resource the Gateway resolves and the remote guard ownership-checks): it
   // inspects the Session's own checkout, follows, reviews or merges the
   // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
-  // `changeRequestChecks` and the review publisher `submitReview` — the same
-  // trust shape as the already-admitted `merge`/`markReady`, since publishing
-  // a review acts on the Session's own code host exactly like merging does),
+  // `changeRequestChecks` and the review publisher `submitReview`; 0.2.2-rc.2
+  // adds the commit/review/diff-base/reviewer reads, the review writer
+  // `changeRequestReviewWrite`, the branch update, rerun-checks, per-file
+  // viewed state and worktree cleanup — the same trust shape as the
+  // already-admitted `merge`/`markReady`/`submitReview`, since they act on the
+  // Session's own code host exactly like merging does),
   // and creates/enters worktrees for that Session — the same
   // trust shape as `terminal.*` (the agent can already run git/shell for the
   // user inside the Session's world). Host-wide secrets are not touched; the
   // sign-in probe reports only the state of the code host of the Session's
   // own checkout.
   'forgePanel.branches', 'forgePanel.cancelWorktree',
-  'forgePanel.changeRequestChecks', 'forgePanel.changeRequestDiff',
-  'forgePanel.changeRequestStates',
-  'forgePanel.changeRequestText', 'forgePanel.continueInProject',
-  'forgePanel.dismiss', 'forgePanel.follow', 'forgePanel.localDiff',
-  'forgePanel.localText', 'forgePanel.markReady', 'forgePanel.merge',
-  'forgePanel.refresh', 'forgePanel.requestWorktree',
+  'forgePanel.changeRequestChecks', 'forgePanel.changeRequestCommits',
+  'forgePanel.changeRequestDiff', 'forgePanel.changeRequestReview',
+  'forgePanel.changeRequestReviewWrite', 'forgePanel.changeRequestStates',
+  'forgePanel.changeRequestText', 'forgePanel.changeRequestViewed',
+  'forgePanel.continueInProject', 'forgePanel.diffBases',
+  'forgePanel.dismiss', 'forgePanel.follow', 'forgePanel.localCommits',
+  'forgePanel.localDiff', 'forgePanel.localText',
+  'forgePanel.markReady', 'forgePanel.merge', 'forgePanel.refresh',
+  'forgePanel.requestReviews', 'forgePanel.requestWorktree',
   'forgePanel.restoreWorktree', 'forgePanel.retryWorktree',
-  'forgePanel.stopCreation', 'forgePanel.submitReview', 'forgePanel.track',
+  'forgePanel.rerunChecks', 'forgePanel.reviewerCandidates',
+  'forgePanel.setFileViewed', 'forgePanel.stopCreation',
+  'forgePanel.submitReview', 'forgePanel.track',
+  'forgePanel.updateBranch', 'forgePanel.worktreeCleanup',
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -142,16 +154,19 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // (docs/adapt-dsh-0.1.6-alpha.2.md §4).
   'terminal.attach', 'terminal.close', 'terminal.create', 'terminal.environment',
   'terminal.list', 'terminal.rename', 'terminal.retain', 'terminal.shells',
+  'terminal.watch',
   // ── remoteAccess: the client's own grant snapshot stream ──────────────────
   // The gateway always allows it and it answers with only the caller's own
   // grants, so admitting it keeps the mount silent on every page load.
   'remoteAccess.follow',
-  // ── document preview: read-only Files surface + Office→PDF ────────────────
+  // ── document preview: read-only Files surface + Office rendering kit ───────
   // Each call carries the scoped session identity (workspaceFileScopeId),
   // resolved and ownership-checked by the Gateway. No write method is exposed.
+  // 0.2.2-rc.2 renames `officeToPdf` → `officeKit` (same two methods, same
+  // `workspaceFileScopeId` scope).
   'workspaceFiles.changes', 'workspaceFiles.list', 'workspaceFiles.read',
-  'workspaceFiles.readBytes', 'workspaceFiles.stat',
-  'officeToPdf.generation', 'officeToPdf.render',
+  'workspaceFiles.readBytes', 'workspaceFiles.search', 'workspaceFiles.stat',
+  'officeKit.generation', 'officeKit.render',
   // ── speech: per-user dictation preferences + transcription ────────────────
   // `configure` persists the caller's own recognizer settings.
   'speech.cancelPreparation', 'speech.catalog', 'speech.configure',
@@ -219,13 +234,16 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
  *                             connection and owner identity, and the share
  *                             audit trail (upstream declares the whole surface
  *                             "owner-only").
+ *  - `mcpManager` / `web`   – host-wide MCP server lifecycle and the
+ *                             instance's registered web search/fetch provider
+ *                             registry (0.2.2-rc.2 additions).
  *  - `dynamicCordisRunner`  – runs arbitrary host-side plugin code.
  */
 export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
-  'account.ackBonusNotified', 'account.cancelSignIn', 'account.getBalance',
-  'account.getProfile', 'account.getState', 'account.getUnnotifiedBonuses',
-  'account.hasRunningAccountTasks', 'account.signOut', 'account.startSignIn',
-  'account.watch', 'account.watchExpiry',
+  'account.cancelSignIn', 'account.getBalance', 'account.getNotificationContent',
+  'account.getNotifications', 'account.getProfile', 'account.getState',
+  'account.hasRunningAccountTasks', 'account.reportNotificationEvent',
+  'account.signOut', 'account.startSignIn', 'account.watch', 'account.watchExpiry',
   'agentPresets.list', 'agentPresets.read', 'agentPresets.select',
   'claudeCodeMods.pressBand', 'claudeCodeMods.watchBand',
   'credentials.describe', 'credentials.set', 'credentials.unset',
@@ -236,6 +254,16 @@ export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
   'dynamicCordisRunner.resolveRequestRun', 'dynamicCordisRunner.runHostHalf',
   'dynamicCordisRunner.settleUserRun', 'dynamicCordisRunner.stopFromPanel',
   'dynamicCordisRunner.syncInspectManifest', 'dynamicCordisRunner.undefineFromPanel',
+  // ── mcpManager: host-wide MCP server lifecycle (0.2.2-rc.2) ────────────────
+  // Probe by server name, restart, and watch every managed server's view.
+  // MCP servers are instance configuration, so the whole namespace is
+  // operator territory (same reasoning as `settings.*`).
+  'mcpManager.probe', 'mcpManager.restart', 'mcpManager.watch',
+  // ── web: the host's search/fetch provider registry (0.2.2-rc.2) ────────────
+  // `listProviders` is read-only, but it enumerates the instance's registered
+  // web providers — a host configuration view; the selection itself lives in
+  // settings, which is already admin-only.
+  'web.listProviders',
   'pluginInventory.list',
   'pluginManager.cancelInstall', 'pluginManager.inspect',
   'pluginManager.installBundle', 'pluginManager.listBundles',
@@ -263,7 +291,7 @@ export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
   // multi-user deployment (external exposure + host-wide state), so the whole
   // namespace stays admin-side; a future user-scoped subset would need
   // per-share ownership checks dsh-login does not model yet.
-  'liveshareShares.audit', 'liveshareShares.capabilities',
+  'liveshareShares.addSessions', 'liveshareShares.audit', 'liveshareShares.capabilities',
   'liveshareShares.create', 'liveshareShares.identity',
   'liveshareShares.list', 'liveshareShares.relay',
   'liveshareShares.setCapabilities', 'liveshareShares.setRelay',

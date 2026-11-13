@@ -39,6 +39,7 @@ async function boot(seed?: { rootPassword?: string; compat?: { onApply?: (enable
   hosts: TrustedHosts
   setting: DefaultWorkspaceSetting
   compatSetting: BooleanSetting
+  sidebarSetting: BooleanSetting
 }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-login-admin-'))
   const configPath = join(root, 'cordis.yml')
@@ -69,18 +70,19 @@ async function boot(seed?: { rootPassword?: string; compat?: { onApply?: (enable
   const hosts = new TrustedHosts(join(root, 'trusted-hosts.json'))
   const setting = new DefaultWorkspaceSetting(join(root, 'settings.json'), true)
   const compatSetting = new BooleanSetting(join(root, 'settings-remote-web-ui.json'), true)
+  const sidebarSetting = new BooleanSetting(join(root, 'settings-sidebar.json'), true)
   if (seed?.rootPassword !== undefined) await users.create('root', seed.rootPassword, true)
   await users.create('bob', 'bobpw', false)
-  ctx_routes(context, users, store, hosts, setting, compatSetting, seed?.compat?.onApply)
-  return { ctx: context, port: context.webServer.port, users, store, hosts, setting, compatSetting }
+  ctx_routes(context, users, store, hosts, setting, compatSetting, sidebarSetting, seed?.compat?.onApply)
+  return { ctx: context, port: context.webServer.port, users, store, hosts, setting, compatSetting, sidebarSetting }
 }
 
-function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting, compatSetting?: BooleanSetting, onRemoteWebUiApply?: (enabled: boolean) => Promise<string>): void {
+function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting, compatSetting?: BooleanSetting, sidebarSetting?: BooleanSetting, onRemoteWebUiApply?: (enabled: boolean) => Promise<string>): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/api/auth/login',
     handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
   }), 'login')
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting, remoteWebUiSetting: compatSetting, onRemoteWebUiApply })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting, remoteWebUiSetting: compatSetting, sidebarSetting, onRemoteWebUiApply })) {
     ctx.effect(() => ctx.webServer.register(route), `admin: ${route.path}`)
   }
 }
@@ -108,12 +110,20 @@ async function loginCookie(port: number, username: string, password: string): Pr
 }
 
 describe('GET /api/auth/me', () => {
-  it('returns the session user with a valid cookie', { timeout: 60_000 }, async () => {
+  it('returns the session user with a valid cookie, with the sidebar flag for an admin', { timeout: 60_000 }, async () => {
     const { port } = await boot({ rootPassword: 'rootpw' })
     const cookie = await loginCookie(port, 'root', 'rootpw')
     const res = await req(port, 'GET', '/api/auth/me', undefined, cookie)
     expect(res.status).toBe(200)
-    expect(res.json).toEqual({ username: 'root', isAdmin: true })
+    expect(res.json).toEqual({ username: 'root', isAdmin: true, usersSidebarVisible: true })
+  })
+
+  it('omits the sidebar flag for a non-admin (ordinary /me shape unchanged)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'bob', 'bobpw')
+    const res = await req(port, 'GET', '/api/auth/me', undefined, cookie)
+    expect(res.status).toBe(200)
+    expect(res.json).toEqual({ username: 'bob', isAdmin: false })
   })
 
   it('returns 401 anonymously', { timeout: 60_000 }, async () => {
@@ -458,6 +468,46 @@ describe('/api/auth/admin/settings/remote-web-ui-compat', () => {
     expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat', undefined, bobCookie)).status).toBe(403)
     expect((await req(port, 'POST', '/api/auth/admin/settings/remote-web-ui-compat', { enabled: true }, bobCookie)).status).toBe(403)
     expect((await req(port, 'GET', '/api/auth/admin/settings/remote-web-ui-compat')).status).toBe(401)
+  })
+})
+
+describe('/api/auth/admin/settings/sidebar', () => {
+  it('reads the persisted flag (default on) and toggles it live for an admin', { timeout: 60_000 }, async () => {
+    const { port, sidebarSetting } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    // Default on.
+    expect((await req(port, 'GET', '/api/auth/admin/settings/sidebar', undefined, cookie)).json).toEqual({ enabled: true })
+    // Turn off.
+    const off = await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: false }, cookie)
+    expect(off.status).toBe(200)
+    expect(off.json).toEqual({ ok: true, enabled: false })
+    expect(sidebarSetting.get()).toBe(false)
+    expect((await req(port, 'GET', '/api/auth/admin/settings/sidebar', undefined, cookie)).json).toEqual({ enabled: false })
+    // Turn back on.
+    expect((await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: true }, cookie)).json).toEqual({ ok: true, enabled: true })
+    expect(sidebarSetting.get()).toBe(true)
+    await sidebarSetting.flush()
+  })
+
+  it('the flag drives usersSidebarVisible on GET /api/auth/me for admins', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const cookie = await loginCookie(port, 'root', 'rootpw')
+    await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: false }, cookie)
+    expect((await req(port, 'GET', '/api/auth/me', undefined, cookie)).json).toEqual({ username: 'root', isAdmin: true, usersSidebarVisible: false })
+    await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: true }, cookie)
+    expect((await req(port, 'GET', '/api/auth/me', undefined, cookie)).json).toEqual({ username: 'root', isAdmin: true, usersSidebarVisible: true })
+  })
+
+  it('rejects bad input (400), is admin-gated (403), and anonymous (401)', { timeout: 60_000 }, async () => {
+    const { port } = await boot({ rootPassword: 'rootpw' })
+    const rootCookie = await loginCookie(port, 'root', 'rootpw')
+    expect((await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: 'yes' }, rootCookie)).status).toBe(400)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/sidebar', {}, rootCookie)).status).toBe(400)
+    const bobCookie = await loginCookie(port, 'bob', 'bobpw')
+    expect((await req(port, 'GET', '/api/auth/admin/settings/sidebar', undefined, bobCookie)).status).toBe(403)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: true }, bobCookie)).status).toBe(403)
+    expect((await req(port, 'GET', '/api/auth/admin/settings/sidebar')).status).toBe(401)
+    expect((await req(port, 'POST', '/api/auth/admin/settings/sidebar', { enabled: true })).status).toBe(401)
   })
 })
 

@@ -31,6 +31,8 @@ export interface AdminDeps {
   defaultWorkspaceSetting?: DefaultWorkspaceSetting
   /** Live + persisted "remote-web-ui 兼容" toggle. Optional for back-compat. */
   remoteWebUiSetting?: BooleanSetting
+  /** Live + persisted "侧边栏显示" toggle (whether 用户管理 shows in the settings sidebar). Optional for back-compat. */
+  sidebarSetting?: BooleanSetting
   /** Runtime applier of the compat flag to remote-web-ui (returns the outcome). */
   onRemoteWebUiApply?: (enabled: boolean) => Promise<CompatApplyResult>
 }
@@ -73,9 +75,15 @@ function requireAdmin(deps: AdminDeps, req: IncomingMessage, res: ServerResponse
 }
 
 export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
+  const sidebarSetting = deps.sidebarSetting
   const me: WebRoute = { kind: 'exact', path: '/api/auth/me', handler: async (req, res) => {
     const session = requireSession(deps, req)
     if (session === undefined) return sendJson(res, 401, { error: 'authentication required' })
+    // Admins additionally learn whether 用户管理 currently shows in the settings
+    // sidebar (the panel's recovery path needs the flag before probing admin
+    // routes). Ordinary users get the exact historical shape.
+    const visible = sidebarSetting?.get() !== false
+    if (session.isAdmin) return sendJson(res, 200, { username: session.user, isAdmin: session.isAdmin, usersSidebarVisible: visible })
     return sendJson(res, 200, { username: session.user, isAdmin: session.isAdmin })
   } }
 
@@ -250,9 +258,23 @@ export function createAdminRoutes(deps: AdminDeps): WebRoute[] {
     return sendJson(res, 200, { ok: true, enabled: remoteSetting.get(), applied })
   } }
 
+  // Live + persisted "侧边栏显示" toggle: whether 用户管理 appears in the settings
+  // sidebar. Off hides the section; the admin fallback is the 账户 section,
+  // which carries the same switch so the setting is always reachable.
+  const sidebarRoute: WebRoute | undefined = sidebarSetting === undefined ? undefined : { kind: 'exact', path: '/api/auth/admin/settings/sidebar', handler: async (req, res) => {
+    if (requireAdmin(deps, req, res) === undefined) return
+    if (req.method === 'GET') return sendJson(res, 200, { enabled: sidebarSetting.get() })
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+    const body = await readJsonObject(req)
+    if (body === null || typeof body.enabled !== 'boolean') return sendJson(res, 400, { error: 'bad request' })
+    sidebarSetting.set(body.enabled)
+    return sendJson(res, 200, { ok: true, enabled: sidebarSetting.get() })
+  } }
+
   const routes: WebRoute[] = [me, capabilitiesRoute, usersRoute, userPassword, userRemove, userDisable]
   if (hostsRoute !== undefined) routes.push(hostsRoute)
   if (settingRoute !== undefined) routes.push(settingRoute)
   if (remoteSettingRoute !== undefined) routes.push(remoteSettingRoute)
+  if (sidebarRoute !== undefined) routes.push(sidebarRoute)
   return routes
 }

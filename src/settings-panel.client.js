@@ -166,6 +166,12 @@ function (require) {
     'rwu.applied': '已生效于 remote-web-ui',
     'rwu.unregistered': '未检测到 remote-web-ui',
     'rwu.toggleFailed': '切换失败',
+    'sidebar.title': '侧边栏显示',
+    'sidebar.intro': '开启后，设置面板左侧边栏显示「用户管理」入口；关闭后隐藏。',
+    'sidebar.hidden': '「用户管理」当前已从左侧边栏隐藏，重新开启即可恢复显示。',
+    'sidebar.on': '已显示',
+    'sidebar.off': '已隐藏',
+    'sidebar.toggleFailed': '切换失败',
   }
   var en = {
     'users.nav': 'Users',
@@ -228,6 +234,12 @@ function (require) {
     'rwu.applied': 'Applied to remote-web-ui',
     'rwu.unregistered': 'remote-web-ui not detected',
     'rwu.toggleFailed': 'Failed to toggle',
+    'sidebar.title': 'Show in sidebar',
+    'sidebar.intro': 'When enabled, the settings sidebar shows the User management entry; when disabled it is hidden.',
+    'sidebar.hidden': 'User management is currently hidden from the settings sidebar. Turn this back on to restore it.',
+    'sidebar.on': 'Visible',
+    'sidebar.off': 'Hidden',
+    'sidebar.toggleFailed': 'Failed to toggle',
   }
 
   // ---- same-origin admin API helpers ----
@@ -289,12 +301,71 @@ function (require) {
       h(Button, { variant: 'outline', size: 'sm', onClick: logout }, t('account.logout')))
   }
 
-  /** Ordinary-user section: identity + logout. */
+  /**
+   * 侧边栏显示 switch: whether the admin 用户管理 section shows in the settings
+   * sidebar. Rendered inside the users panel (manage the flag where 用户管理
+   * lives) and inside the admin fallback account panel (the recovery path —
+   * when the section is hidden, this switch is still reachable there).
+   */
+  function SidebarCard(props) {
+    var t = props.t
+    var onSidebarVisible = props.onSidebarVisible
+    var enabledState = useState(props.me.usersSidebarVisible !== false)
+    var enabled = enabledState[0]
+    var setEnabled = enabledState[1]
+    var busyState = useState(false)
+    var busy = busyState[0]
+    var setBusy = busyState[1]
+    var errorState = useState('')
+    var error = errorState[0]
+    var setError = errorState[1]
+    var toggle = async function (next) {
+      setBusy(true)
+      try {
+        var data = await api('/api/auth/admin/settings/sidebar', 'POST', { enabled: next })
+        // The server value is authoritative (it may have flipped concurrently).
+        var applied = data !== null && data.enabled === true
+        setEnabled(applied)
+        setError('')
+        if (onSidebarVisible) onSidebarVisible(applied)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+      setBusy(false)
+    }
+    var description = error.length > 0
+      ? t('sidebar.toggleFailed') + ': ' + error
+      : (props.variant === 'account' ? t('sidebar.hidden') : t('sidebar.intro'))
+    return h('div', { className: 'dshlu-card' },
+      h('div', { className: 'dshlu-switchrow' },
+        h('div', { className: 'dshlu-switchtext' },
+          h('div', { className: 'dshlu-switchlabel' }, t('sidebar.title')),
+          h('p', { className: 'dshlu-switchdesc' }, description)),
+        h('label', { className: 'dshlu-switch', title: enabled ? t('sidebar.on') : t('sidebar.off') },
+          h('input', {
+            type: 'checkbox',
+            'data-switch': 'sidebar',
+            checked: enabled,
+            disabled: busy,
+            onChange: function (e) { void toggle(e.target.checked) },
+          }),
+          h('span', { className: 'dshlu-switch-track' }),
+          h('span', { className: 'dshlu-switch-knob' }))))
+  }
+
+  /** Ordinary-user section: identity + logout. Admin fallback adds the sidebar switch. */
   function AccountPanel(props) {
     var t = props.t
+    // The wrapper tracks which panel the shell currently displays so the
+    // open section survives a visibility flip (it unregisters on unmount).
+    useEffect(function () {
+      if (props.onPanelMounted) props.onPanelMounted('account')
+      return function () { if (props.onPanelUnmounted) props.onPanelUnmounted('account') }
+    }, [])
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('account.title')),
       h('p', { className: 'dshlu-intro' }, t('account.intro')),
+      props.isAdmin === true ? SidebarCard({ t: t, me: props.me, variant: 'account', onSidebarVisible: props.onSidebarVisible }) : null,
       AccountBar(t, props.me))
   }
 
@@ -302,6 +373,12 @@ function (require) {
   function UsersPanel(props) {
     var t = props.t
     var me = props.me
+    // The wrapper tracks which panel the shell currently displays so the
+    // open section survives a visibility flip (it unregisters on unmount).
+    useEffect(function () {
+      if (props.onPanelMounted) props.onPanelMounted('users')
+      return function () { if (props.onPanelUnmounted) props.onPanelUnmounted('users') }
+    }, [])
 
     var listState = useState({ status: 'loading', users: [], error: '' })
     var list = listState[0]
@@ -621,6 +698,7 @@ function (require) {
           }),
           h('span', { className: 'dshlu-switch-track' }),
           h('span', { className: 'dshlu-switch-knob' }))))
+    var sidebarCard = SidebarCard({ t: t, me: me, variant: 'users', onSidebarVisible: props.onSidebarVisible })
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('users.title')),
       h('p', { className: 'dshlu-intro' }, t('users.intro')),
@@ -629,6 +707,7 @@ function (require) {
       createCard,
       wsCard,
       rwuCard,
+      sidebarCard,
       hostsCard,
       AccountBar(t, me),
       resetDialog,
@@ -669,21 +748,67 @@ function (require) {
         }, 'dsh-login: settings-panel dictionaries')
         var t = sub.locale.bind(NS)
 
-        // Identity probe: pick the admin (用户管理) or ordinary (账户)
-        // section. Unauthenticated pages never reach the SPA shell (the
-        // gateway redirects first); a failed probe registers nothing.
+        // Identity probe: admins get the 用户管理 section (hidden when the
+        // 侧边栏显示 flag is off — the 账户 section then serves as the fallback
+        // that still carries the switch), ordinary users get 账户.
         void fetchMe().then(function (me) {
           if (me === undefined) return
           var isAdmin = me.isAdmin === true
-          sub.slots.inject('settings.section', function () {
-            return sub.slots.register({
-              name: 'settings.section',
-              id: isAdmin ? 'users' : 'account',
-              order: 25,
-              label: function () { return t(isAdmin ? 'users.nav' : 'account.nav') },
-              locale: NS,
-            }, function () { return h(isAdmin ? UsersPanel : AccountPanel, { t: t, me: me }) })
-          })
+          // Sidebar-visibility state machine. Entries (de)register live, so
+          // the settings sidebar follows the flag without a reload. Tearing
+          // down is deferred: while the section the admin is currently
+          // viewing is still mounted it stays registered (the shell never
+          // blanks an open panel) and unregisters on panel unmount.
+          var visible = isAdmin ? me.usersSidebarVisible !== false : true
+          var mounted = null
+          var regUsers = undefined
+          var regAccount = undefined
+          var setVisible = function (next) {
+            if (visible === next) return
+            visible = next
+            applyState()
+          }
+          var panelProps = function (which) {
+            var props = { t: t, me: me }
+            if (which === 'account') props.isAdmin = isAdmin
+            if (isAdmin) {
+              props.onSidebarVisible = setVisible
+              props.onPanelMounted = function (panel) { mounted = panel; applyState() }
+              props.onPanelUnmounted = function (panel) {
+                if (mounted === panel) { mounted = null; applyState() }
+              }
+            }
+            return props
+          }
+          var applyState = function () {
+            var wantUsers = isAdmin && (visible || mounted === 'users')
+            var wantAccount = !isAdmin || !visible || mounted === 'account'
+            if (wantUsers && regUsers === undefined) {
+              regUsers = sub.slots.register({
+                name: 'settings.section',
+                id: 'users',
+                order: 25,
+                label: function () { return t('users.nav') },
+                locale: NS,
+              }, function () { return h(UsersPanel, panelProps('users')) })
+            }
+            if (!wantUsers && regUsers !== undefined) { regUsers(); regUsers = undefined }
+            if (wantAccount && regAccount === undefined) {
+              regAccount = sub.slots.register({
+                name: 'settings.section',
+                id: 'account',
+                order: 30,
+                label: function () { return t('account.nav') },
+                locale: NS,
+              }, function () { return h(AccountPanel, panelProps('account')) })
+            }
+            if (!wantAccount && regAccount !== undefined) { regAccount(); regAccount = undefined }
+          }
+          applyState()
+          return function () {
+            if (regUsers !== undefined) { regUsers(); regUsers = undefined }
+            if (regAccount !== undefined) { regAccount(); regAccount = undefined }
+          }
         })
       })
     },

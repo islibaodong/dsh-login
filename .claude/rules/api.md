@@ -12,11 +12,15 @@ paths registered by the connection child plugin.
 | POST | `/api/auth/login` | none | Body `{username,password}` → verify vs UserStore → session cookie + `lastLoginAt` stamp; 401 invalid; 500 no users |
 | POST | `/api/auth/logout` | session cookie (optional) | Revoke token, clear cookie |
 | GET | `/logout` | none | Same revocation + cookie clear, 302 `/login` (link-friendly) |
-| GET | `/api/auth/me` | session cookie | `{username,isAdmin}`; 401 without session |
+| GET | `/api/auth/me` | session cookie | `{username,isAdmin}`; admins also get `usersSidebarVisible` (侧边栏显示 flag, default true); 401 without session |
 | GET/POST | `/api/auth/admin/users` | admin | GET list (`{users:[{username,isAdmin,lastLoginAt(null=never),disabled,onlineSessions}]}`); POST create `{username,password,isAdmin?}` (409 exists, 401/403 gate) |
 | POST | `/api/auth/admin/users/password` | admin | `{username,password}` → reset (404 unknown user) |
 | POST | `/api/auth/admin/users/disable` | admin | `{username,disabled:boolean}` → disable blocks login + revokes sessions; 409 last enabled admin |
 | POST | `/api/auth/admin/users/remove` | admin | `{username}` → remove; 409 refuses the last admin |
+| GET/POST/DELETE | `/api/auth/admin/hosts` | admin | TrustedHosts registry list/add/remove (`{host}`) |
+| GET/POST | `/api/auth/admin/settings/default-workspace` | admin | 默认用户工作空间 toggle (`{enabled}` → `{ok,enabled}`; 400 non-boolean) |
+| GET/POST | `/api/auth/admin/settings/remote-web-ui-compat` | admin | remote-web-ui 兼容 toggle (`{ok,enabled,applied}`; `applied`=ok/skipped/unregistered) |
+| GET/POST | `/api/auth/admin/settings/sidebar` | admin | 侧边栏显示 toggle — whether 用户管理 shows in the settings sidebar (`{enabled}` → `{ok,enabled}`; persisted `settings-sidebar.json`, default on; 400 non-boolean) |
 | ANY | `/api` (prefix) | host trust + `dsh_session` cookie | Carrier takeover: 403 untrusted host, 401 no session, 426 plain GET on event paths, 403 non-allowed method (non-admin), per-user dispatch otherwise |
 | WS | `/api/events.mux`, `/api/events.host` | host trust + cookie on upgrade | Per-user, ownership-filtered downlinks |
 
@@ -24,7 +28,11 @@ No standalone `/admin` page anymore: user management ships inside the GUI
 settings panel (设置-用户管理 for admins, 账户 for ordinary users) via the
 browser bundle's settings section (`src/settings-panel.client.js`, appended to
 `dist/client.js` by `scripts/build-client.mjs`; theme via `--dsw-alias-*`
-tokens; identity picked from `/api/auth/me` at client apply).
+tokens; identity picked from `/api/auth/me` at client apply). The admin
+section registers via a two-entry state machine keyed on the 侧边栏显示 flag:
+flag off → users section unregisters (the currently open panel stays until
+unmount) and admins fall back to the 账户 section, which carries the same
+switch, so the setting is always reachable.
 
 ## GET/HEAD fallback (gateway)
 `dsh_session` cookie required: 302 `/login` unauthenticated; else static dist

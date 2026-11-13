@@ -112,10 +112,13 @@ browser calls; the dispatch seam is the effective hook.
   client verbatim (protocol unchanged; cookie rides along).
 
 ## src/admin-api.ts
-- `createAdminRoutes`: GET `/api/auth/me`; GET/POST `/api/auth/admin/users`
-  (list / create); POST `/api/auth/admin/users/password`;
-  POST `/api/auth/admin/users/disable`;
-  POST `/api/auth/admin/users/remove` (refuses the last admin).
+- `createAdminRoutes`: GET `/api/auth/me` (admins also get `usersSidebarVisible`);
+  GET/POST `/api/auth/admin/users` (list / create); POST
+  `/api/auth/admin/users/password`; POST `/api/auth/admin/users/disable`;
+  POST `/api/auth/admin/users/remove` (refuses the last admin); optional
+  hosts route; optional setting routes —
+  `/api/auth/admin/settings/default-workspace`, `.../remote-web-ui-compat`,
+  `.../sidebar` (侧边栏显示, from `AdminDeps.sidebarSetting`).
   8KB body cap; webserver registers (kind,path) pairs, so GET/POST dispatch
   inside handlers. No `/admin` HTML page — the settings panel owns the UI.
 
@@ -154,9 +157,13 @@ browser calls; the dispatch seam is the effective hook.
   this fiber is the only `connection` provider (shipped row disabled) and
   `locale` waits on `connection`, so a hard slots/locale wait deadlocks the
   whole boot (the 59-pending-entries failure). Dictionaries + the
-  `settings.section` slot entry (用户管理 id `users` admin / 账户 id
-  `account` ordinary, picked from `/api/auth/me`, 15s-bounded) register via
-  a `ctx.inject(['slots','locale'])` dependency fiber. Table + create card +
+  `settings.section` slot entries register via a
+  `ctx.inject(['slots','locale'])` dependency fiber: a two-entry state machine
+  keyed on the 侧边栏显示 flag — admins get 用户管理 (id `users`, order 25;
+  unregisters when hidden, keeping an open panel alive until unmount) with
+  the 账户 fallback (id `account`, order 30) carrying the same switch;
+  ordinary users get 账户 only. Identity from `/api/auth/me`, 15s-bounded.
+  Table + create card + ws/rwu/sidebar switch cards + hosts card +
   reset/disable/remove dialogs + logout entry; React and Button/Input/Modal/
   RiskConfirmation come from the platform module-table seeds; styles are
   `--dsw-alias-*` theme tokens (auto light/dark), style tag pre-tagged

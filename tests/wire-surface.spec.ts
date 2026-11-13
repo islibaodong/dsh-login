@@ -71,8 +71,8 @@ describe('wire surface classification', () => {
   it('keeps the bucket sizes deliberate', () => {
     // A silent shrink here means a user feature was demoted without a test
     // change; a silent growth means the admin boundary moved.
-    expect(USER_ALLOWED.size).toBe(124)
-    expect(ADMIN_ONLY_METHODS.size).toBe(79)
+    expect(USER_ALLOWED.size).toBe(139)
+    expect(ADMIN_ONLY_METHODS.size).toBe(85)
     expect(HOST_INTERNAL_METHODS.size).toBe(1)
   })
 
@@ -80,7 +80,7 @@ describe('wire surface classification', () => {
     const checkout = liveCheckout()
     if (checkout === undefined) {
       // No checkout on this machine: the vendored snapshot is the authority.
-      expect(snapshotMethods.length).toBe(204)
+      expect(snapshotMethods.length).toBe(225)
       return
     }
     const live = enumerateWireSurface(checkout)

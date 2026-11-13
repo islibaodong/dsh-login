@@ -3,6 +3,7 @@ lib/
 *.tsbuildinfo
 coverage/
 .npm-cache/
+.npm-cache-watch/
 *.tmp
 _syspath_backup*
 esbuild-*

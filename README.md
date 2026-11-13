@@ -26,7 +26,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 ---
 ## Current status
 
-**Current release: `@islibaodong/dsh-login@0.3.12`** (git tag `v0.3.12`, npm `latest`) — tracks DSH **0.2.2-rc.1**; full suite **22 files / 291 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
+**Current release: `@islibaodong/dsh-login@0.3.13`** (git tag `v0.3.13`) — tracks DSH **0.2.2-rc.2**; full suite **22 files / 298 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
 
 0.3.12 is a **security release**. It fixes [issue #11](https://github.com/islibaodong/dsh-login/issues/11): streaming methods (`workspace.follow` workspace trees, and id-carrying invokes such as `session.page`) travel the `/api/remote.mux` WebSocket, which the POST-only bridge wall never saw — an ordinary user could enumerate and enter other users' workspaces. Since 0.3.12 a **dispatch-seam guard** ships in-plugin: connection admission requires a live dsh-login session on the browser path (the WebSocket upgrade included), and the gateway's dispatch seams gate every browser call per user — non-user methods denied, id arguments ownership-checked, `workspace.follow` frames filtered per frame. It also carries the merged PR #12 fix (DSH 0.2.2 homepage 400) and the CI rewrite (Node 24 matrix, dist freshness gate).
 
@@ -34,6 +34,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 
 | dsh-login | DSH | Notes |
 |-----------|-----|-------|
+| 0.3.13 | 0.2.2-rc.2 | deps retargeted to the rc.2 tuple (wire surface 204 → 225, officeToPdf→officeKit) + 用户管理 sidebar-visibility toggle (侧边栏显示) |
 | 0.3.12 | 0.2.2-rc.1 | issue #11 streaming-method isolation + PR #12 gateway fix |
 | 0.3.11 | 0.2.2-rc.1 | dependency retarget onto the rc.1 line (vendor stable) |
 | 0.3.10 | 0.2.2-alpha.3 | wire surface re-pinned 199 → 204 (schedule CRUD split, forge review) |
@@ -66,7 +67,8 @@ Upstream DSH still ships **no native user accounts** — no user store, no login
 - **`/api` bridge auth wall (`apiBridgeAuth`, on by default; DSH ≥ 0.1.6-alpha.2):** on the upstream `connection/request` hook dsh-login answers **401 for any bridged `/api` request without a live `dsh_session`** — so logout/expiry/revocation actually cut `/api` access even though the browser keeps the connection row's process-wide browser-auth cookie. Beyond authentication, the wall is the per-user enforcement seam: the method allow-list gate (above) and the response narrowing for `session.list`/`session.search`/`workspace.list` ride the same hook, and admitted `session.create`/`session.fork`/`workspace.create` responses are observed to keep the ownership sidecar warm (admin-created resources are recorded too, record-only, so the composed REMOTE-layer guard can attribute admin sessions). Plugin-exact routes (`/api/auth/*`, remote-web-ui's `/api/pair/*` pairing) never touch the bridge and keep working pre-login; since 0.3.12 the stream-mux WebSocket upgrade (`/api/remote.mux`) also passes the dispatch-seam guard's admission check, which requires a live `dsh_session` too. Turn it off only if you serve the bridge to clients that cannot carry the `dsh_session` cookie — e.g. remote-web-ui's `/remote` paired-device channel re-issues requests server-side without it (pairing is by design a full-control credential outside dsh-login's user model). On DSH < 0.1.6-alpha.2 the hook does not exist and this is a harmless no-op.
 - **Admin sees and does everything:** unfiltered API access, all sessions/workspaces visible, and the 设置 → 用户管理 settings section.
 - **Logout:** the settings panel's 用户管理/账户 section carries a logout entry for every user (POST `/api/auth/logout` → `/login`); `GET /logout` works as a plain link.
-- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. Inside it, the **Allowed Hosts / Trusted Hosts** card lists the `/api` whitelist (learned + manually added) with add/remove — removing takes effect immediately. A **默认用户工作空间** switch toggles the per-user default-workspace provisioning live (persisted, no restart), and a **远程访问兼容** switch toggles the remote-web-ui `requirePairingForLan` bypass. The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
+- **Admin user management (设置 → 用户管理):** ships inside the GUI settings panel via the browser bundle — no separate page. Inside it, the **Allowed Hosts / Trusted Hosts** card lists the `/api` whitelist (learned + manually added) with add/remove — removing takes effect immediately. A **默认用户工作空间** switch toggles the per-user default-workspace provisioning live (persisted, no restart), a **远程访问兼容** switch toggles the remote-web-ui `requirePairingForLan` bypass, and a **侧边栏显示** switch toggles whether the 用户管理 entry itself appears in the settings sidebar (persisted, effective immediately — no reload needed). The user list reports each account's last-login time (stamped on every successful login; `never` before its first login after the feature shipped), online session count, and disabled flag; per-row actions reset passwords, disable/enable, and remove users (single non-wrapping line, right-aligned). Ordinary users get an 账户 section (identity + logout). The panel styles itself entirely through the framework's `--dsw-alias-*` theme tokens, so it follows the app skin (light/dark) automatically.
+- **Sidebar visibility toggle (侧边栏显示, on by default):** a global admin switch that hides the 用户管理 section from the settings sidebar without touching any account. The section (de)registers live as the flag flips, so the sidebar follows without a reload; while the admin is viewing the panel it stays open and only disappears once they navigate away. When hidden, admins fall back to the 账户 section — which carries the same 侧边栏显示 switch — so the setting can always be turned back on and logout is never out of reach. Ordinary users are unaffected.
 
 ## Data locations
 
@@ -77,6 +79,7 @@ Upstream DSH still ships **no native user accounts** — no user store, no login
 | Auto-learned / admin Host whitelist | `<DSH_HOME>/.dsh-login/trusted-hosts.json` (configurable via `dataDir`) |
 | Default-user-workspace toggle | `<DSH_HOME>/.dsh-login/settings.json` (configurable via `dataDir`) |
 | Remote-web-ui compat toggle | `<DSH_HOME>/.dsh-login/settings-remote-web-ui.json` (configurable via `dataDir`) |
+| Sidebar visibility toggle (侧边栏显示) | `<DSH_HOME>/.dsh-login/settings-sidebar.json` (configurable via `dataDir`) |
 | Login sessions | `<DSH_HOME>/.dsh-login/sessions.json` (0o600; persisted across restarts, TTL drops stale) |
 
 ## `/api` integration (option A, DSH ≥ 0.1.5-alpha.1)
@@ -192,7 +195,7 @@ src/
 ├── api-bridge-auth.ts  # shared /api bridge wall: 401 + method gate + quiet denials + response tee
 ├── dispatch-guard.ts   # dispatch-seam guard: admission tagging + per-user dispatch gating + workspace.follow frame filtering (issue #11)
 └── web-runtime.ts    # webRuntime takeover: LAN trust + DSH_WEB_URL
-tests/ (22 files / 291 tests green)
+tests/ (22 files / 298 tests green)
 └── *.spec.ts         # vitest test definitions
 ```
 

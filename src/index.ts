@@ -104,6 +104,7 @@ export function apply(ctx: Context, config: Config): void {
   // not installed. The toggle is settings-backed + hot-reloaded by that plugin,
   // so flipping it at runtime takes effect immediately and persists.
   const remoteWebUiSetting = new BooleanSetting(join(dataDir, 'settings-remote-web-ui.json'), config.remoteWebUiCompat)
+  const sidebarSetting = new BooleanSetting(join(dataDir, 'settings-sidebar.json'), true)
   const remoteWebUiCompat = new RemoteWebUiCompat({
     getSettings: () => ctx.get('settings') as unknown as ReturnType<RemoteWebUiCompatDeps['getSettings']>,
   })
@@ -173,7 +174,7 @@ export function apply(ctx: Context, config: Config): void {
     path: '/logout',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
-  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
+  for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, sidebarSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
     ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
   }
   // Boot-time application of the remote-web-ui compatibility toggle. Deferred
@@ -273,5 +274,5 @@ export function apply(ctx: Context, config: Config): void {
   // Teardown: flush any pending ownership-index / trusted-hosts writes to
   // disk. Returning the Promise lets Cordis await it on stop so a freshly
   // learned host (debounce still pending) is not dropped (review #3).
-  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
+  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
 }

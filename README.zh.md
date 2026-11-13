@@ -26,7 +26,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 ---
 ## 当前状态
 
-**当前版本：`@islibaodong/dsh-login@0.3.12`**（git 标签 `v0.3.12`，npm `latest`）——跟随 DSH **0.2.2-rc.1**；全量测试 **22 文件 / 291 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+**当前版本：`@islibaodong/dsh-login@0.3.13`**（git 标签 `v0.3.13`）——跟随 DSH **0.2.2-rc.2**；全量测试 **22 文件 / 298 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
 
 0.3.12 是**安全修复版本**，修复 [issue #11](https://github.com/islibaodong/dsh-login/issues/11)：流式方法（`workspace.follow` 工作区树、以及带 id 的 `session.page` 等调用）走 `/api/remote.mux` WebSocket，只拦 POST 的桥墙完全看不见——普通用户可枚举并切入他人的工作区。0.3.12 起插件内置 **dispatch-seam guard**：连接准入要求浏览器路径携带有效 dsh-login 会话（含 WebSocket upgrade），分发 seam 对每次浏览器调用逐用户把关——非 user 方法拒绝、id 参数过归属校验、`workspace.follow` 逐帧过滤。同时带上已合并的 PR #12 修复（DSH 0.2.2 登录后主页 400）与 CI 重写（Node 24 矩阵、dist 新鲜度闸门）。
 
@@ -34,6 +34,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 | dsh-login | DSH | 说明 |
 |-----------|-----|------|
+| 0.3.13 | 0.2.2-rc.2 | 依赖重定向到 rc.2 元组线（线面 204 → 225，officeToPdf→officeKit）+ 用户管理「侧边栏显示」开关 |
 | 0.3.12 | 0.2.2-rc.1 | issue #11 流式方法隔离修复 + PR #12 网关修复 |
 | 0.3.11 | 0.2.2-rc.1 | 依赖重定向到 rc.1 元组线（vendor 稳定版） |
 | 0.3.10 | 0.2.2-alpha.3 | 线面重钉 199 → 204（schedule CRUD 拆分、forge 评审面） |
@@ -65,7 +66,8 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 - **`/api` 桥鉴权墙（`apiBridgeAuth`，默认开启；DSH ≥ 0.1.6-alpha.2）：** 在上游的 `connection/request` 钩子上，dsh-login 对**未携带有效 `dsh_session` 的桥接 `/api` 请求直接回 401**——注销/过期/吊销会话后，即使浏览器仍持有 connection 行的进程级浏览器 cookie，也无法继续调用 `/api`。对已认证的普通用户，桥墙继续做方法级强制（见上文两层模型）并在请求/响应两侧保温所有权索引：记录经 `session.create`/`session.fork`/`workspace.create` 产生的新资源（含管理员创建——record-only，不限制管理员请求），过滤普通用户的 list 响应，并在需要时触发默认工作区供给。插件自有精确路由（`/api/auth/*`、remote-web-ui 的 `/api/pair/*` 配对）不经过桥，登录前照常可用；Remote 流 mux 的 WebSocket 升级仍由上游的 Host/Origin + 浏览器鉴权围栏把关（上游没有提供逐请求钩子）。仅当有无法携带 `dsh_session` cookie 的客户端需要直连桥时才关闭本项——例如 remote-web-ui 的 `/remote` 配对设备通道会在服务端重新发起请求且不带该 cookie（配对凭证在设计上就是绕开 dsh-login 用户模型的完全控制凭据）。DSH < 0.1.6-alpha.2 时该钩子不存在，本项是无害的空操作。
 - **管理员可见可做一切：** 不受限的 API 访问、所有会话/工作区可见，以及「设置 → 用户管理」设置分区。
 - **登出：** 设置面板的「用户管理/账户」分区为每个用户提供登出入口（POST `/api/auth/logout` → `/login`）；`GET /logout` 可作为普通链接使用。
-- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。其中有一张「访问白名单 / Trusted Hosts」卡片列出 `/api` 白名单（自动学习 + 手动添加），支持增删；删除立即生效。「默认用户工作空间」开关实时开/关默认工作区供给（持久化、无需重启），「远程访问兼容」开关实时开/关 remote-web-ui 配对绕过。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
+- **管理员用户管理（设置 → 用户管理）：** 通过浏览器 bundle 内置在 GUI 设置面板中，无独立页面。其中有一张「访问白名单 / Trusted Hosts」卡片列出 `/api` 白名单（自动学习 + 手动添加），支持增删；删除立即生效。「默认用户工作空间」开关实时开/关默认工作区供给（持久化、无需重启），「远程访问兼容」开关实时开/关 remote-web-ui 配对绕过，「侧边栏显示」开关实时显示/隐藏设置侧边栏里的「用户管理」入口本身（持久化、即时生效、无需刷新）。用户列表显示每个账号的最后登录时间（每次成功登录时落盘；功能上线后从未登录过的账号显示「从未登录」）、在线会话数与禁用标记；每行提供重置密码、禁用/启用、删除操作（单行右对齐不换行）。普通用户则得到「账户」分区（身份信息 + 登出入口）。面板样式全部走框架的 `--dsw-alias-*` 主题令牌，自动跟随应用皮肤（浅色/深色）。
+- **侧边栏显示开关（侧边栏显示，默认开启）：** 面向管理员的全局开关，可以在不动任何账号的情况下把「用户管理」分区从设置侧边栏隐藏。开关切换时分区实时注册/注销，侧边栏即时跟随、无需刷新；管理员正停留在面板上时面板保持打开，离开后入口才消失。隐藏期间管理员回退到「账户」分区——其中带有同一个「侧边栏显示」开关——随时可以重新开启，登出也始终可达。普通用户不受影响。
 
 ## 数据位置
 
@@ -76,6 +78,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 | 自动学习 / 管理员白名单 | `<DSH_HOME>/.dsh-login/trusted-hosts.json`（可用 `dataDir` 配置） |
 | 默认用户工作空间开关 | `<DSH_HOME>/.dsh-login/settings.json`（可用 `dataDir` 配置） |
 | 远程访问兼容开关 | `<DSH_HOME>/.dsh-login/settings-remote-web-ui.json`（可用 `dataDir` 配置） |
+| 侧边栏显示开关 | `<DSH_HOME>/.dsh-login/settings-sidebar.json`（可用 `dataDir` 配置） |
 | 登录会话 | `<DSH_HOME>/.dsh-login/sessions.json`（0o600；跨重启存续，TTL 过期的自动剔除） |
 
 ## `/api` 集成（option A，DSH ≥ 0.1.5-alpha.1）
@@ -171,7 +174,7 @@ src/
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
 scripts/build-client.mjs  # 生成 dist/client.js：设置面板 dsh.client 注册
-tests/（22 文件 / 291 用例全绿）
+tests/（22 文件 / 298 用例全绿）
 └── *.spec.ts         # vitest 测试定义
 
 ## 许可证

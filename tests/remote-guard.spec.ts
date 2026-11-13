@@ -92,13 +92,13 @@ describe('wrapRemoteGateway (option A isolation glue)', () => {
     // (`workspaceFileScopeId` on the wire): an owned id passes.
     await expect(wrapped.invoke({ namespace: 'workspaceFiles', method: 'read', args: { workspaceFileScopeId: 's-1', path: 'report.md' } }))
       .resolves.toEqual({ invoked: 'workspaceFiles.read' })
-    await expect(wrapped.invoke({ namespace: 'officeToPdf', method: 'render', args: { workspaceFileScopeId: 's-1', path: 'report.docx', priority: 'foreground' } }))
-      .resolves.toEqual({ invoked: 'officeToPdf.render' })
+    await expect(wrapped.invoke({ namespace: 'officeKit', method: 'render', args: { workspaceFileScopeId: 's-1', path: 'report.docx', priority: 'foreground' } }))
+      .resolves.toEqual({ invoked: 'officeKit.render' })
     // ...and a foreign scoped identity is denied (the document preview can
     // not be used to read another user's session files).
     await expect(wrapped.invoke({ namespace: 'workspaceFiles', method: 'read', args: { workspaceFileScopeId: 's-foreign', path: 'secret.md' } }))
       .rejects.toThrow(/forbidden/)
-    await expect(wrapped.invoke({ namespace: 'officeToPdf', method: 'render', args: { workspaceFileScopeId: 's-foreign', path: 'secret.docx', priority: 'foreground' } }))
+    await expect(wrapped.invoke({ namespace: 'officeKit', method: 'render', args: { workspaceFileScopeId: 's-foreign', path: 'secret.docx', priority: 'foreground' } }))
       .rejects.toThrow(/forbidden/)
     expect(g.calls).toHaveLength(3)
   })

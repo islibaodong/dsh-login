@@ -158,7 +158,7 @@ describe('dsh-login plugin (full composition)', () => {
     const cookie = await setupAdmin(port, 's3cret')
     const me = await request(port, '/api/auth/me', { headers: { Cookie: cookie } })
     expect(me.status).toBe(200)
-    expect(JSON.parse(me.body)).toEqual({ username: 'root', isAdmin: true })
+    expect(JSON.parse(me.body)).toEqual({ username: 'root', isAdmin: true, usersSidebarVisible: true })
     const anon = await request(port, '/api/auth/me')
     expect(anon.status).toBe(401)
   })
