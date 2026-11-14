@@ -208,6 +208,28 @@
   unexpected eof while reading" (2026-09-19); retrying with
   `git -c http.version=HTTP/1.1 fetch --tags origin` succeeded. Treat a bare
   tag list BEFORE a successful fetch as stale data, not release evidence.
+- **Dev-tree live boot (2026-11-14):** a fresh `DSH_HOME` profile boots on the
+  DEFAULT port 3080 — EADDRINUSE while the running GUI holds it; pass
+  `--port 0` (OS-picked). The default-profile temp boot prints the URL **with
+  a boot token**, but once dsh-login is mounted the URL has NO token (the
+  login wall owns the entry — that difference is itself the "wall is mounted"
+  signal). To mount dsh-login in a temp profile: `npm pack`, `npm install
+  <tgz>` inside `<DSH_HOME>\profiles\web`, append `"@islibaodong/dsh-login"`
+  to `dsh.profile.bundles` in the profile `package.json` (rewrite BOM-free,
+  UTF-8 no-BOM), then reboot — a running server does not hot-load bundles.
+- **PowerShell 5.1 + curl.exe JSON (2026-11-14):** single-quoted JSON bodies
+  lose their inner double quotes through PowerShell's native argument
+  parsing — the server answers 400 `{"error":"bad request"}` (a JSON parse
+  failure, not a payload problem). Pass payloads with `--data "@file"`
+  (ASCII, `-NoNewline`). Same class as the npm ENEEDAUTH lesson: each fresh
+  shell re-parses arguments; never assume quoting survives.
+- **npm dist-tag propagation (2026-11-14, confirmed twice):** right after a
+  successful `npm publish` the packument CDN can serve a stale copy for
+  several minutes — `npm view ... dist-tags` showed 0.3.13 while 0.3.14 was
+  already accepted (`+ @islibaodong/dsh-login@0.3.14` printed). Verify with a
+  no-cache HTTP GET of the packument
+  (`Invoke-WebRequest https://registry.npmjs.org/@islibaodong%2Fdsh-login`),
+  not by polling `npm view` through the same CDN.
 - `scripts/dump-wire-surface.mjs` **writes** `tests/fixtures/wire-surface.json`
   when run from the CLI (it exists to regenerate the vendored snapshot), so it
   is the wrong tool for the pre-release drift radar — running it with a dev
