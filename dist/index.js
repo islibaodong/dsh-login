@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.2";
+var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.3";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -855,7 +855,17 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "userQuestions.answer",
   "userQuestions.attachWait",
   // ── toolResults: the Session's own tool-result trajectory stream ──────────
-  "toolResults.watch"
+  "toolResults.watch",
+  // ── deepseek-chat-import: the conversation-archive importer's limits ───────
+  // 0.2.2-rc.3 adds the chat-import feature (#8342). `limits` reports the
+  // upload constraints the browser checks before posting an exported archive;
+  // upstream declares the surface owner-only, and under dsh-login every
+  // signed-in browser user is an owner principal, so the read always
+  // succeeds — a harmless per-user read, same trust shape as the
+  // schedule/session catalog reads. The archive upload itself is an HTTP POST
+  // route (`/api/deepseek-chat-import/archive`), not a wire method, so it is
+  // outside this registry's scope.
+  "deepseekChatImport.limits"
 ]);
 var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   "account.cancelSignIn",

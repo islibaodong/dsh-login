@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11 and 2026-11-14)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -94,4 +94,22 @@ viewer's grants). That makes the page-render seam peer-aware, which is the shape
 a future role model would ride — but dsh-login identities are owner principals,
 so it carries no role for them today. Verdict and effort estimate in §3/§4
 stand; do not implement until (a) or (b) in §4 fires.
+
+**2026-11-14 (scheduled watch, DSH 0.2.2-rc.3 → dsh-login 0.3.14)** — re-checked
+at the rc.3 tag `38a6a5c965`:
+
+| Claim in §2 | Re-verified evidence at the rc.3 tag |
+|---|---|
+| Page gate is a per-request transform | `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`; the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`; `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139` — **all three at the same lines as 11-11** |
+| No upstream role model to reuse | `git grep -nEi 'multi.?user\|multiuser\|role.?based\|\brbac\b' dsh-v0.2.2-rc.3 -- packages apps` = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline); no account store exists upstream |
+| Wire classifier is bucketed | now 140 / 85 / 1 of 226 at dsh-login 0.3.14 (`src/api-filter.ts`) — the +1 (`deepseekChatImport.limits`) is owner-only upstream and lands in USER because every dsh-login user is an owner principal |
+
+New radar item that touches this evaluation: the unreleased master backlog
+(`rc.3..origin/master`) contains an in-progress **authentication-provider seam
+in the gateway** (`packages/api/gateway` stream-server/client rewrites plus a
+new `tests/authentication-provider.host.spec.ts`). If a future release ships a
+non-owner principal model on that seam, condition (a)/(b) in §4 could fire with
+an upstream-provided principal instead of a dsh-login-declared one — re-read
+§3/§4 when the next DSH release carries it. Verdict and effort estimate
+unchanged today.
 

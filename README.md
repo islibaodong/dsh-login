@@ -26,7 +26,9 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 ---
 ## Current status
 
-**Current release: `@islibaodong/dsh-login@0.3.13`** (git tag `v0.3.13`) — tracks DSH **0.2.2-rc.2**; full suite **22 files / 298 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
+**Current release: `@islibaodong/dsh-login@0.3.14`** (git tag `v0.3.14`) — tracks DSH **0.2.2-rc.3**; full suite **22 files / 298 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
+
+0.3.14 is a **pure re-pin release**: every seam the plugin mounts is byte-stable between DSH 0.2.2-rc.2 → rc.3, and the wire registry grows by exactly one method (`deepseekChatImport.limits`, the conversation-archive importer's upload-limits probe — owner-only upstream, admitted per-user). Verified live under the rc.3 runtime (login wall, owner 225 / user 140 capability split).
 
 0.3.12 is a **security release**. It fixes [issue #11](https://github.com/islibaodong/dsh-login/issues/11): streaming methods (`workspace.follow` workspace trees, and id-carrying invokes such as `session.page`) travel the `/api/remote.mux` WebSocket, which the POST-only bridge wall never saw — an ordinary user could enumerate and enter other users' workspaces. Since 0.3.12 a **dispatch-seam guard** ships in-plugin: connection admission requires a live dsh-login session on the browser path (the WebSocket upgrade included), and the gateway's dispatch seams gate every browser call per user — non-user methods denied, id arguments ownership-checked, `workspace.follow` frames filtered per frame. It also carries the merged PR #12 fix (DSH 0.2.2 homepage 400) and the CI rewrite (Node 24 matrix, dist freshness gate).
 
@@ -34,6 +36,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 
 | dsh-login | DSH | Notes |
 |-----------|-----|-------|
+| 0.3.14 | 0.2.2-rc.3 | pure re-pin: devDeps retargeted to the rc.3 tuple (wire surface 225 → 226, +`deepseekChatImport.limits`); all mounted seams byte-stable |
 | 0.3.13 | 0.2.2-rc.2 | deps retargeted to the rc.2 tuple (wire surface 204 → 225, officeToPdf→officeKit) + 用户管理 sidebar-visibility toggle (侧边栏显示) |
 | 0.3.12 | 0.2.2-rc.1 | issue #11 streaming-method isolation + PR #12 gateway fix |
 | 0.3.11 | 0.2.2-rc.1 | dependency retarget onto the rc.1 line (vendor stable) |

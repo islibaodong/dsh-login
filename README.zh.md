@@ -26,7 +26,9 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 ---
 ## 当前状态
 
-**当前版本：`@islibaodong/dsh-login@0.3.13`**（git 标签 `v0.3.13`）——跟随 DSH **0.2.2-rc.2**；全量测试 **22 文件 / 298 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+**当前版本：`@islibaodong/dsh-login@0.3.14`**（git 标签 `v0.3.14`）——跟随 DSH **0.2.2-rc.3**；全量测试 **22 文件 / 298 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+
+0.3.14 是**纯重钉版本**：DSH 0.2.2-rc.2 → rc.3 之间插件挂载的所有 seam 均字节稳定，线面仅新增 1 个方法（`deepseekChatImport.limits`，对话归档导入器的上传限额探测——上游声明 owner-only，本插件按 user 放行）。已在 rc.3 运行时下实测验证（登录墙、owner 225 / user 140 的能力面切分）。
 
 0.3.12 是**安全修复版本**，修复 [issue #11](https://github.com/islibaodong/dsh-login/issues/11)：流式方法（`workspace.follow` 工作区树、以及带 id 的 `session.page` 等调用）走 `/api/remote.mux` WebSocket，只拦 POST 的桥墙完全看不见——普通用户可枚举并切入他人的工作区。0.3.12 起插件内置 **dispatch-seam guard**：连接准入要求浏览器路径携带有效 dsh-login 会话（含 WebSocket upgrade），分发 seam 对每次浏览器调用逐用户把关——非 user 方法拒绝、id 参数过归属校验、`workspace.follow` 逐帧过滤。同时带上已合并的 PR #12 修复（DSH 0.2.2 登录后主页 400）与 CI 重写（Node 24 矩阵、dist 新鲜度闸门）。
 
@@ -34,6 +36,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 | dsh-login | DSH | 说明 |
 |-----------|-----|------|
+| 0.3.14 | 0.2.2-rc.3 | 纯重钉：devDeps 重定向到 rc.3 元组线（线面 225 → 226，+`deepseekChatImport.limits`）；所有挂载 seam 字节稳定 |
 | 0.3.13 | 0.2.2-rc.2 | 依赖重定向到 rc.2 元组线（线面 204 → 225，officeToPdf→officeKit）+ 用户管理「侧边栏显示」开关 |
 | 0.3.12 | 0.2.2-rc.1 | issue #11 流式方法隔离修复 + PR #12 网关修复 |
 | 0.3.11 | 0.2.2-rc.1 | 依赖重定向到 rc.1 元组线（vendor 稳定版） |

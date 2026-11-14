@@ -18,14 +18,15 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.2-rc.2 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 225 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
+ * 0.2.2-rc.3 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
+ * 226 in total — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
  * subset of this classification, so one list serves both supported lines; the
  * 0.2.2-line additions are the forge panel review/commits/reviewers surface,
  * the `officeToPdf`→`officeKit` rename, the DeepSeek Platform account
  * notification trio, the agent-team mode toggle, host MCP-server management,
  * the web search/fetch provider list, `terminal.watch`,
- * `workspaceFiles.search` and the `subagents.interruptByUser` rename). They
+ * `workspaceFiles.search`, the `subagents.interruptByUser` rename and the
+ * deepseek-chat-import limits probe). They
  * are a **total, disjoint classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
@@ -46,7 +47,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.2'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.3'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may
@@ -211,6 +212,16 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'userQuestions.answer', 'userQuestions.attachWait',
   // ── toolResults: the Session's own tool-result trajectory stream ──────────
   'toolResults.watch',
+  // ── deepseek-chat-import: the conversation-archive importer's limits ───────
+  // 0.2.2-rc.3 adds the chat-import feature (#8342). `limits` reports the
+  // upload constraints the browser checks before posting an exported archive;
+  // upstream declares the surface owner-only, and under dsh-login every
+  // signed-in browser user is an owner principal, so the read always
+  // succeeds — a harmless per-user read, same trust shape as the
+  // schedule/session catalog reads. The archive upload itself is an HTTP POST
+  // route (`/api/deepseek-chat-import/archive`), not a wire method, so it is
+  // outside this registry's scope.
+  'deepseekChatImport.limits',
 ])
 
 /**
