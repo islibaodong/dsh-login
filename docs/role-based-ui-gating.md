@@ -113,3 +113,19 @@ an upstream-provided principal instead of a dsh-login-declared one — re-read
 §3/§4 when the next DSH release carries it. Verdict and effort estimate
 unchanged today.
 
+**2026-11-15 (scheduled watch)** — re-checked after the 11-14 rc.3 adaptation
+(dsh-login 0.3.14): **zero upstream movement since the 11-14 watch** —
+origin/master tip still `39163dd30f` (2026-11-13 15:37 +0800), backlog still
+608 commits past `dsh-v0.2.2-rc.3`, no new tag, every npm peer `next` still
+0.2.2-rc.3, `@islibaodong/dsh-login` `latest` still 0.3.14.
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | all three levers confirmed at the same lines as 11-14: `renderIndex(html, peer)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', …)` at `packages/api/remote-access/src/index.ts:139` |
+| No upstream role model to reuse | grep at BOTH `origin/master` tip and the rc.3 tag = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline) |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.14: 140 / 85 / 1 of 226 (`src/api-filter.ts`) |
+
+Nothing new to act on. The gateway auth-provider WIP is unchanged (same tip,
+no new commits), so §4's condition (a)/(b) has not fired. Verdict and effort
+estimate unchanged.
+
