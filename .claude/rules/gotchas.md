@@ -241,3 +241,33 @@
   `node -e "import('./scripts/dump-wire-surface.mjs').then(m=>{const live=m.enumerateWireSurface('E:/code/deepseek-harness');const snap=JSON.parse(require('fs').readFileSync('tests/fixtures/wire-surface.json','utf8')).methods;…})"`.
   Note `tests/wire-surface.spec.ts` deliberately tolerates a size mismatch
   (returns early), so a dev checkout never reds the suite.
+- **DSH session sandbox vs npm registry reads (2026-11-15):** under the dsh
+  harness session sandbox (workspace-write on this repo), `npm view` fails with
+  EPERM — npm writes its request cache to the global `E:\dev-cache\npm-cache`
+  (outside the workspace), so even a read-only registry query dies
+  ("Invalid response body ... EPERM ... `_cacache\tmp`"), and its log write
+  fails the same way. `curl.exe` against the registry failed the same day for a
+  different reason (connection closed mid-body). Working pattern: plain
+  `node -e "fetch('https://registry.npmmirror.com/<pkg>',{headers:{Accept:'application/vnd.npm.install-v1+json'}})"`
+  — node's fetch reaches the mirror, `dist-tags` parse from the abbreviated
+  packument, zero local writes. (Redirecting npm's `--cache` into the workspace
+  would also work.)
+- **git fetch vs the same sandbox (2026-11-15):** `git -C
+  E:\code\deepseek-harness fetch` fails with "error: cannot open
+  '.git/FETCH_HEAD': Permission denied" — the harness checkout is outside the
+  session workspace, so the FETCH_HEAD write is denied. Remote authority
+  without any local write: `git ls-remote origin` (live tags + branch tips; the
+  same standing convention as the 11-11 watch). Greps at a remote tip still
+  work once its objects were fetched in a previous unsandboxed session — e.g.
+  master tip `39163dd30f` was fetched on 11-14, so `git grep <pat> 39163dd30f`
+  resolves locally; a NEW tip needs a sandbox escalation of the fetch (or a
+  session with write access to that checkout) before tip-level greps can run.
+- **vitest/tsx cannot run under the session sandbox (2026-11-15):** both
+  `npm test` (vitest worker processes) and `node --import tsx/esm
+  tests/runner.mjs` (tsx transform workers) die with EPERM on `spawn` — the
+  sandbox forbids child spawns with piped stdio, and both toolchains pipe
+  worker output. Direct spawns are fine (node -e, git, curl all work). Docs-only
+  watch days: skip the suite re-run and lean on the last green baseline from an
+  unsandboxed session (11-14: 22 files / 298 tests green on `8546bea`); a
+  release day needs a session whose sandbox permits piped spawns (or
+  escalation) before publishing anything.

@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11 and 2026-11-14)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14 and 2026-11-15)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -112,6 +112,20 @@ non-owner principal model on that seam, condition (a)/(b) in §4 could fire with
 an upstream-provided principal instead of a dsh-login-declared one — re-read
 §3/§4 when the next DSH release carries it. Verdict and effort estimate
 unchanged today.
+
+**2026-11-15 (scheduled watch)** — no new DSH release (npm `next` still
+0.2.2-rc.3; newest tag still `dsh-v0.2.2-rc.3`; origin/master tip still
+`39163dd30f` — byte-identical to the 11-14 state, so the 11-14 table's evidence
+carries over; re-confirmed by grep anyway):
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`; the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`; `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139` — re-grepped at the `dsh-v0.2.2-rc.3` tag, same lines as 11-14 |
+| No upstream role model to reuse | `git grep -nEi 'multi.?user\|multiuser\|role.?based\|\brbac\b' 39163dd30f -- packages apps` = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline); backlog past rc.3 still 608 commits, tip unchanged |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.14: 140 / 85 / 1 of 226 (`src/api-filter.ts`); drift radar at the rc.3 checkout = 226 == 226, added [] removed [] |
+
+Verdict and effort estimate in §3/§4 unchanged; the gateway auth-provider radar
+(11-14) still stands — tip unchanged, nothing new to re-read.
 
 **2026-11-15 (scheduled watch)** — re-checked after the 11-14 rc.3 adaptation
 (dsh-login 0.3.14): **zero upstream movement since the 11-14 watch** —
