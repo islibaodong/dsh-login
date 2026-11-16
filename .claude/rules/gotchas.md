@@ -262,6 +262,12 @@
   master tip `39163dd30f` was fetched on 11-14, so `git grep <pat> 39163dd30f`
   resolves locally; a NEW tip needs a sandbox escalation of the fetch (or a
   session with write access to that checkout) before tip-level greps can run.
+  Same boundary blocks `git push` to this repo (msys2 ssh fatal:
+  `NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…) 0xC0000022` — access
+  denied before ssh even starts). Sanctioned path: commit first, then a one-shot
+  `sandbox_permissions` escalation of the exact push command; on an unattended
+  scheduled run the approval may sit unanswered for hours (11-15 watch: approval
+  landed 11-16 08:55 +0800, ~21 h later, push then succeeded).
 - **vitest/tsx cannot run under the session sandbox (2026-11-15):** both
   `npm test` (vitest worker processes) and `node --import tsx/esm
   tests/runner.mjs` (tsx transform workers) die with EPERM on `spawn` — the
