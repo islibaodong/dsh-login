@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14 and 2026-11-15)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15 and 2026-11-16)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -142,4 +142,18 @@ origin/master tip still `39163dd30f` (2026-11-13 15:37 +0800), backlog still
 Nothing new to act on. The gateway auth-provider WIP is unchanged (same tip,
 no new commits), so §4's condition (a)/(b) has not fired. Verdict and effort
 estimate unchanged.
+
+**2026-11-16 (scheduled watch)** — no new DSH release (newest tag still
+`dsh-v0.2.2-rc.3`; origin/master tip still `39163dd30f` — zero upstream movement
+since the 11-14 watch; every npm peer `next` still 0.2.2-rc.3;
+`@islibaodong/dsh-login` `latest` still 0.3.14):
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | at the rc.3 tag all three levers sit at the same lines as 11-14: `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', …)` at `packages/api/remote-access/src/index.ts:139`. NEW tip-level look at `39163dd30f`: the `renderIndex` implementation has moved to `packages/host/webserver/src/index.ts:867` and the inject logic now lives in `packages/host/webserver/src/injections.ts` (`renderIndexInjections`) — unreleased-backlog refactor only, signature and per-request transform shape unchanged, lever intact |
+| No upstream role model to reuse | recurring grep at BOTH the master tip and the rc.3 tag = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline) |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.14: 140 / 85 / 1 of 226 (`src/api-filter.ts`); drift radar at the rc.3 checkout = 226 == 226, added [] removed [] |
+
+Nothing new to act on: the gateway auth-provider WIP is unchanged (same tip),
+so §4's condition (a)/(b) has not fired. Verdict and effort estimate unchanged.
 
