@@ -55,6 +55,11 @@
   `remove_bundle` of the npm 0.3.15 row — a same-name source change needs remove-then-install).
   Client rebuilds from the repo now reach the GUI on a page refresh without reinstalling;
   a host-half change needs the loader row to restart.
+- GitHub Releases backfilled (they had stopped at `v0.3.12`): `v0.3.3`, `v0.3.11`, `v0.3.13`,
+  `v0.3.14`, `v0.3.15`, `v0.3.16` created via `gh release create --verify-tag` with notes derived
+  from the changelog entries — English bodies matching the existing style (Highlights, verified
+  line, Full Changelog compare link). All **25 tags now carry a release**; `v0.3.16` is `Latest`.
+  Notes drafts live in `tmp/release-notes/` (gitignored, not shipped).
 
 ## 2026-11-17 (scheduled watch) — no new DSH release; 0.3.15 stays current; READMEs corrected to the 0.3.15 state; no adaptation, no publish
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-17T04:00:01.000Z / 12:00 +0800). dsh-login 0.3.15 was released earlier today (commit b001a5b at 08:16 +0800 — release section below); this watch lands ON TOP of it.
