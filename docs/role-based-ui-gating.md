@@ -157,3 +157,19 @@ since the 11-14 watch; every npm peer `next` still 0.2.2-rc.3;
 Nothing new to act on: the gateway auth-provider WIP is unchanged (same tip),
 so §4's condition (a)/(b) has not fired. Verdict and effort estimate unchanged.
 
+
+**2026-11-17 (scheduled watch)** — no new DSH release (newest tag still
+`dsh-v0.2.2-rc.3` → `38a6a5c965`; origin/master tip still `39163dd30f`, backlog
+still 608 commits; every npm peer `next` still 0.2.2-rc.3;
+`@islibaodong/dsh-login` `latest` now 0.3.15). dsh-login 0.3.15 (the 用户管理
+main-sidebar rework) is current, released 2026-11-17.
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | at the rc.3 tag all three levers sit at the same lines as 11-14: `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', …)` at `packages/api/remote-access/src/index.ts:139`. Tip-level look at `39163dd30f` still shows the unreleased refactor: `renderIndex` at `packages/host/webserver/src/index.ts:867`, inject logic in `packages/host/webserver/src/injections.ts` (`renderIndexInjections`) — signature/shape unchanged, lever intact |
+| No upstream role model to reuse | recurring grep at BOTH the master tip `39163dd30f` and the `dsh-v0.2.2-rc.3` tag = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline) |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.15: 140 / 85 / 1 of 226 (`src/api-filter.ts`, pinned by `tests/wire-surface.spec.ts`); drift radar at the rc.3 checkout = 226 == 226, added [] removed [] |
+
+Nothing new to act on: the tip is byte-identical to 11-14/15/16, so the gateway
+auth-provider WIP has not moved and §4's condition (a)/(b) has not fired.
+Verdict and effort estimate (≈1–2 days) unchanged.

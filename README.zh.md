@@ -18,7 +18,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 - 👥 **多账号** —— 首次访问创建管理员账号，其余用户由管理员在 GUI 里直接新建，无需命令行
 - 🙈 **会话隔离** —— 普通用户只能看到、操作**自己**的对话（含其派生的子代理/分叉）；桥墙对普通用户拒绝白名单外的方法，并把 `session.list`/`session.search`/`workspace.list` 响应收窄为自己拥有的会话；dispatch-seam 守卫对每次分发做归属校验（含 `workspace.follow` 流的逐用户帧过滤）；其他人的会话、消息、工作区一律不可见；凭据、宿主设置等管理域整体禁用
 - 🎭 **整 UI 角色门** —— 普通用户的页面在返回前会过滤客户端引导图（`window.__DSH_BOOT__`），admin 专属 UI 插件不再挂载（`uiRoleGate`，默认开）
-- 🛠 **用户管理** —— 设置 → 用户管理：最后登录时间、在线会话数、重置密码、禁用、删除；禁用/删除/改密会**立即吊销**该用户的现有会话
+- 🛠 **用户管理** —— 主界面左侧栏的管理员专属「用户管理」入口（点开即整版面版块），版块内的「侧边栏显示」开关可即时隐藏/显示该入口；内含最后登录时间、在线会话数、重置密码、禁用、删除；禁用/删除/改密会**立即吊销**该用户的现有会话。「设置 → 用户管理」始终保留，作为回退入口
 - 👑 **管理员例外** —— 管理员不受隔离限制，可见全部会话，可配置宿主
 - 🚪 **登出** —— 每个用户的设置面板里都有登出入口
 - 🌐 **远程访问友好** —— 通过 frp/隧道或局域网 IP 访问 GUI 无需手改 `trustedHosts`：`/api` 主机信任围栏使用「实时有效集」（LAN 字面量 + `trustedHosts` + 已学习主机），且任何成功登录都会把请求 Host 学进持久化白名单，可在「设置 → 用户管理」里增删管理
@@ -26,7 +26,9 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 ---
 ## 当前状态
 
-**当前版本：`@islibaodong/dsh-login@0.3.14`**（git 标签 `v0.3.14`）——跟随 DSH **0.2.2-rc.3**；全量测试 **22 文件 / 298 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+**当前版本：`@islibaodong/dsh-login@0.3.15`**（git 标签 `v0.3.15`）——跟随 DSH **0.2.2-rc.3**；全量测试 **22 文件 / 299 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+
+0.3.15 重做了 0.3.13/0.3.14 引入的**用户管理侧边栏显示**开关：开关改为控制**主界面左侧栏**的入口（该入口把用户管理作为整版面版块打开），不再是设置面板里的分节——「设置 → 用户管理」永久保留，作为回退路径。服务端面与 0.3.13 完全一致（`GET/POST /api/auth/admin/settings/sidebar`、`GET /api/auth/me` 的 `usersSidebarVisible`）；客户端改为在 `sidebar.panellist` 与 `main` 席位之间即时（反）注册，无需刷新。
 
 0.3.14 是**纯重钉版本**：DSH 0.2.2-rc.2 → rc.3 之间插件挂载的所有 seam 均字节稳定，线面仅新增 1 个方法（`deepseekChatImport.limits`，对话归档导入器的上传限额探测——上游声明 owner-only，本插件按 user 放行）。已在 rc.3 运行时下实测验证（登录墙、owner 225 / user 140 的能力面切分）。
 
@@ -36,6 +38,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 | dsh-login | DSH | 说明 |
 |-----------|-----|------|
+| 0.3.15 | 0.2.2-rc.3 | 用户管理「侧边栏显示」改造：入口移到**主界面左侧栏**（设置面板保留固定回退入口）；服务端面与 0.3.13 一致；测试 299 |
 | 0.3.14 | 0.2.2-rc.3 | 纯重钉：devDeps 重定向到 rc.3 元组线（线面 225 → 226，+`deepseekChatImport.limits`）；所有挂载 seam 字节稳定 |
 | 0.3.13 | 0.2.2-rc.2 | 依赖重定向到 rc.2 元组线（线面 204 → 225，officeToPdf→officeKit）+ 用户管理「侧边栏显示」开关 |
 | 0.3.12 | 0.2.2-rc.1 | issue #11 流式方法隔离修复 + PR #12 网关修复 |
@@ -56,8 +59,8 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
   2. **dispatch-seam 守卫（0.3.12 起内置，自动生效——修复 [issue #11](https://github.com/islibaodong/dsh-login/issues/11)）**——连接准入要求浏览器路径携带有效 dsh-login 会话（含 `/api/remote.mux` WebSocket upgrade），并把 dsh-login 身份打标到每个浏览器 peer；分发 seam（`dispatchRpc`/`openWireStream`）随后对每次浏览器调用逐用户把关：非 user 方法拒绝、全部 id 参数（`sessionId`/`workspaceId`/`agentId`/…）过归属校验、`workspace.follow` 流逐帧过滤（镜像上游 per-principal 语义：baseline 收窄、delivered 集合记账、可见性丢失 replace 重同步、未知帧 fail-closed）。未打标 peer（launch-token CLI/SDK、宿主内部调用）保持上游原语义。
   3. **REMOTE 层守卫（`wrapRemoteGateway`，导出、可选）**——面向部署方的组合原语，包装网关公开 API（见 [`docs/compose-guard.md`](docs/compose-guard.md)）；0.3.12 起内置守卫已覆盖浏览器流量，组合它属于额外的纵深防御。
   其余一律禁止：
-  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.2-rc.1 实际暴露的 204 个方法中的 124 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeToPdf.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及 0.2.2 新增面（按会话的 `forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
-  - 管理员专属域（`ADMIN_ONLY_METHODS`，79 个）：`credentials.*`、`settings.*`、`agentPresets.*`、原生插件管理器（`pluginManager.*`、`pluginMarket.*`、`pluginRegistryProbe.*`、`pluginInventory.*`）、`dynamicCordisRunner.*`、`claudeCodeMods.*`、整个 `account.*` 命名空间（唯一的进程级上游 DeepSeek Platform 授权）、CUA 同意（`cuaAccess.*`）、`schedule.deleteInactive` 与 `liveshareShares.*` 分享管理面
+  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.2-rc.3 实际暴露的 226 个方法中的 140 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeKit.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及 0.2.2 新增面（按会话的 `forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
+  - 管理员专属域（`ADMIN_ONLY_METHODS`，85 个）：`credentials.*`、`settings.*`、`agentPresets.*`、原生插件管理器（`pluginManager.*`、`pluginMarket.*`、`pluginRegistryProbe.*`、`pluginInventory.*`）、`dynamicCordisRunner.*`、`claudeCodeMods.*`、整个 `account.*` 命名空间（唯一的进程级上游 DeepSeek Platform 授权）、CUA 同意（`cuaAccess.*`）、`schedule.deleteInactive` 与 `liveshareShares.*` 分享管理面
   - 宿主内部：`workspace.initializeDefault`（首次使用的内部管线，对用户拒绝且从不对外通告）
   - 未知方法（不在本版本 wire 面上）会在宿主日志里按方法名报一次并带上目标版本，于是上游改名留下的是诊断信息而不是用户侧的静默拒绝——用 `node scripts/dump-wire-surface.mjs` 从 checkout 重新生成 `src/api-filter.ts`
   - 工作区级变更按 `workspaceId` 所有权守卫：普通用户只能对「含自己会话」的工作区执行 `rename`/`delete`/`insertBefore`，`create` 只能落在自己的沙箱目录（`workspaceRoot/<username>`）内——既动不了他人的工作区，也不能把工作区指向任意宿主目录
@@ -177,7 +180,7 @@ src/
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
 scripts/build-client.mjs  # 生成 dist/client.js：设置面板 dsh.client 注册
-tests/（22 文件 / 298 用例全绿）
+tests/（22 文件 / 299 用例全绿）
 └── *.spec.ts         # vitest 测试定义
 
 ## 许可证
