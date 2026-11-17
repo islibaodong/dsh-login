@@ -118,7 +118,7 @@ browser calls; the dispatch seam is the effective hook.
   POST `/api/auth/admin/users/remove` (refuses the last admin); optional
   hosts route; optional setting routes —
   `/api/auth/admin/settings/default-workspace`, `.../remote-web-ui-compat`,
-  `.../sidebar` (侧边栏显示, from `AdminDeps.sidebarSetting`).
+  `.../sidebar` (侧边栏显示 — MAIN-page sidebar entry toggle, from `AdminDeps.sidebarSetting`).
   8KB body cap; webserver registers (kind,path) pairs, so GET/POST dispatch
   inside handlers. No `/admin` HTML page — the settings panel owns the UI.
 
@@ -156,13 +156,15 @@ browser calls; the dispatch seam is the effective hook.
   runs synchronously to provide `connection`. NEVER add a hard inject here:
   this fiber is the only `connection` provider (shipped row disabled) and
   `locale` waits on `connection`, so a hard slots/locale wait deadlocks the
-  whole boot (the 59-pending-entries failure). Dictionaries + the
-  `settings.section` slot entries register via a
-  `ctx.inject(['slots','locale'])` dependency fiber: a two-entry state machine
-  keyed on the 侧边栏显示 flag — admins get 用户管理 (id `users`, order 25;
-  unregisters when hidden, keeping an open panel alive until unmount) with
-  the 账户 fallback (id `account`, order 30) carrying the same switch;
-  ordinary users get 账户 only. Identity from `/api/auth/me`, 15s-bounded.
+  whole boot (the 59-pending-entries failure). Dictionaries + slot entries
+  register via a `ctx.inject(['slots','locale'])` dependency fiber. The
+  settings.section entry is the fixed single entry (admin → 用户管理 id
+  `users` order 25, ordinary → 账户 id `account` order 25). For admins the
+  侧边栏显示 flag drives a MAIN-page sidebar state machine: `sidebar.panellist`
+  entry (`dsh-login-users`, order 20, `users.nav` label, UsersPanelIcon SVG)
+  + `main` seat (`key: dsh-login-users`) rendering the full UsersPanel;
+  the switch card in the settings users panel (un)registers both live.
+  Identity from `/api/auth/me`, 15s-bounded.
   Table + create card + ws/rwu/sidebar switch cards + hosts card +
   reset/disable/remove dialogs + logout entry; React and Button/Input/Modal/
   RiskConfirmation come from the platform module-table seeds; styles are

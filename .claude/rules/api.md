@@ -20,7 +20,7 @@ paths registered by the connection child plugin.
 | GET/POST/DELETE | `/api/auth/admin/hosts` | admin | TrustedHosts registry list/add/remove (`{host}`) |
 | GET/POST | `/api/auth/admin/settings/default-workspace` | admin | 默认用户工作空间 toggle (`{enabled}` → `{ok,enabled}`; 400 non-boolean) |
 | GET/POST | `/api/auth/admin/settings/remote-web-ui-compat` | admin | remote-web-ui 兼容 toggle (`{ok,enabled,applied}`; `applied`=ok/skipped/unregistered) |
-| GET/POST | `/api/auth/admin/settings/sidebar` | admin | 侧边栏显示 toggle — whether 用户管理 shows in the settings sidebar (`{enabled}` → `{ok,enabled}`; persisted `settings-sidebar.json`, default on; 400 non-boolean) |
+| GET/POST | `/api/auth/admin/settings/sidebar` | admin | 侧边栏显示 toggle — whether 用户管理 shows in the MAIN-page sidebar (icon + main-panel seat; settings section unaffected) (`{enabled}` → `{ok,enabled}`; persisted `settings-sidebar.json`, default on; 400 non-boolean) |
 | ANY | `/api` (prefix) | host trust + `dsh_session` cookie | Carrier takeover: 403 untrusted host, 401 no session, 426 plain GET on event paths, 403 non-allowed method (non-admin), per-user dispatch otherwise |
 | WS | `/api/events.mux`, `/api/events.host` | host trust + cookie on upgrade | Per-user, ownership-filtered downlinks |
 
@@ -28,11 +28,13 @@ No standalone `/admin` page anymore: user management ships inside the GUI
 settings panel (设置-用户管理 for admins, 账户 for ordinary users) via the
 browser bundle's settings section (`src/settings-panel.client.js`, appended to
 `dist/client.js` by `scripts/build-client.mjs`; theme via `--dsw-alias-*`
-tokens; identity picked from `/api/auth/me` at client apply). The admin
-section registers via a two-entry state machine keyed on the 侧边栏显示 flag:
-flag off → users section unregisters (the currently open panel stays until
-unmount) and admins fall back to the 账户 section, which carries the same
-switch, so the setting is always reachable.
+tokens; identity picked from `/api/auth/me` at client apply). The settings
+section registration is the fixed single entry (admin → 用户管理 order 25,
+ordinary → 账户 order 25). The 侧边栏显示 flag instead gates a MAIN-page
+sidebar entry, registered only for admins: `sidebar.panellist`
+(`dsh-login-users`, order 20, `users.nav` label, `UsersPanelIcon` SVG) + a
+`main` seat keyed `dsh-login-users` rendering the full UsersPanel; the
+switch card inside the settings 用户管理 panel (un)registers both live.
 
 ## GET/HEAD fallback (gateway)
 `dsh_session` cookie required: 302 `/login` unauthenticated; else static dist

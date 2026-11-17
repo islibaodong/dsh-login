@@ -44,13 +44,15 @@ function makeRequire() {
   })
 }
 
-interface RegisteredSection {
-  options: { id: string; order: number; label: () => string }
+interface SlotEntry {
+  options: { name?: string; id?: string; key?: string; order?: number; label?: () => string }
   render: (props: unknown) => unknown
 }
 
 function makeCtx() {
-  const sections: RegisteredSection[] = []
+  const sections: SlotEntry[] = []
+  const panels: SlotEntry[] = []
+  const mains: SlotEntry[] = []
   const disposers: Array<() => void> = []
   const stats = { registered: 0, unregistered: 0 }
   const base = {
@@ -70,13 +72,14 @@ function makeCtx() {
         void factory()
         return () => {}
       },
-      register: (options: RegisteredSection['options'], render: unknown) => {
-        const entry = { options, render } as unknown as RegisteredSection
-        sections.push(entry)
+      register: (options: SlotEntry['options'], render: unknown) => {
+        const entry = { options, render } as unknown as SlotEntry
+        const bucket = options.name === 'main' ? mains : options.name === 'sidebar.panellist' ? panels : sections
+        bucket.push(entry)
         stats.registered++
         return () => {
-          const index = sections.indexOf(entry)
-          if (index >= 0) sections.splice(index, 1)
+          const index = bucket.indexOf(entry)
+          if (index >= 0) bucket.splice(index, 1)
           stats.unregistered++
         }
       },
@@ -93,7 +96,7 @@ function makeCtx() {
       return Promise.resolve()
     },
   }
-  return { ctx, sections, stats, disposers }
+  return { ctx, sections, panels, mains, stats, disposers }
 }
 
 const fetchMock = vi.fn()
@@ -225,64 +228,91 @@ function sidebarInputs(tree: unknown): El[] {
 }
 
 describe('sidebar visibility toggle (侧边栏显示)', () => {
-  it('hides 用户管理 and falls back to the 账户 section when usersSidebarVisible is false', async () => {
-    const { ctx, sections } = makeCtx()
+  it('hides the main-sidebar 用户管理 entry while the settings section stays put', async () => {
+    const { ctx, sections, panels, mains } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true, usersSidebarVisible: false }) })
     factory(makeRequire()).apply(ctx)
     await flush()
+    // The settings-panel section is unaffected (设置 → 用户管理 stays reachable).
     expect(sections).toHaveLength(1)
-    expect(sections[0]!.options.id).toBe('account')
-    expect(sections[0]!.options.label()).toBe('account.nav')
-    // The admin fallback account panel carries the re-enable switch, initially off.
-    const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
-    const inputs = sidebarInputs(tree)
-    expect(inputs).toHaveLength(1)
-    expect(inputs[0]!.props.checked).toBe(false)
+    expect(sections[0]!.options.id).toBe('users')
+    // The main-page sidebar entry is hidden: no panellist icon, no main seat.
+    expect(panels).toHaveLength(0)
+    expect(mains).toHaveLength(0)
   })
 
-  it('renders the 侧边栏显示 switch inside the admin users panel, never for ordinary users', async () => {
-    const { ctx, sections } = makeCtx()
+  it('registers the main-sidebar 用户管理 panel for admins by default', async () => {
+    const { ctx, sections, panels, mains } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true }) })
     factory(makeRequire()).apply(ctx)
     await flush()
-    expect(sections).toHaveLength(1)
-    const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
-    const inputs = sidebarInputs(tree)
-    expect(inputs).toHaveLength(1)
-    expect(inputs[0]!.props.checked).toBe(true)
-    // Ordinary users never get the switch.
-    const bob = makeCtx()
+    expect(sections.map(s => s.options.id)).toEqual(['users'])
+    // Sidebar entry: icon + metadata.
+    expect(panels).toHaveLength(1)
+    expect(panels[0]!.options.id).toBe('dsh-login-users')
+    expect(panels[0]!.options.order).toBe(20)
+    expect(panels[0]!.options.label!()).toBe('users.nav')
+    const icon = (panels[0]!.render as (p: unknown) => unknown)({ size: 16 })
+    expect((icon as El).type).toBe('svg')
+    // Main seat: full 用户管理 panel keyed to the same panel id.
+    expect(mains).toHaveLength(1)
+    expect(mains[0]!.options.key).toBe('dsh-login-users')
+    const seatTree = deepRender((mains[0]!.render as (p: unknown) => unknown)(undefined))
+    const seatInputs = sidebarInputs(seatTree)
+    expect(seatInputs).toHaveLength(1)
+    expect(seatInputs[0]!.props.checked).toBe(true)
+  })
+
+  it('never registers the main-sidebar entry or the switch for ordinary users', async () => {
+    const { ctx, sections, panels, mains } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'bob', isAdmin: false }) })
-    factory(makeRequire()).apply(bob.ctx)
+    factory(makeRequire()).apply(ctx)
     await flush()
-    const bobTree = deepRender((bob.sections[0]!.render as (p: unknown) => unknown)(undefined))
+    expect(sections.map(s => s.options.id)).toEqual(['account'])
+    expect(panels).toHaveLength(0)
+    expect(mains).toHaveLength(0)
+    const bobTree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
     expect(sidebarInputs(bobTree)).toHaveLength(0)
   })
 
-  it('toggling the switch off unregisters 用户管理 and registers the 账户 fallback', async () => {
-    const { ctx, sections, stats } = makeCtx()
+  it('toggling the switch live (un)registers the main-sidebar entry', async () => {
+    const { ctx, sections, panels, mains, stats } = makeCtx()
     vi.stubGlobal('fetch', fetchMock)
-    fetchMock.mockImplementation(async (url: unknown, init?: { method?: string }) => {
+    fetchMock.mockImplementation(async (url: unknown, init?: { method?: string; body?: string }) => {
       const path = String(url)
       if (path === '/api/auth/me') return { ok: true, json: async () => ({ username: 'root', isAdmin: true }) }
       if (path === '/api/auth/admin/settings/sidebar' && (init?.method ?? 'GET') === 'POST') {
-        // api() reads res.text() and parses JSON itself.
-        return { ok: true, text: async () => JSON.stringify({ ok: true, enabled: false }) }
+        // api() reads res.text() and parses JSON itself; echo the requested value.
+        const requested = JSON.parse(init?.body ?? '{}') as { enabled?: boolean }
+        return { ok: true, text: async () => JSON.stringify({ ok: true, enabled: requested.enabled === true }) }
       }
       throw new Error('unexpected fetch: ' + path)
     })
     factory(makeRequire()).apply(ctx)
     await flush()
-    expect(sections.map(s => s.options.id)).toEqual(['users'])
+    expect(panels).toHaveLength(1)
+    expect(mains).toHaveLength(1)
+    // The switch lives in the settings-panel 用户管理 section.
     const tree = deepRender((sections[0]!.render as (p: unknown) => unknown)(undefined))
     const input = sidebarInputs(tree)[0]!
     ;(input.props.onChange as (e: unknown) => void)({ target: { checked: false } })
     await flush()
-    expect(sections.map(s => s.options.id)).toEqual(['account'])
-    expect(stats.registered).toBe(2)
-    expect(stats.unregistered).toBe(1)
+    expect(panels).toHaveLength(0)
+    expect(mains).toHaveLength(0)
+    expect(sections.map(s => s.options.id)).toEqual(['users'])
+    // settings.section (1) + panellist (1) + main (1) registered; the two
+    // main-sidebar entries then unregistered by the toggle-off.
+    expect(stats.registered).toBe(3)
+    expect(stats.unregistered).toBe(2)
+    // Toggle back on from the same mounted switch: entries come back.
+    ;(input.props.onChange as (e: unknown) => void)({ target: { checked: true } })
+    await flush()
+    expect(panels).toHaveLength(1)
+    expect(mains).toHaveLength(1)
+    expect(stats.registered).toBe(5)
+    expect(stats.unregistered).toBe(2)
   })
 })

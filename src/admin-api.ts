@@ -31,7 +31,7 @@ export interface AdminDeps {
   defaultWorkspaceSetting?: DefaultWorkspaceSetting
   /** Live + persisted "remote-web-ui 兼容" toggle. Optional for back-compat. */
   remoteWebUiSetting?: BooleanSetting
-  /** Live + persisted "侧边栏显示" toggle (whether 用户管理 shows in the settings sidebar). Optional for back-compat. */
+  /** Live + persisted "侧边栏显示" toggle (whether 用户管理 shows in the main-page sidebar). Optional for back-compat. */
   sidebarSetting?: BooleanSetting
   /** Runtime applier of the compat flag to remote-web-ui (returns the outcome). */
   onRemoteWebUiApply?: (enabled: boolean) => Promise<CompatApplyResult>
