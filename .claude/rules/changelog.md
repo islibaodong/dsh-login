@@ -1,3 +1,61 @@
+## 2026-11-17 (feature) — dsh-login 0.3.16: 主界面「用户管理」整页布局重做 (块式堆叠)
+
+- Trigger: maintainer feedback on 0.3.15 — "继续优化在主界面时，用户管理展示效果，目前布局太丑了。"
+  Root cause: the panel was designed for the settings column and reused verbatim in the
+  `main` seat, so inside a ~1176px main area it rendered as a 720px stack of cards hugging
+  the left edge (`.dshlu-section { max-width: 720px }`), with no page shell, no hierarchy,
+  and switch cards floating as three separate boxes.
+- Client only (`src/settings-panel.client.js`); the server surface, routes, persisted flags
+  and the `sidebar.panellist`/`main` registration logic are untouched.
+  - `panelProps(layout)` now carries `layout: 'main' | 'settings'`; the `main` seat renders
+    `UsersPanel(panelProps('main'))`, the `settings.section` entry keeps
+    `UsersPanel(panelProps('settings'))`. `var main = props.layout === 'main'` switches the
+    chassis, so the settings column keeps its 5-card stack and `.dshlu-section` 720px rhythm.
+  - New main-only page shell: `.dshlu-page` (centred column, `padding: 0 clamp(16px, 3vw, 36px)`)
+    > `.dshlu-pagecol` (`max-width: 1040px`, `gap: 20px`, `padding: 30px 0 44px`), mirroring the
+    framework's own main-page conventions (ui-plugin-manager `PluginManagerPage.module.css`).
+  - Page anatomy: hero (`h1.dshlu-heroTitle` 22px/600 + `p.dshlu-heroLede`) → stat tiles
+    (`div.dshlu-stats` 3-up `div.dshlu-stat` 账户总数 / 在线 / 已禁用, tone modifiers
+    `--success`/`--warn`/`--muted`; only when the user list is `ready`) → four titled blocks
+    (`section.dshlu-block` + `div.dshlu-blockHead` > `h2.dshlu-blockTitle` + `span.dshlu-blockNote`):
+    账户列表 (with 共 N 个 note), 新建用户, 访问白名单, 登录与访问.
+  - 登录与访问 is `dshlu-block--rows`: the three switches (默认用户工作空间 / 远程访问兼容 / 侧边栏显示)
+    become hairline-separated `div.dshlu-settingrow` rows instead of three cards — same
+    `.dshlu-switchrow` internals, `SidebarCard({as: 'row'})` returns the row wrapper,
+    `wrapSwitch(row)` picks card vs row per layout.
+  - Table in main mode reads as a table: header hairline, row separators, no boxed rows
+    (`.dshlu-pagecol .dshlu-table .dshlu-row { border: 0; border-bottom: 1px solid …; border-radius: 0 }`),
+    first column gets a 24px circular initial avatar (`span.dshlu-avatar`), rows get 10px padding,
+    `.dshlu-empty`/`.dshlu-loading` centre. Form fields cap at `flex: 0 1 240px` so a 1040px block
+    does not produce 450px-wide inputs.
+  - Locale (zh + en): `stats.accounts`, `stats.online`, `stats.disabled`, `table.title`,
+    `table.count` (`共 {n} 个` / `{n} total`), `access.title`.
+- Superseded design (kept as the lesson): the first draft used masonry-free 2/3-column grids
+  (`.dshlu-columns`, `.dshlu-columns--triple`). Dropped because measured geometry showed a
+  160px hole next to the tall hosts card and the three switch cards read as disconnected boxes.
+- Tests 299 → 302: `settings-panel.client.spec.ts` gains `byClass()` (exact class-token match,
+  null-props safe) plus a 3-case `main-panel layout (主界面展示)` describe — page shell present in
+  main / absent in settings, `dshlu-block` 4 + `dshlu-blockTitle` 4 + `dshlu-blockHead` 4 +
+  `dshlu-settingrow` 3 + `dshlu-card` 0 in main vs 5 cards in settings, and source guards for the
+  new CSS rules + locale keys + the untouched `.dshlu-section` 720px rule.
+  Note: the React stub's `useEffect` is a noop, so lists stay `.dshlu-loading` in the tree
+  (exactly 2) — the spec never sees `.dshlu-table` in the rendered tree.
+- Verification: `npm test` = 22 files / **302 tests** green (2026-11-17 18:24 +0800, 8.97s);
+  `npm run build` + `npm run build:client` (`dist/client.js` **50396 chars**, was 41911);
+  `npm run verify:imports` exit 0. Layout verified numerically against real theme tokens
+  (headless Chrome + CDP geometry probe over a `tmp/preview` render of the exact markup):
+  at a 1424×905 viewport the column is 1040px centred (68px insets both sides), no horizontal
+  overflow anywhere, header/row column x-deltas 0 (first column ±1px after removing row borders),
+  all 6 vertical gaps exactly 20px, page height 1308 (scrolls as the page body should).
+- Release: version bumped to **0.3.16**, committed, tagged `v0.3.16`, pushed to `origin/master`,
+  npm-published (`latest` 0.3.15 → 0.3.16) with the granular token from `.env`
+  (`NPM_ACCESS_TOKENS`, temp `.npmrc.publish`, removed afterwards — see `docs/PUBLISHING.md`).
+- Live instance: installed into the running web profile as a **source link**
+  (`install_bundle link:E:\code\dsh-login` in `C:\Users\Administrator\.dsh\profiles\web`, after
+  `remove_bundle` of the npm 0.3.15 row — a same-name source change needs remove-then-install).
+  Client rebuilds from the repo now reach the GUI on a page refresh without reinstalling;
+  a host-half change needs the loader row to restart.
+
 ## 2026-11-17 (scheduled watch) — no new DSH release; 0.3.15 stays current; READMEs corrected to the 0.3.15 state; no adaptation, no publish
 - Scheduled watch (cron `0 12 * * *` Asia/Shanghai; trigger 2026-11-17T04:00:01.000Z / 12:00 +0800). dsh-login 0.3.15 was released earlier today (commit b001a5b at 08:16 +0800 — release section below); this watch lands ON TOP of it.
 - Detection (three channels + remote authority):

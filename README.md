@@ -18,7 +18,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 - 👥 **Multiple accounts** — the first visit creates the administrator account; further users are added by an admin right inside the GUI, no CLI needed
 - 🙈 **Conversation isolation** — ordinary users see and act on **their own** conversations only (including their subagents/forks); the bridge wall denies non-whitelisted methods and narrows `session.list`/`session.search`/`workspace.list` responses to owned sessions, and the dispatch-seam guard ownership-checks every dispatch (including per-user `workspace.follow` frame filtering); other users' sessions, messages, and workspaces are invisible; credentials, host settings, and other admin domains are forbidden wholesale
 - 🎭 **Whole-UI role gate** — for ordinary users the gateway filters the client boot graph (`window.__DSH_BOOT__`) before serving the page, so admin-only UI plugins never mount (`uiRoleGate`, on by default)
-- 🛠 **User management** — an admin-only 用户管理 entry in the **main page's left sidebar** opens the full panel; its 侧边栏显示 switch hides/shows that entry live. Inside: last-login time, online session count, reset password, disable, remove; disabling/removing/password-changes **immediately revoke** that user's live sessions. 设置 → 用户管理 always stays available as the recovery path
+- 🛠 **User management** — an admin-only 用户管理 entry in the **main page's left sidebar** opens the full panel; its 侧边栏显示 switch hides/shows that entry live. In the main page it renders as a proper full page (hero, 账户总数 / 在线 / 已禁用 stat tiles, then titled blocks: account list with an avatar column, new user, trusted hosts, and a 登录与访问 block whose switches sit as hairline rows); in 设置 → 用户管理 it stays a compact card stack. Inside: last-login time, online session count, reset password, disable, remove; disabling/removing/password-changes **immediately revoke** that user's live sessions. 设置 → 用户管理 always stays available as the recovery path
 - 👑 **Admin exception** — the admin is not isolated: all sessions visible, full configuration access
 - 🚪 **Logout** — every user gets a logout entry in their settings panel
 - 🌐 **Remote access friendly** — reach the GUI through frp/隧道/tunnels or a LAN IP without hand-editing `trustedHosts`: the `/api` host-trust fence uses a live set (LAN literals + `trustedHosts` + auto-learned hosts), and any successful login learns its Host into a persisted whitelist you can manage in 设置 → 用户管理
@@ -26,7 +26,9 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 ---
 ## Current status
 
-**Current release: `@islibaodong/dsh-login@0.3.15`** (git tag `v0.3.15`) — tracks DSH **0.2.2-rc.3**; full suite **22 files / 299 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
+**Current release: `@islibaodong/dsh-login@0.3.16`** — tracks DSH **0.2.2-rc.3**; full suite **22 files / 302 tests** green, CI green. Per-version release notes: [GitHub Releases](https://github.com/islibaodong/dsh-login/releases).
+
+0.3.16 redesigns the **用户管理 panel in the main page** — the panel was written for the settings column, so in the wide main area it rendered as a narrow 720px stack hugging the left edge. It is now layout-aware (`layout: 'main' | 'settings'`): the main page gets a centred 1040px page column (hero, 账户总数 / 在线 / 已禁用 stat tiles, then four titled blocks — 账户列表 with an initial-avatar column and hairline rows, 新建用户, 访问白名单, 登录与访问 holding the three switches as hairline setting rows), while 设置 → 用户管理 keeps its compact card stack. Client-only: the server routes, persisted flags and the main-sidebar (un)registration are unchanged.
 
 0.3.15 reworks the **用户管理 sidebar visibility** control shipped in 0.3.13/0.3.14: the switch now gates the entry in the **main page's left sidebar** (the entry opens user management as a full panel) instead of the settings-panel section — 设置 → 用户管理 stays permanently reachable as the recovery path. The server surface is unchanged from 0.3.13 (`GET/POST /api/auth/admin/settings/sidebar`, `usersSidebarVisible` in `GET /api/auth/me`); the client live (un)registers the `sidebar.panellist` entry plus its `main` seat, no reload needed.
 
@@ -38,6 +40,7 @@ The DSH Web GUI ships with **no login** — it assumes a single user on localhos
 
 | dsh-login | DSH | Notes |
 |-----------|-----|-------|
+| 0.3.16 | 0.2.2-rc.3 | 用户管理 panel redesigned for the **main page** (centred 1040px page column, stat tiles, four titled blocks, switches as setting rows, avatar column); settings section keeps its card stack; client-only, server surface unchanged; suite 302 |
 | 0.3.15 | 0.2.2-rc.3 | 用户管理 sidebar-visibility rework: the entry moves to the **main page's left sidebar** (settings section keeps the fixed recovery entry); server surface unchanged from 0.3.13; suite 299 |
 | 0.3.14 | 0.2.2-rc.3 | pure re-pin: devDeps retargeted to the rc.3 tuple (wire surface 225 → 226, +`deepseekChatImport.limits`); all mounted seams byte-stable |
 | 0.3.13 | 0.2.2-rc.2 | deps retargeted to the rc.2 tuple (wire surface 204 → 225, officeToPdf→officeKit) + 用户管理 sidebar-visibility toggle (侧边栏显示) |
@@ -201,7 +204,7 @@ src/
 ├── api-bridge-auth.ts  # shared /api bridge wall: 401 + method gate + quiet denials + response tee
 ├── dispatch-guard.ts   # dispatch-seam guard: admission tagging + per-user dispatch gating + workspace.follow frame filtering (issue #11)
 └── web-runtime.ts    # webRuntime takeover: LAN trust + DSH_WEB_URL
-tests/ (22 files / 299 tests green)
+tests/ (22 files / 302 tests green)
 └── *.spec.ts         # vitest test definitions
 ```
 

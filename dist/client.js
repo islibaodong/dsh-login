@@ -101,6 +101,53 @@ function (require) {
 .dshlu-switch input:focus-visible + .dshlu-switch-track { outline: 2px solid var(--dsw-alias-border-interactive); outline-offset: 1px; }
 .dshlu-switch input:disabled + .dshlu-switch-track { opacity: 0.5; }
 .dshlu-switch-status { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
+
+/* ---- main-panel page (用户管理 opened as a full panel from the sidebar) ----
+   The settings section above stays a compact 720px stack (it lives in the
+   settings column). The main panel is a whole page, so it gets its own
+   centred column with viewport-scaled page insets, section blocks, stat tiles
+   and a card grid — otherwise a 720px list pinned to the left edge of a wide
+   main area is exactly the "ugly" state this replaces. */
+.dshlu-page { display: flex; flex-direction: column; align-items: center; box-sizing: border-box; width: 100%; min-height: 100%; padding: 0 clamp(16px, 3vw, 36px); color: var(--dsw-alias-label-primary); }
+.dshlu-pagecol { display: flex; flex-direction: column; gap: 20px; box-sizing: border-box; width: 100%; max-width: 1040px; padding: 30px 0 44px; }
+.dshlu-hero { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dshlu-heroTitle { margin: 0; font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em; }
+.dshlu-heroLede { margin: 0; max-width: 680px; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-tertiary); }
+.dshlu-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dshlu-stat { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; background: var(--dsw-alias-card-fill); }
+.dshlu-statValue { font-size: 22px; line-height: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+.dshlu-statLabel { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
+.dshlu-stat--success .dshlu-statValue { color: var(--dsw-alias-state-success-primary); }
+.dshlu-stat--warn .dshlu-statValue { color: var(--dsw-alias-state-warn-primary); }
+.dshlu-stat--muted .dshlu-statValue { color: var(--dsw-alias-label-caption); }
+.dshlu-block { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px 18px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-card-fill); }
+.dshlu-blockHead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.dshlu-blockTitle { margin: 0; font-size: 14px; line-height: 22px; font-weight: 600; }
+.dshlu-blockNote { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); }
+/* Setting ROWS live inside one block in the main panel (a card per switch
+   left three short boxes separated by holes); hairlines separate the rows. */
+.dshlu-block--rows { gap: 0; }
+.dshlu-block--rows .dshlu-blockHead { padding-bottom: 10px; }
+.dshlu-settingrow { padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.dshlu-blockHead + .dshlu-settingrow { padding-top: 0; border-top: 0; }
+.dshlu-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 50%; background: var(--dsw-alias-interactive-bg-hover); font-size: 11px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); text-transform: uppercase; }
+@media (max-width: 720px) {
+  .dshlu-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dshlu-pagecol { padding: 20px 0 32px; }
+}
+/* Main-page rhythm: rows get more breathing room and empty/loading states
+   centre instead of hugging the left edge; block intros shrink to caption
+   scale so a block's title stays the dominant line. */
+.dshlu-pagecol .dshlu-row { padding: 10px 14px; }
+.dshlu-pagecol .dshlu-block .dshlu-intro { font-size: 12px; line-height: 18px; }
+.dshlu-pagecol .dshlu-empty, .dshlu-pagecol .dshlu-loading { padding: 24px 14px; text-align: center; }
+/* Inside the account block the table reads as a table: one header hairline
+   and row separators, instead of a boxed card inside a boxed block. */
+.dshlu-pagecol .dshlu-table .dshlu-head { padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.dshlu-pagecol .dshlu-table .dshlu-row { border: 0; border-bottom: 1px solid var(--dsw-alias-border-l2); border-radius: 0; }
+.dshlu-pagecol .dshlu-table .dshlu-row:last-child { border-bottom: 0; }
+/* Form fields do not need to stretch across a 1040px block. */
+.dshlu-pagecol .dshlu-fields > :first-child, .dshlu-pagecol .dshlu-fields > :nth-child(2) { flex: 0 1 240px; }
 `
 
   // ---- locale dictionaries ----
@@ -117,6 +164,12 @@ function (require) {
     'col.lastLogin': '最后登录',
     'col.status': '状态',
     'col.actions': '操作',
+    'stats.accounts': '账户总数',
+    'stats.online': '在线',
+    'stats.disabled': '已禁用',
+    'table.title': '账户列表',
+    'table.count': '共 {n} 个',
+    'access.title': '登录与访问',
     'status.never': '从未登录',
     'role.admin': '管理员',
     'role.user': '用户',
@@ -185,6 +238,12 @@ function (require) {
     'col.lastLogin': 'Last login',
     'col.status': 'Status',
     'col.actions': 'Actions',
+    'stats.accounts': 'Accounts',
+    'stats.online': 'Online',
+    'stats.disabled': 'Disabled',
+    'table.title': 'Accounts',
+    'table.count': '{n} total',
+    'access.title': 'Sign-in & access',
     'status.never': 'never',
     'role.admin': 'admin',
     'role.user': 'user',
@@ -293,6 +352,13 @@ function (require) {
     return h('span', { className: 'dshlu-badge dshlu-badge--' + tone }, label)
   }
 
+  /** One main-page stat tile: a big number over its caption. */
+  function StatTile(t, key, value, tone) {
+    return h('div', { className: 'dshlu-stat' + (tone ? ' dshlu-stat--' + tone : '') },
+      h('span', { className: 'dshlu-statValue' }, String(value)),
+      h('span', { className: 'dshlu-statLabel' }, t(key)))
+  }
+
   function AccountBar(t, me) {
     return h('div', { className: 'dshlu-account' },
       h('div', { className: 'dshlu-account-id' },
@@ -359,21 +425,24 @@ function (require) {
     var description = error.length > 0
       ? t('sidebar.toggleFailed') + ': ' + error
       : (enabled ? t('sidebar.intro') : t('sidebar.hidden'))
-    return h('div', { className: 'dshlu-card' },
-      h('div', { className: 'dshlu-switchrow' },
-        h('div', { className: 'dshlu-switchtext' },
-          h('div', { className: 'dshlu-switchlabel' }, t('sidebar.title')),
-          h('p', { className: 'dshlu-switchdesc' }, description)),
-        h('label', { className: 'dshlu-switch', title: enabled ? t('sidebar.on') : t('sidebar.off') },
-          h('input', {
-            type: 'checkbox',
-            'data-switch': 'sidebar',
-            checked: enabled,
-            disabled: busy,
-            onChange: function (e) { void toggle(e.target.checked) },
-          }),
-          h('span', { className: 'dshlu-switch-track' }),
-          h('span', { className: 'dshlu-switch-knob' }))))
+    var row = h('div', { className: 'dshlu-switchrow' },
+      h('div', { className: 'dshlu-switchtext' },
+        h('div', { className: 'dshlu-switchlabel' }, t('sidebar.title')),
+        h('p', { className: 'dshlu-switchdesc' }, description)),
+      h('label', { className: 'dshlu-switch', title: enabled ? t('sidebar.on') : t('sidebar.off') },
+        h('input', {
+          type: 'checkbox',
+          'data-switch': 'sidebar',
+          checked: enabled,
+          disabled: busy,
+          onChange: function (e) { void toggle(e.target.checked) },
+        }),
+        h('span', { className: 'dshlu-switch-track' }),
+        h('span', { className: 'dshlu-switch-knob' })))
+    // Main panel: a setting row inside the access block. Settings column: its
+    // own card, where the section is a stack of self-contained cards.
+    if (props.as === 'row') return h('div', { className: 'dshlu-settingrow' }, row)
+    return h('div', { className: 'dshlu-card' }, row)
   }
 
   /** Ordinary-user section: identity + logout. */
@@ -389,6 +458,9 @@ function (require) {
   function UsersPanel(props) {
     var t = props.t
     var me = props.me
+    // Two presentations share this panel: the settings column (compact stack
+    // of cards, 720px cap) and the MAIN panel page (full-width blocks).
+    var main = props.layout === 'main'
 
     var listState = useState({ status: 'loading', users: [], error: '' })
     var list = listState[0]
@@ -548,6 +620,7 @@ function (require) {
         list.users.map(function (u) {
           return h('div', { key: u.username, className: 'dshlu-row' + (u.disabled ? ' dshlu-row--disabled' : '') },
             h('div', { className: 'dshlu-cell dshlu-name' },
+              h('span', { className: 'dshlu-avatar', 'aria-hidden': 'true' }, u.username.slice(0, 1).toUpperCase()),
               u.username,
               u.isAdmin ? Badge('admin', 'role.admin', t) : null),
             h('div', { className: 'dshlu-cell dshlu-cell--login', title: u.lastLoginAt !== null && u.lastLoginAt !== undefined ? fmtDate(u.lastLoginAt) : undefined },
@@ -562,25 +635,27 @@ function (require) {
         }))
     }
 
+    var createForm = h('form', {
+      className: 'dshlu-fields',
+      onSubmit: function (e) {
+        e.preventDefault()
+        if (createUsername.length === 0 || createPassword.length === 0) return
+        void run(async function () {
+          await api('/api/auth/admin/users', 'POST', { username: createUsername, password: createPassword, isAdmin: createAdmin })
+          setCreateUsername(''); setCreatePassword(''); setCreateAdmin(false)
+        }, 'create.title')
+      },
+    },
+      h(Input, { placeholder: t('create.username'), value: createUsername, autoComplete: 'off', onChange: function (e) { setCreateUsername(e.target.value) } }),
+      h(Input, { placeholder: t('create.password'), value: createPassword, type: 'password', autoComplete: 'new-password', onChange: function (e) { setCreatePassword(e.target.value) } }),
+      h('label', { className: 'dshlu-check' },
+        h('input', { type: 'checkbox', checked: createAdmin, onChange: function (e) { setCreateAdmin(e.target.checked) } }),
+        t('create.admin')),
+      h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: createUsername.length === 0 || createPassword.length === 0 }, t('create.submit')))
+
     var createCard = h('div', { className: 'dshlu-card' },
       h('h3', null, t('create.title')),
-      h('form', {
-        className: 'dshlu-fields',
-        onSubmit: function (e) {
-          e.preventDefault()
-          if (createUsername.length === 0 || createPassword.length === 0) return
-          void run(async function () {
-            await api('/api/auth/admin/users', 'POST', { username: createUsername, password: createPassword, isAdmin: createAdmin })
-            setCreateUsername(''); setCreatePassword(''); setCreateAdmin(false)
-          }, 'create.title')
-        },
-      },
-        h(Input, { placeholder: t('create.username'), value: createUsername, autoComplete: 'off', onChange: function (e) { setCreateUsername(e.target.value) } }),
-        h(Input, { placeholder: t('create.password'), value: createPassword, type: 'password', autoComplete: 'new-password', onChange: function (e) { setCreatePassword(e.target.value) } }),
-        h('label', { className: 'dshlu-check' },
-          h('input', { type: 'checkbox', checked: createAdmin, onChange: function (e) { setCreateAdmin(e.target.checked) } }),
-          t('create.admin')),
-        h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: createUsername.length === 0 || createPassword.length === 0 }, t('create.submit'))))
+      createForm)
 
     var resetDialog = h(Modal, {
       open: resetFor !== null,
@@ -644,75 +719,149 @@ function (require) {
       },
     })
 
+    var hostsIntro = h('p', { className: 'dshlu-intro' }, t('hosts.intro'))
+    var hostsList = hosts.status === 'loading'
+      ? h('div', { className: 'dshlu-loading' }, '…')
+      : hosts.status === 'error'
+        ? h('div', { className: 'dshlu-empty' }, hosts.error)
+        : hosts.hosts.length === 0
+          ? h('div', { className: 'dshlu-empty' }, t('hosts.empty'))
+          : h('div', { className: 'dshlu-hostlist' }, hosts.hosts.map(function (hst) {
+              return h('div', { key: hst, className: 'dshlu-hostrow' },
+                h('code', null, hst),
+                h(Button, { variant: 'ghost', size: 'sm', className: 'dshlu-danger', onClick: function () {
+                  void (async function () {
+                    try { await api('/api/auth/admin/hosts', 'DELETE', { host: hst }); setNotice({ kind: 'success', text: t('hosts.removed') }) }
+                    catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.removeFailed') + ')' }) }
+                    void refreshHosts()
+                  })()
+                } }, t('hosts.remove')))
+            }))
+    var hostsForm = h('form', { className: 'dshlu-fields', onSubmit: function (e) {
+      e.preventDefault()
+      if (hostInput.length === 0) return
+      var value = hostInput
+      void (async function () {
+        try { await api('/api/auth/admin/hosts', 'POST', { host: value }); setHostInput(''); setNotice({ kind: 'success', text: t('hosts.added') }) }
+        catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.addFailed') + ')' }) }
+        void refreshHosts()
+      })()
+    } },
+      h(Input, { placeholder: t('hosts.placeholder'), value: hostInput, autoComplete: 'off', onChange: function (e) { setHostInput(e.target.value) } }),
+      h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: hostInput.length === 0 }, t('hosts.add')))
+
     var hostsCard = h('div', { className: 'dshlu-card' },
       h('h3', null, t('hosts.title')),
-      h('p', { className: 'dshlu-intro' }, t('hosts.intro')),
-      hosts.status === 'loading'
-        ? h('div', { className: 'dshlu-loading' }, '…')
-        : hosts.status === 'error'
-          ? h('div', { className: 'dshlu-empty' }, hosts.error)
-          : hosts.hosts.length === 0
-            ? h('div', { className: 'dshlu-empty' }, t('hosts.empty'))
-            : h('div', { className: 'dshlu-hostlist' }, hosts.hosts.map(function (hst) {
-                return h('div', { key: hst, className: 'dshlu-hostrow' },
-                  h('code', null, hst),
-                  h(Button, { variant: 'ghost', size: 'sm', className: 'dshlu-danger', onClick: function () {
-                    void (async function () {
-                      try { await api('/api/auth/admin/hosts', 'DELETE', { host: hst }); setNotice({ kind: 'success', text: t('hosts.removed') }) }
-                      catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.removeFailed') + ')' }) }
-                      void refreshHosts()
-                    })()
-                  } }, t('hosts.remove')))
-              })),
-      h('form', { className: 'dshlu-fields', onSubmit: function (e) {
-        e.preventDefault()
-        if (hostInput.length === 0) return
-        var value = hostInput
-        void (async function () {
-          try { await api('/api/auth/admin/hosts', 'POST', { host: value }); setHostInput(''); setNotice({ kind: 'success', text: t('hosts.added') }) }
-          catch (err) { setNotice({ kind: 'error', text: (err instanceof Error ? err.message : String(err)) + ' (' + t('hosts.addFailed') + ')' }) }
-          void refreshHosts()
-        })()
-      } },
-        h(Input, { placeholder: t('hosts.placeholder'), value: hostInput, autoComplete: 'off', onChange: function (e) { setHostInput(e.target.value) } }),
-        h(Button, { variant: 'primary', size: 'sm', type: 'submit', disabled: hostInput.length === 0 }, t('hosts.add'))))
+      hostsIntro,
+      hostsList,
+      hostsForm)
 
     var wsEnabled = ws.status === 'ready' ? ws.enabled : true
-    var wsCard = h('div', { className: 'dshlu-card' },
-      h('div', { className: 'dshlu-switchrow' },
-        h('div', { className: 'dshlu-switchtext' },
-          h('div', { className: 'dshlu-switchlabel' }, t('ws.title')),
-          h('p', { className: 'dshlu-switchdesc' }, ws.status === 'error' ? t('ws.toggleFailed') + ': ' + ws.error : t('ws.intro'))),
-        h('label', { className: 'dshlu-switch', title: wsEnabled ? t('ws.on') : t('ws.off') },
-          h('input', {
-            type: 'checkbox',
-            checked: wsEnabled,
-            disabled: wsBusy || ws.status === 'loading',
-            onChange: function (e) { void toggleWs(e.target.checked) },
-          }),
-          h('span', { className: 'dshlu-switch-track' }),
-          h('span', { className: 'dshlu-switch-knob' }))))
+    var wsRow = h('div', { className: 'dshlu-switchrow' },
+      h('div', { className: 'dshlu-switchtext' },
+        h('div', { className: 'dshlu-switchlabel' }, t('ws.title')),
+        h('p', { className: 'dshlu-switchdesc' }, ws.status === 'error' ? t('ws.toggleFailed') + ': ' + ws.error : t('ws.intro'))),
+      h('label', { className: 'dshlu-switch', title: wsEnabled ? t('ws.on') : t('ws.off') },
+        h('input', {
+          type: 'checkbox',
+          checked: wsEnabled,
+          disabled: wsBusy || ws.status === 'loading',
+          onChange: function (e) { void toggleWs(e.target.checked) },
+        }),
+        h('span', { className: 'dshlu-switch-track' }),
+        h('span', { className: 'dshlu-switch-knob' })))
 
     var rwuEnabled = rwu.status === 'ready' ? rwu.enabled : true
-    var rwuCard = h('div', { className: 'dshlu-card' },
-      h('div', { className: 'dshlu-switchrow' },
-        h('div', { className: 'dshlu-switchtext' },
-          h('div', { className: 'dshlu-switchlabel' }, t('rwu.title')),
-          h('p', { className: 'dshlu-switchdesc' }, rwu.status === 'error' ? t('rwu.toggleFailed') + ': ' + rwu.error : t('rwu.intro'))),
-        h('label', { className: 'dshlu-switch', title: rwuEnabled ? t('rwu.on') : t('rwu.off') },
-          h('input', {
-            type: 'checkbox',
-            checked: rwuEnabled,
-            disabled: rwuBusy || rwu.status === 'loading',
-            onChange: function (e) { void toggleRwu(e.target.checked) },
-          }),
-          h('span', { className: 'dshlu-switch-track' }),
-          h('span', { className: 'dshlu-switch-knob' }))))
-    var sidebarCard = SidebarCard({ t: t, me: me, onSidebarVisible: props.onSidebarVisible })
+    var rwuRow = h('div', { className: 'dshlu-switchrow' },
+      h('div', { className: 'dshlu-switchtext' },
+        h('div', { className: 'dshlu-switchlabel' }, t('rwu.title')),
+        h('p', { className: 'dshlu-switchdesc' }, rwu.status === 'error' ? t('rwu.toggleFailed') + ': ' + rwu.error : t('rwu.intro'))),
+      h('label', { className: 'dshlu-switch', title: rwuEnabled ? t('rwu.on') : t('rwu.off') },
+        h('input', {
+          type: 'checkbox',
+          checked: rwuEnabled,
+          disabled: rwuBusy || rwu.status === 'loading',
+          onChange: function (e) { void toggleRwu(e.target.checked) },
+        }),
+        h('span', { className: 'dshlu-switch-track' }),
+        h('span', { className: 'dshlu-switch-knob' })))
+
+    // A switch card in the settings column becomes a hairline-separated
+    // setting row inside the main panel's access block.
+    var wrapSwitch = function (row) {
+      return main
+        ? h('div', { className: 'dshlu-settingrow' }, row)
+        : h('div', { className: 'dshlu-card' }, row)
+    }
+    var wsCard = wrapSwitch(wsRow)
+    var rwuCard = wrapSwitch(rwuRow)
+    var sidebarCard = SidebarCard({ t: t, me: me, onSidebarVisible: props.onSidebarVisible, as: main ? 'row' : '' })
+    var noticeLine = notice.text.length > 0
+      ? h('p', { className: 'dshlu-notice dshlu-notice--' + notice.kind }, notice.text)
+      : null
+
+    // Main panel: the sidebar entry opens 用户管理 as a whole page, so it
+    // renders the page shell — a hero, stat tiles, then titled blocks (table,
+    // create, trusted hosts, sign-in settings). The settings column keeps the
+    // compact single stack below.
+    if (main) {
+      var statsRow = null
+      if (list.status === 'ready') {
+        var onlineUsers = 0
+        var disabledUsers = 0
+        list.users.forEach(function (u) {
+          if (u.onlineSessions > 0) onlineUsers += 1
+          if (u.disabled) disabledUsers += 1
+        })
+        statsRow = h('div', { className: 'dshlu-stats' },
+          StatTile(t, 'stats.accounts', list.users.length, ''),
+          StatTile(t, 'stats.online', onlineUsers, onlineUsers > 0 ? 'success' : 'muted'),
+          StatTile(t, 'stats.disabled', disabledUsers, disabledUsers > 0 ? 'warn' : 'muted'))
+      }
+      var accountBlock = h('section', { className: 'dshlu-block' },
+        h('div', { className: 'dshlu-blockHead' },
+          h('h2', { className: 'dshlu-blockTitle' }, t('table.title')),
+          list.status === 'ready'
+            ? h('span', { className: 'dshlu-blockNote' }, t('table.count').replace('{n}', String(list.users.length)))
+            : null),
+        table)
+      var createBlock = h('section', { className: 'dshlu-block' },
+        h('div', { className: 'dshlu-blockHead' },
+          h('h2', { className: 'dshlu-blockTitle' }, t('create.title'))),
+        createForm)
+      var hostsBlock = h('section', { className: 'dshlu-block' },
+        h('div', { className: 'dshlu-blockHead' },
+          h('h2', { className: 'dshlu-blockTitle' }, t('hosts.title'))),
+        hostsIntro,
+        hostsList,
+        hostsForm)
+      var accessBlock = h('section', { className: 'dshlu-block dshlu-block--rows' },
+        h('div', { className: 'dshlu-blockHead' },
+          h('h2', { className: 'dshlu-blockTitle' }, t('access.title'))),
+        wsCard,
+        rwuCard,
+        sidebarCard)
+      return h('div', { className: 'dshlu-page' },
+        h('div', { className: 'dshlu-pagecol' },
+          h('header', { className: 'dshlu-hero' },
+            h('h1', { className: 'dshlu-heroTitle' }, t('users.title')),
+            h('p', { className: 'dshlu-heroLede' }, t('users.intro'))),
+          statsRow,
+          noticeLine,
+          accountBlock,
+          createBlock,
+          hostsBlock,
+          accessBlock,
+          AccountBar(t, me),
+          resetDialog,
+          disableDialog,
+          removeDialog))
+    }
+
     return h('div', { className: 'dshlu-section' },
       h('h2', { className: 'dshlu-title' }, t('users.title')),
       h('p', { className: 'dshlu-intro' }, t('users.intro')),
-      notice.text.length > 0 ? h('p', { className: 'dshlu-notice dshlu-notice--' + notice.kind }, notice.text) : null,
+      noticeLine,
       table,
       createCard,
       wsCard,
@@ -765,8 +914,8 @@ function (require) {
         void fetchMe().then(function (me) {
           if (me === undefined) return
           var isAdmin = me.isAdmin === true
-          var panelProps = function () {
-            return { t: t, me: me, onSidebarVisible: setVisible }
+          var panelProps = function (layout) {
+            return { t: t, me: me, layout: layout, onSidebarVisible: setVisible }
           }
           // Main-sidebar entry state machine: the icon + main seat
           // (de)register live as the switch flips, no reload needed.
@@ -791,7 +940,7 @@ function (require) {
             if (!visible && regIcon !== undefined) { regIcon(); regIcon = undefined }
             if (visible && regMain === undefined) {
               regMain = sub.slots.register({ name: 'main', key: PANEL_ID, locale: NS }, function () {
-                return h(UsersPanel, panelProps())
+                return h(UsersPanel, panelProps('main'))
               })
             }
             if (!visible && regMain !== undefined) { regMain(); regMain = undefined }
@@ -805,7 +954,7 @@ function (require) {
               order: 25,
               label: function () { return t(isAdmin ? 'users.nav' : 'account.nav') },
               locale: NS,
-            }, function () { return h(isAdmin ? UsersPanel : AccountPanel, panelProps()) })
+            }, function () { return h(isAdmin ? UsersPanel : AccountPanel, panelProps('settings')) })
           })
           if (!isAdmin) return
           applySidebar()

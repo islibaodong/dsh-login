@@ -165,6 +165,14 @@ browser calls; the dispatch seam is the effective hook.
   + `main` seat (`key: dsh-login-users`) rendering the full UsersPanel;
   the switch card in the settings users panel (un)registers both live.
   Identity from `/api/auth/me`, 15s-bounded.
+  The panel is layout-aware: `panelProps(layout)` passes
+  `layout: 'main' | 'settings'`. In `main` it renders a full page —
+  `.dshlu-page` > `.dshlu-pagecol` (max-width 1040px, centred, 20px gaps),
+  hero + 3 stat tiles (`.dshlu-stat`, accounts/online/disabled) + four titled
+  blocks (`.dshlu-block` + `.dshlu-blockHead`, 账户列表 / 新建用户 / 访问白名单 /
+  登录与访问) with the three switches as hairline `.dshlu-settingrow` rows and
+  the user table as hairlines with an initial-avatar column. In `settings`
+  it keeps the original 720px `.dshlu-section` stack of 5 `.dshlu-card`s.
   Table + create card + ws/rwu/sidebar switch cards + hosts card +
   reset/disable/remove dialogs + logout entry; React and Button/Input/Modal/
   RiskConfirmation come from the platform module-table seeds; styles are

@@ -227,6 +227,14 @@ function sidebarInputs(tree: unknown): El[] {
   return collect(tree, el => el.type === 'input' && el.props['data-switch'] === 'sidebar')
 }
 
+/** Elements carrying one exact class token (no substring matching). */
+function byClass(tree: unknown, className: string): El[] {
+  return collect(tree, el => {
+    const cls = (el.props as Record<string, unknown> | null | undefined)?.className
+    return typeof cls === 'string' && cls.split(' ').includes(className)
+  })
+}
+
 describe('sidebar visibility toggle (侧边栏显示)', () => {
   it('hides the main-sidebar 用户管理 entry while the settings section stays put', async () => {
     const { ctx, sections, panels, mains } = makeCtx()
@@ -314,5 +322,71 @@ describe('sidebar visibility toggle (侧边栏显示)', () => {
     expect(mains).toHaveLength(1)
     expect(stats.registered).toBe(5)
     expect(stats.unregistered).toBe(2)
+  })
+})
+
+describe('main-panel layout (主界面展示)', () => {
+  async function renderAdmin() {
+    const harness = makeCtx()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ username: 'root', isAdmin: true }) })
+    factory(makeRequire()).apply(harness.ctx)
+    await flush()
+    const mainTree = deepRender((harness.mains[0]!.render as (p: unknown) => unknown)(undefined))
+    const settingsTree = deepRender((harness.sections[0]!.render as (p: unknown) => unknown)(undefined))
+    return { ...harness, mainTree, settingsTree }
+  }
+
+  it('renders the full-page shell in the main seat and the compact stack in settings', async () => {
+    const { mainTree, settingsTree } = await renderAdmin()
+    // Main seat: the page shell (centred column, no 720px settings cap).
+    expect(byClass(mainTree, 'dshlu-page')).toHaveLength(1)
+    expect(byClass(mainTree, 'dshlu-pagecol')).toHaveLength(1)
+    expect(byClass(mainTree, 'dshlu-hero')).toHaveLength(1)
+    expect(byClass(mainTree, 'dshlu-heroTitle')).toHaveLength(1)
+    expect(byClass(mainTree, 'dshlu-heroLede')).toHaveLength(1)
+    // Settings section keeps the compact stack: no page shell there.
+    expect(byClass(settingsTree, 'dshlu-page')).toHaveLength(0)
+    expect(byClass(settingsTree, 'dshlu-pagecol')).toHaveLength(0)
+    expect(byClass(settingsTree, 'dshlu-hero')).toHaveLength(0)
+    expect(byClass(settingsTree, 'dshlu-section')).toHaveLength(1)
+  })
+
+  it('stacks the page as titled blocks instead of loose cards', async () => {
+    const { mainTree, settingsTree } = await renderAdmin()
+    // Four blocks: accounts (table), create user, trusted hosts, sign-in &
+    // access. One wide column reads better than ragged card columns: the
+    // short create card left a hole beside the tall hosts card.
+    expect(byClass(mainTree, 'dshlu-block')).toHaveLength(4)
+    expect(byClass(mainTree, 'dshlu-blockTitle')).toHaveLength(4)
+    expect(byClass(mainTree, 'dshlu-blockHead')).toHaveLength(4)
+    // The three switches are setting ROWS inside the access block, not cards.
+    expect(byClass(mainTree, 'dshlu-settingrow')).toHaveLength(3)
+    expect(byClass(mainTree, 'dshlu-card')).toHaveLength(0)
+    expect(sidebarInputs(mainTree)).toHaveLength(1)
+    // Both placeholder loaders (account list + trusted hosts) sit inside the
+    // page while the probe-driven requests have not settled in this stub.
+    expect(byClass(mainTree, 'dshlu-loading')).toHaveLength(2)
+    // The settings column keeps its five self-contained cards.
+    expect(byClass(settingsTree, 'dshlu-card')).toHaveLength(5)
+    expect(byClass(settingsTree, 'dshlu-settingrow')).toHaveLength(0)
+  })
+
+  it('pins the wide-page stylesheet rules (no settings-width cap on the page)', () => {
+    expect(source).toContain('.dshlu-page {')
+    expect(source).toContain('.dshlu-pagecol {')
+    expect(source).toContain('.dshlu-heroTitle {')
+    expect(source).toContain('.dshlu-block {')
+    expect(source).toContain('.dshlu-settingrow {')
+    // Stat tiles: three across, flexible tracks (the no-px-track guard stays).
+    expect(source).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))')
+    expect(source).toContain("'stats.accounts'")
+    expect(source).toContain("'stats.online'")
+    expect(source).toContain("'stats.disabled'")
+    expect(source).toContain("'table.title'")
+    expect(source).toContain("'table.count'")
+    expect(source).toContain("'access.title'")
+    // The 720px cap stays on the settings section only.
+    expect(source).toContain('.dshlu-section { display: flex; flex-direction: column; gap: 12px; max-width: 720px;')
   })
 })
