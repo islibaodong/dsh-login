@@ -28,7 +28,9 @@
   the shipped `connection` row must stay disabled while dsh-login's takeover
   is active.
 - vitest resolves `@deepseek-ai/*` at RUNTIME from `node_modules` (real npm
-  tarballs, devDeps pinned to `^0.2.2-rc.2` since 2026-11-13, before that
+  tarballs, devDeps pinned to `^0.2.2-rc.4` since 2026-11-18, before that
+  `^0.2.2-rc.3` since 2026-11-14, before that
+  `^0.2.2-rc.2` since 2026-11-13, before that
   `^0.2.2-rc.1` since 2026-11-05, before that
   `^0.2.2-alpha.3` since 2026-11-04, before that
   `^0.2.2-alpha.2` since 2026-10-28, before that

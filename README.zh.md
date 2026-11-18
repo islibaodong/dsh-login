@@ -26,7 +26,9 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 ---
 ## 当前状态
 
-**当前版本：`@islibaodong/dsh-login@0.3.16`** —— 跟随 DSH **0.2.2-rc.3**；全量测试 **22 文件 / 302 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+**当前版本：`@islibaodong/dsh-login@0.3.17`** —— 跟随 DSH **0.2.2-rc.4**；全量测试 **22 文件 / 302 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+
+0.3.17 是重钉到 DSH 0.2.2-rc.4 的**纯重钉版本**。rc.3 → rc.4 只动了三个源文件（liveshare tunnel-worker 的 `ELECTRON_RUN_AS_NODE`、`llm-deepseek` 的内容安全拒答处理、`llm` 的一个错误常量），且都不是 remote 标注文件，因此线面**逐字节不变**，仍是 **226 个方法**（无需重新分类，桶稳定在 140 user / 85 admin / 1 host-internal），所有挂载 seam 不变。已在真实 rc.4 npm 运行时下实测（登录墙接管入口、owner 225 / user 140 能力面、alice 访问管理路由 403）。细节见 [`docs/adapt-dsh-0.2.2-rc.4.md`](docs/adapt-dsh-0.2.2-rc.4.md)。
 
 0.3.16 重做了**主界面里的「用户管理」面板展示**——该面板原本是按设置面板那一列设计的，放进宽阔的主界面后就成了贴着左边缘、只有 720px 宽的一列卡片。现在面板按所处位置切换版式（`layout: 'main' | 'settings'`）：主界面是居中 1040px 的整页（页头 hero、账户总数 / 在线 / 已禁用 统计块，随后是四个带标题的块——带首字母头像列与细线行的账户列表、新建用户、访问白名单、以及把三个开关收成细分隔行的「登录与访问」）；「设置 → 用户管理」仍是紧凑卡片栈。纯客户端改动：服务端路由、持久化开关、主侧边栏的（反）注册逻辑均未变。
 
@@ -40,6 +42,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 | dsh-login | DSH | 说明 |
 |-----------|-----|------|
+| 0.3.17 | 0.2.2-rc.4 | 纯重钉：devDeps 重定向到 rc.4 元组线；该区间不涉及 remote 标注源码，线面仍为 226（140 / 85 / 1），所有挂载 seam 字节稳定；测试 302 |
 | 0.3.16 | 0.2.2-rc.3 | 「用户管理」面板按**主界面**重做版式（居中 1040px 整页列、统计块、四个带标题的块、开关改为细分隔行、头像列）；设置分区仍是卡片栈；纯客户端改动，服务端面不变；测试 302 |
 | 0.3.15 | 0.2.2-rc.3 | 用户管理「侧边栏显示」改造：入口移到**主界面左侧栏**（设置面板保留固定回退入口）；服务端面与 0.3.13 一致；测试 299 |
 | 0.3.14 | 0.2.2-rc.3 | 纯重钉：devDeps 重定向到 rc.3 元组线（线面 225 → 226，+`deepseekChatImport.limits`）；所有挂载 seam 字节稳定 |
@@ -62,7 +65,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
   2. **dispatch-seam 守卫（0.3.12 起内置，自动生效——修复 [issue #11](https://github.com/islibaodong/dsh-login/issues/11)）**——连接准入要求浏览器路径携带有效 dsh-login 会话（含 `/api/remote.mux` WebSocket upgrade），并把 dsh-login 身份打标到每个浏览器 peer；分发 seam（`dispatchRpc`/`openWireStream`）随后对每次浏览器调用逐用户把关：非 user 方法拒绝、全部 id 参数（`sessionId`/`workspaceId`/`agentId`/…）过归属校验、`workspace.follow` 流逐帧过滤（镜像上游 per-principal 语义：baseline 收窄、delivered 集合记账、可见性丢失 replace 重同步、未知帧 fail-closed）。未打标 peer（launch-token CLI/SDK、宿主内部调用）保持上游原语义。
   3. **REMOTE 层守卫（`wrapRemoteGateway`，导出、可选）**——面向部署方的组合原语，包装网关公开 API（见 [`docs/compose-guard.md`](docs/compose-guard.md)）；0.3.12 起内置守卫已覆盖浏览器流量，组合它属于额外的纵深防御。
   其余一律禁止：
-  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.2-rc.3 实际暴露的 226 个方法中的 140 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeKit.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及 0.2.2 新增面（按会话的 `forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
+  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.2-rc.4 实际暴露的 226 个方法中的 140 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeKit.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及 0.2.2 新增面（按会话的 `forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
   - 管理员专属域（`ADMIN_ONLY_METHODS`，85 个）：`credentials.*`、`settings.*`、`agentPresets.*`、原生插件管理器（`pluginManager.*`、`pluginMarket.*`、`pluginRegistryProbe.*`、`pluginInventory.*`）、`dynamicCordisRunner.*`、`claudeCodeMods.*`、整个 `account.*` 命名空间（唯一的进程级上游 DeepSeek Platform 授权）、CUA 同意（`cuaAccess.*`）、`schedule.deleteInactive` 与 `liveshareShares.*` 分享管理面
   - 宿主内部：`workspace.initializeDefault`（首次使用的内部管线，对用户拒绝且从不对外通告）
   - 未知方法（不在本版本 wire 面上）会在宿主日志里按方法名报一次并带上目标版本，于是上游改名留下的是诊断信息而不是用户侧的静默拒绝——用 `node scripts/dump-wire-surface.mjs` 从 checkout 重新生成 `src/api-filter.ts`

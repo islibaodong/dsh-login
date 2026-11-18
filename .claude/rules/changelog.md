@@ -1,3 +1,58 @@
+## 2026-11-18 (scheduled watch) — DSH 0.2.2-rc.4 released; dsh-login 0.3.17 pure re-pin (wire 226 → 226)
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-18T04:00Z). Detection:
+  npm packument no-cache GET (`@deepseek-ai/dsh` `next` = **0.2.2-rc.4**, published
+  `2026-11-17T17:03:03.170Z`; `latest` stays 0.2.2-rc.1) + `git tag dsh-v0.2.2-rc.4` →
+  `3f321d32bfe382212a8ed8785c1d47a5a300aa23`. `origin/master` tip moved `39163dd30f` →
+  `ca33fd6843b205e279c7ccb6cb73a472c78f5760`; backlog `rc.4..origin/master` = **1407** commits.
+- Range rc.3 → rc.4 = **8 commits, 395 files, +579/−429**, but only **3 source files**, and
+  **none of them remote-decorated**: `packages/experimental/liveshare/src/host/tunnel-worker.ts`
+  (`workerNodeModeEnv` → worker inherits `ELECTRON_RUN_AS_NODE`),
+  `packages/llm/llm-deepseek/src/translate.ts` (`refusal(details)` → `LlmError(..., 'CONTENT_REFUSED')`,
+  usage chunk yielded before the throw, `stop_reason === 'refusal'`), `packages/llm/llm/src/error.ts`
+  (+1 line). Everything else is `package.json` version stamps (386 files), 4 tests, 3 llm-deepseek
+  README/i18n docs. No new `@Remote` package.
+- **Wire surface delta is genuinely empty** for the first time in the 0.2.2 line: the `@Remote(`
+  file set is 44 files at both tags with an identical list, and the intersection with "changed
+  files" is empty, so dumping from the existing (rc.3-rebuilt) `lib/` reproduces rc.4 exactly —
+  live 226 vs fixture 226, `added []` `removed []`. Buckets stay **140 / 85 / 1**; no
+  classification work, no test-pin moves.
+- Changes: `package.json` (0.3.17, ten dsh devDeps `^0.2.2-rc.3` → `^0.2.2-rc.4`, vendor +
+  peers untouched — `0.2.2-rc.4` satisfies every `>=0.2.2-alpha.2 <0.3.0-0` peer branch under
+  `includePrerelease: true` via the same-tuple rule); `src/api-filter.ts`
+  (`WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.4'` + header rewrite); `tests/fixtures/wire-surface.json`
+  (`dshVersion` line only); `dist/index.js`/`.map` re-stamp, `dist/client.js` byte-identical
+  (50396 chars).
+- Verification: `npm install` 25 packages changed, no ERESOLVE; `vitest run` **22 files / 302
+  tests green** incl. the live wire cross-check 226 == 226; `npm run build` + `verify:imports`
+  exit 0; **live boot under a real rc.4 npm runtime** (`npm install @deepseek-ai/dsh@0.2.2-rc.4`
+  in `.tmp-rc4`, temp `DSH_HOME`, `npm pack` 0.3.17 → installed into `profiles/web` + bundle
+  appended, booted 127.0.0.1:58861 **with no boot token**) — `/` 302 `/login`, anon capabilities
+  401, setup 200, owner capabilities **225** (140 + 85), alice **140** / `isAdmin:false` /
+  `settings.update:false` / `terminal.watch:true`, alice `GET /api/auth/admin/users` 403.
+  Temp dirs + tarball removed (`.gitignore` does not cover `.tmp-*`).
+- Detection answers recorded in `docs/adapt-dsh-0.2.2-rc.4.md`: **still no upstream multi-user
+  accounts** (recurring grep = 1 hit, `packages/api/remote-access/README.md:2`, at both rc.4 and
+  the new tip); **three role-gating levers at identical lines** (webserver/src/index.ts:738,
+  client/modules/src/index.ts:635, remote-access/src/index.ts:139); role-based whole-UI gating
+  verdict unchanged (feasible, ≈1–2 days, no upstream change needed).
+- **Radar graduated**: the unreleased backlog now implements Peer-based authentication Providers —
+  `connection.authentication` at `packages/client/connection/src/authentication.ts:14`,
+  `ctx.inject(['connection.authentication'], …)` at `packages/client/connection/src/index.ts:129`,
+  `ctx['connection.authentication']` at `packages/client/connection/src/rpc-host.ts:80`, note
+  `.agents/notes/implemented/architecture/2026-11-07-browser-authentication-providers.md`,
+  spec `packages/api/gateway/tests/authentication-provider.host.spec.ts`. **Absent at rc.4.** A
+  Provider returns an existing live Peer; the Host fixes `peer.principal`; the Remote product
+  (roles, invitations) is explicitly not implemented. Two follow-ups for the first release that
+  carries it: (a) it gives a plugin its own Peer/principal — the mechanism behind gating-doc §4
+  condition (a), still without any role model; (b) all five `webserver/*` events become
+  instance-scoped (`webServer` as dispatch subject, `global: true` opt-out) and route
+  registration gains `anonymous`/`required`/`deny` — the `webserver/index-inject` listener this
+  plugin mounts must be re-checked for service isolation.
+- Docs: new `docs/adapt-dsh-0.2.2-rc.4.md`; 2026-11-18 block in
+  `docs/role-based-ui-gating.md` §5 + a condition-(a) status line in §4; README / README.zh
+  status, 0.3.17 paragraph, compat row, rc.4 allow-list prose; this entry; devDep lineage in
+  `gotchas.md` (rule: bump lineage on every re-pin, not only feature releases).
 ## 2026-11-17 (feature) — dsh-login 0.3.16: 主界面「用户管理」整页布局重做 (块式堆叠)
 
 - Trigger: maintainer feedback on 0.3.15 — "继续优化在主界面时，用户管理展示效果，目前布局太丑了。"

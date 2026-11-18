@@ -75,6 +75,12 @@ non-owner identity, or (b) a deployment needs more than admin/ordinary (e.g.
 per-team plugin visibility). At that point the change is the five items in §2,
 with `rolePolicy.ts` as the one source of truth for all three seams.
 
+Status of (a) as of 2026-11-18: upstream has implemented an unreleased
+Peer-based authentication Provider registry (`connection.authentication`) that
+lets a plugin supply its own Peer/principal — the *mechanism* for a non-owner
+identity now exists in the backlog, but no role or authorization model sits on
+top of it, so (a) is still open (§5, 11-18 entry).
+
 ## 5. Re-verification log
 
 **2026-11-11 (scheduled watch)** — re-checked against upstream master tip
@@ -173,3 +179,52 @@ main-sidebar rework) is current, released 2026-11-17.
 Nothing new to act on: the tip is byte-identical to 11-14/15/16, so the gateway
 auth-provider WIP has not moved and §4's condition (a)/(b) has not fired.
 Verdict and effort estimate (≈1–2 days) unchanged.
+
+**2026-11-18 (scheduled watch, DSH 0.2.2-rc.4 → dsh-login 0.3.17)** — new release
+`dsh-v0.2.2-rc.4` → `3f321d32bf`; origin/master tip moved `39163dd30f` →
+`ca33fd6843` (backlog 608 → **1407** commits). dsh-login 0.3.17 is the re-pin onto
+rc.4 (226 → 226, buckets 140 / 85 / 1 unchanged — see
+[`docs/adapt-dsh-0.2.2-rc.4.md`](adapt-dsh-0.2.2-rc.4.md)).
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | at the rc.4 tag all three levers sit at the same lines as 11-14: `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139`. Tip `ca33fd6843`: `renderIndex` at `packages/host/webserver/src/index.ts:867`, inject logic in `packages/host/webserver/src/injections.ts` — same unreleased refactor, signature/transform shape unchanged, lever intact |
+| No upstream role model to reuse | recurring grep at the `dsh-v0.2.2-rc.4` tag AND the new tip `ca33fd6843` = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline). No account store, no role field, no permission matrix |
+| Wire classifier is bucketed | at dsh-login 0.3.17: 140 / 85 / 1 of 226 (`src/api-filter.ts`, pinned by `tests/wire-surface.spec.ts`); drift radar at the checkout = 226 == 226, added [] removed [] (the rc.3→rc.4 range touches no remote-decorated source) |
+
+**The 11-14 "gateway auth-provider WIP" radar has graduated**: it is now an
+*implemented, unreleased* architecture — Peer-based authentication Providers.
+`ConnectionAuthentication` sits at `packages/client/connection/src/authentication.ts:14`
+as service `connection.authentication`, injected at
+`packages/client/connection/src/index.ts:129` and consumed at
+`packages/client/connection/src/rpc-host.ts:80`; the rationale note is
+`.agents/notes/implemented/architecture/2026-11-07-browser-authentication-providers.md`
+(+ `.zh.md` / `.i18n.yaml`), covered by
+`packages/api/gateway/tests/authentication-provider.host.spec.ts`. An
+`AuthenticationProvider` synchronously returns an **existing live Peer** or
+`undefined`; Providers are tried in registration order; the **Host fixes
+`peer.principal` at Peer creation**, and the note is explicit that the
+**Remote product itself is not implemented** (no role model, no invitation UI).
+None of it exists at rc.4 (greps for `connection.authentication` at the tag
+return nothing).
+
+Why this matters here, and why §4's condition (a) still has not fired:
+
+- It gives a plugin a way to mint its **own** Peer/principal instead of arriving
+  as the default owner Token Peer — the mechanical half of condition (a). What
+  it does **not** give is any role/authorization model above the Peer: no
+  admin/ordinary split, no per-package visibility rule. So the five items in §2
+  are unchanged, and the role store stays dsh-login's.
+- It is a **compatibility** item first: when that seam ships, all five
+  `webserver/*` events become instance-scoped (the `webServer` service is the
+  dispatch subject; `global: true` is the opt-out), and route registration gains
+  explicit `anonymous` / `required` / `deny` policy with omission meaning
+  `required`. The `webserver/index-inject` listener this plugin mounts is an
+  ordinary listener, so it would be filtered by server instance rather than
+  broadcasting from the Cordis root — exactly the kind of change that silently
+  narrows a UI gate. Re-check it in the first release that carries the seam.
+
+Nothing new to act on today: verdict and effort estimate (≈1–2 days) stand; the
+next watch should read the authentication note's integration counterpart
+(`2026-11-07-browser-authentication-development.md`) before deciding whether a
+Provider-based identity is worth adopting over the current login wall.
