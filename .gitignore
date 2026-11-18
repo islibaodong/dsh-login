@@ -36,3 +36,8 @@ test-ts.ts
 /npm_recovery_codes.txt
 /.claude/
 /.github/
+
+# scratch dirs used by watch/verification runs (npm caches, temp DSH_HOMEs)
+/.tmp-*/
+.tmp-*/
+
