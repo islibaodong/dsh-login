@@ -1,0 +1,27 @@
+0 verbose cli D:\NVM\nodejs\node.exe D:\NVM\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.19.0
+2 info using node@v24.20.0
+3 silly config load:file:D:\NVM\nvm\v24.20.0\node_modules\npm\npmrc
+4 silly config load:file:E:\code\dsh-login\.npmrc
+5 silly config load:file:C:\Users\Administrator\.npmrc
+6 silly config load:file:D:\NVM\nodejs\etc\npmrc
+7 verbose title npm view @islibaodong/dsh-login dist-tags
+8 verbose argv "view" "@islibaodong/dsh-login" "dist-tags" "--json"
+9 verbose logfile logs-max:10 dir:E:\code\dsh-login\.tmp-npmcache\_logs\2026-11-18T04_19_09_328Z-
+10 verbose logfile E:\code\dsh-login\.tmp-npmcache\_logs\2026-11-18T04_19_09_328Z-debug-0.log
+11 warn Unknown user config "phantomjs_cdnurl". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+12 warn Unknown user config "chromedriver_cdnurl". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+13 warn Unknown user config "sass_binary_site". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+14 warn Unknown user config "ELECTRON_MIRROR". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+15 warn Unknown user config "CHROMEDRIVER_CDNURL". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+16 warn Unknown user config "OPERADRIVER". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+17 warn Unknown user config "ELECTRON_BUILDER_BINARIES_MIRROR". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+18 warn Unknown user config "PYTHON_MIRROR". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+19 silly logfile done cleaning log files
+20 http fetch GET 200 https://registry.npmmirror.com/@islibaodong%2fdsh-login 120ms (cache revalidated)
+21 verbose cwd E:\code\dsh-login
+22 verbose os Windows_NT 10.0.19045
+23 verbose node v24.20.0
+24 verbose npm  v11.19.0
+25 verbose exit 0
+26 info ok

@@ -195,8 +195,10 @@
   (`//registry.npmjs.org/:_authToken=<token>` → `npm publish --access
   public --registry=https://registry.npmjs.org --userconfig .npmrc.publish`)
   and DELETE the temp file immediately after. Post-publish registry reads
-  may lag ~2 min (`dist-tags.latest` still shows the old version right
-  after a successful publish — wait ~60 s before re-checking). Never
+  may lag (`dist-tags.latest` still shows the old version right after a
+  successful publish — observed ~2 min on 2026-11-17 and ~4 min on
+  2026-11-18, so poll the no-cache packument several times, never conclude
+  a failure or re-publish from the first negative read). Never
   commit, paste, or log the token.
 - The `E:\code\deepseek-harness` checkout working tree can be STALE relative
   to releases (2026-10-15: `dev` still at the alpha.2 merge `d743267388`

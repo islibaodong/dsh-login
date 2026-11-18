@@ -53,6 +53,17 @@
   `docs/role-based-ui-gating.md` §5 + a condition-(a) status line in §4; README / README.zh
   status, 0.3.17 paragraph, compat row, rc.4 allow-list prose; this entry; devDep lineage in
   `gotchas.md` (rule: bump lineage on every re-pin, not only feature releases).
+- Release: version bumped to **0.3.17**, committed `d652745` (`chore(release): 0.3.17 - pure
+  re-pin onto DSH 0.2.2-rc.4`), tagged `v0.3.17`, pushed to `origin/master`; npm-published with
+  the granular token from `.env` (`NPM_ACCESS_TOKENS` → temp `.npmrc.publish`,
+  `npm publish --access public`, config deleted immediately after; registry `latest`
+  0.3.16 → **0.3.17**, packument confirms `2026-11-18T04:19:30Z`); GitHub release `v0.3.17`
+  created via `gh release create --verify-tag` with notes derived from this entry (now
+  `Latest`; all 26 tags carry a release).
+- Note for the next watch: the publish was visible on the registry ~4 minutes after the
+  publish command, longer than the ~2 min recorded in `gotchas.md` — poll the packument a
+  few times before concluding a lag failure, and never re-publish on the first negative check.
+
 ## 2026-11-17 (feature) — dsh-login 0.3.16: 主界面「用户管理」整页布局重做 (块式堆叠)
 
 - Trigger: maintainer feedback on 0.3.15 — "继续优化在主界面时，用户管理展示效果，目前布局太丑了。"
