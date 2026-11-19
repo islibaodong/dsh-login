@@ -46,8 +46,15 @@
   its completed edits (package.json/lock, api-filter, fixture) at ~12:22, re-ran the full
   verification, and finished the release. Do not double-publish if a peer resumes after
   v0.3.18 exists.
+- Release: version bump **0.3.18** committed `4106958` (`chore(release): 0.3.18 - pure re-pin
+  onto DSH 0.2.2-rc.5 (wire surface unchanged at 226)`), annotated tag `v0.3.18`, pushed to
+  `origin/master` (`6046513..4106958`); npm-published with the granular token from `.env`
+  (`NPM_ACCESS_TOKENS` → temp userconfig outside the repo, `npm publish --access public`, file
+  deleted immediately; registry `latest` 0.3.17 → **0.3.18**, packument time
+  `2026-11-19T04:39:22.739Z`, ~2.5 min lag); GitHub release `v0.3.18` created via
+  `gh release create --verify-tag` (now `Latest`, published `2026-11-19T04:42:26Z`).
 
-
+## 2026-11-18 (scheduled watch) — DSH 0.2.2-rc.4 released; dsh-login 0.3.17 pure re-pin (wire 226 → 226)
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-18T04:00Z). Detection:
   npm packument no-cache GET (`@deepseek-ai/dsh` `next` = **0.2.2-rc.4**, published
