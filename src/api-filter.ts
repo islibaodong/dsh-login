@@ -18,9 +18,10 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.2-rc.4 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 226 in total — byte-identical to rc.3's registry: the rc.3→rc.4 range touches
- * no remote-decorated source — 0.2.1-rc.4's registry stays at 0.2.1's 146 endpoints, a strict
+ * 0.2.2-rc.5 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
+ * 226 in total — byte-identical across rc.3 → rc.4 → rc.5: those ranges touch
+ * no remote-decorated source that adds or removes an endpoint — 0.2.1-rc.4's
+ * registry stays at 0.2.1's 146 endpoints, a strict
  * subset of this classification, so one list serves both supported lines; the
  * 0.2.2-line additions are the forge panel review/commits/reviewers surface,
  * the `officeToPdf`→`officeKit` rename, the DeepSeek Platform account
@@ -48,7 +49,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.4'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.5'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may

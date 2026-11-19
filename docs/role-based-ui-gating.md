@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15 and 2026-11-16)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16 and 2026-11-19)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -75,11 +75,13 @@ non-owner identity, or (b) a deployment needs more than admin/ordinary (e.g.
 per-team plugin visibility). At that point the change is the five items in §2,
 with `rolePolicy.ts` as the one source of truth for all three seams.
 
-Status of (a) as of 2026-11-18: upstream has implemented an unreleased
-Peer-based authentication Provider registry (`connection.authentication`) that
-lets a plugin supply its own Peer/principal — the *mechanism* for a non-owner
-identity now exists in the backlog, but no role or authorization model sits on
-top of it, so (a) is still open (§5, 11-18 entry).
+Status of (a) as of 2026-11-18, re-checked 2026-11-19: upstream has implemented
+an unreleased Peer-based authentication Provider registry
+(`connection.authentication`) that lets a plugin supply its own
+Peer/principal — the *mechanism* for a non-owner identity now exists in the
+backlog, but no role or authorization model sits on top of it, and the seam is
+still absent at `dsh-v0.2.2-rc.5`, so (a) is still open (§5, 11-18 and 11-19
+entries).
 
 ## 5. Re-verification log
 
@@ -228,3 +230,23 @@ Nothing new to act on today: verdict and effort estimate (≈1–2 days) stand; 
 next watch should read the authentication note's integration counterpart
 (`2026-11-07-browser-authentication-development.md`) before deciding whether a
 Provider-based identity is worth adopting over the current login wall.
+
+**2026-11-19 (scheduled watch, DSH 0.2.2-rc.5 → dsh-login 0.3.18)** — new release
+`dsh-v0.2.2-rc.5` → `9c2670d3bc`; origin/master tip moved `ca33fd6843` →
+`2e39e70496` (backlog 1407 → **1640** commits). dsh-login 0.3.18 is the re-pin
+onto rc.5 (226 → 226, buckets 140 / 85 / 1 unchanged — see
+[`docs/adapt-dsh-0.2.2-rc.5.md`](adapt-dsh-0.2.2-rc.5.md)).
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | at the rc.5 tag all three levers sit at the same lines as 11-18: `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139`. The `rc.5..origin/master` backlog (1640 commits) is where the instance-scoping refactor lives; **none of it is in the release** |
+| No upstream role model to reuse | recurring grep at the `dsh-v0.2.2-rc.5` tag = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline). No account store, no role field, no permission matrix. `git grep connection.authentication` at the tag returns **nothing** (exit 1) — the auth-Provider registry is still unreleased |
+| Wire classifier is bucketed | at dsh-login 0.3.18: 140 / 85 / 1 of 226 (`src/api-filter.ts`, pinned by `tests/wire-surface.spec.ts`); drift radar at the checkout = 226 == 226, added [] removed [] (the rc.4→rc.5 range's one behaviour change — route-aware web-search provider selection — touches no remote-decorated source) |
+
+Condition (a) has not fired: the mechanism is still backlog-only, and no role
+model sits above the Peer. Verdict and effort estimate (≈1–2 days) unchanged.
+The compatibility item from the 11-18 entry — `webserver/index-inject` becoming
+instance-scoped — also has **not** shipped; re-check it in the first release
+whose tag contains `connection.authentication`. Live evidence that the current
+three-lever design still enforces under rc.5 is in the adaptation doc (§4:
+owner 225 / user 140, alice 403 on the admin route).

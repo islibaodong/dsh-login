@@ -1,4 +1,53 @@
-## 2026-11-18 (scheduled watch) — DSH 0.2.2-rc.4 released; dsh-login 0.3.17 pure re-pin (wire 226 → 226)
+## 2026-11-19 (scheduled watch) — DSH 0.2.2-rc.5 released; dsh-login 0.3.18 pure re-pin (wire 226 → 226)
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-19T04:00Z). Detection:
+  npm packument no-cache GET (`@deepseek-ai/dsh` `next` = **0.2.2-rc.5**, published
+  `2026-11-18T13:17:23.604Z`; `latest` stays 0.2.2-rc.1, `alpha` 0.2.2-alpha.3) +
+  `git tag dsh-v0.2.2-rc.5` → `9c2670d3bce5275e0d1610272958121af87787bb`. `origin/master`
+  tip `2e39e70496aa02986ca6a820c5d497e816b69d7e`; backlog `rc.5..origin/master` = **1640**
+  commits (was 1407 past rc.4).
+- Range rc.4 → rc.5 = **5 commits, 433 files, +917/−594** (`packages`+`apps`: 413 files,
+  +759/−529). Real change: route-aware web-search provider selection
+  (`deepseek-official` / `deepseek-account` routes keep the legacy Messages search, others use
+  `deepseek-search-api`; `packages/bundle/base/cordis.patch.yml` stops pinning `searchProvider`)
+  across `packages/web/web/src/{index,types}.ts`, `tool-web/src/search.ts`,
+  `web-search-deepseek/src/{provider,types}.ts`, `ui-settings-web-search` client + locales, tests.
+  `packages/extensions/tool-cordis/src/api-catalog.ts` changed descriptions only. The rest are
+  `package.json` stamps (386 files). No new `@Remote` package.
+- **Wire surface unchanged**: `@Remote(` file set is 44 files at both tags with an identical
+  list, and the intersection with "changed files" is empty; the api-catalog diff adds no
+  decorator/method key. Live 226 vs fixture 226, `added []` `removed []`. Buckets stay
+  **140 / 85 / 1**; no classification work, no test-pin moves.
+- Gotcha re-confirmed: dumping the registry from an **npm tarball** install is incomplete —
+  `@deepseek-ai/dsh@0.2.2-rc.4` ships 39 `typert.remote-client.d.ts` and yields **224** methods
+  (2 short). Dump from the built checkout (`scripts/dump-wire-surface.mjs`), never from tarballs.
+- Changes: `package.json` (0.3.18, ten dsh devDeps `^0.2.2-rc.4` → `^0.2.2-rc.5`, vendor + peers
+  untouched — rc.5 satisfies every `>=0.2.2-alpha.2 <0.3.0-0` peer branch under
+  `includePrerelease: true`); `src/api-filter.ts` (`WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.5'` +
+  header rewrite); `tests/fixtures/wire-surface.json` (`dshVersion` line only);
+  `dist/index.js`/`.map` re-stamp, `dist/client.js` byte-identical (50396 chars); new
+  `docs/adapt-dsh-0.2.2-rc.5.md`; role-doc 2026-11-19 entry; README / README.zh.
+- Verification: `npm install` clean (lock regenerated, no ERESOLVE); `vitest run` **22 files /
+  302 tests green** incl. live wire cross-check 226 == 226; `npm run build` + `verify:imports`
+  exit 0; `npm pack` 38 files / 243693 bytes; **live boot under a real rc.5 npm runtime**
+  (`npm install @deepseek-ai/dsh@0.2.2-rc.5` in `.tmp-rc5`, temp `DSH_HOME`, tgz installed into
+  `profiles/web` + bundle appended). A fixed port hit a Windows excluded range
+  (`listen EACCES 127.0.0.1:58901`); `--port 0` booted 127.0.0.1:56812 **with no boot token**.
+  `/` 302 `/login`; anon capabilities 401; setup 200 `{"ok":true}`; owner 225 / `isAdmin:true`;
+  alice 201 / 140 / `isAdmin:false`; alice `GET /api/auth/admin/users` 403, owner 200; injected
+  index 45 KB with `__DSH_BOOT__`.
+- Multi-user: **still none** — recurring grep at the tag = exactly 1 hit
+  (`packages/api/remote-access/README.md:2`); `connection.authentication` at rc.5 returns
+  nothing (exit 1); three gating levers at identical lines (`webserver/src/index.ts:738`,
+  `client/modules/src/index.ts:635`, `remote-access/src/index.ts:139`). Role-UI verdict and
+  estimate (≈1–2 days) unchanged; condition (a) still open.
+- Ops note: two scheduled sessions ran this card concurrently. The peer deadlocked waiting for
+  a human approval after hitting the sandbox pipe EPERM on `npm test`; this session took over
+  its completed edits (package.json/lock, api-filter, fixture) at ~12:22, re-ran the full
+  verification, and finished the release. Do not double-publish if a peer resumes after
+  v0.3.18 exists.
+
+
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-18T04:00Z). Detection:
   npm packument no-cache GET (`@deepseek-ai/dsh` `next` = **0.2.2-rc.4**, published
