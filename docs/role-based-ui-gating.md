@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16 and 2026-11-19)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16, 2026-11-19 and 2026-11-20)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -250,3 +250,17 @@ instance-scoped — also has **not** shipped; re-check it in the first release
 whose tag contains `connection.authentication`. Live evidence that the current
 three-lever design still enforces under rc.5 is in the adaptation doc (§4:
 owner 225 / user 140, alice 403 on the admin route).
+
+**2026-11-20 (scheduled watch)** — **zero upstream movement since 11-19**: newest tag still
+`dsh-v0.2.2-rc.5` → `9c2670d3bc`, origin/master tip still `2e39e70496`, backlog still
+1640 commits past rc.5; npm `latest`/`next` both 0.2.2-rc.5 (`latest` promoted from rc.1, a
+dist-tag move only). dsh-login 0.3.18 stays current.
+
+| Claim in §2 | Re-verified evidence |
+|---|---|
+| Page gate is a per-request transform | at the rc.5 tag all three levers sit at the same lines as 11-19: `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`, the `{ kind: 'global', name: '__DSH_BOOT__', value: graph }` row at `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', (table, peer) => …)` at `packages/api/remote-access/src/index.ts:139`; the instance-scoping refactor in `injections.ts` is still backlog-only |
+| No upstream role model to reuse | `git grep -nEi 'multi.?user\|multiuser\|role.?based\|\brbac\b' 9c2670d3bc -- packages apps` = exactly 1 hit, `packages/api/remote-access/README.md:2` (the standing baseline); `git grep connection.authentication` at the tag returns nothing — no auth-Provider seam, no account store, no role field |
+| Wire classifier is bucketed | unchanged at dsh-login 0.3.18: 140 / 85 / 1 of 226 (`src/api-filter.ts`, pinned by `tests/wire-surface.spec.ts`); no upstream commits since 11-19, so the 226 == 226 radar stands |
+
+Verdict (feasible) and effort estimate (≈1–2 days) unchanged; §4 condition (a) still has not
+fired, and the `webserver/index-inject` instance-scoping compatibility item has not shipped.

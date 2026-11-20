@@ -1,3 +1,42 @@
+## 2026-11-20 (scheduled watch) — no new DSH release; 0.2.2-rc.5 stays newest, 0.3.18 stays current; no adaptation, no publish
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-20T04:00:01Z / 12:00 +0800).
+- Detection (git + npm):
+  - Git: `git ls-remote origin` (the local `git fetch` still fails — `error: cannot open '.git/FETCH_HEAD':
+    Permission denied` under workspace-write) — newest tag still **`dsh-v0.2.2-rc.5`** →
+    `9c2670d3bce5275e0d1610272958121af87787bb`; origin/master tip still
+    `2e39e70496aa02986ca6a820c5d497e816b69d7e` (**unmoved since the 11-19 watch**); backlog
+    `rc.5..origin/master` = **1640** commits (same); no `dsh-v0.2.2` stable tag, no 0.2.3/0.3 line.
+  - npm (node https, no-cache packument `@deepseek-ai/dsh`): `latest` = **0.2.2-rc.5** and `next` =
+    0.2.2-rc.5 (`alpha` 0.2.2-alpha.3) — rc.5 published `2026-11-18T13:17:23.604Z`. Only variant
+    since 11-19: **`latest` was promoted from 0.2.2-rc.1 to 0.2.2-rc.5** (dist-tag move, no new
+    version, no new code). `@islibaodong/dsh-login` `latest` = **0.3.18** (`2026-11-19T04:39:22.739Z`).
+- Local runtime: packaged `D:\soft\dsh` still absent (`dsh` not on PATH, `resources/app.asar/dsh/package.json`
+  does not resolve); the runtime target remains the checkout `E:\code\deepseek-harness`, HEAD
+  `9c2670d3bc` = tag rc.5, root + `apps/cli` package.json 0.2.2-rc.5. GUI 127.0.0.1:3080: `/` → **302**
+  login wall, `/login` **200**, anonymous `/api/auth/capabilities` **401** (the 11-17 source-link
+  install is still mounted).
+- Drift radar: zero upstream movement (same tip, same tag) → the fixture stands at **226** methods /
+  buckets **140 / 85 / 1**; no re-dump needed.
+- Multi-user: `git grep -nEi 'multi.?user|multiuser|role.?based|\brbac\b' 9c2670d3bc -- packages apps`
+  = **exactly 1 hit**, the standing baseline `packages/api/remote-access/README.md:2`;
+  `git grep connection.authentication 9c2670d3bc -- packages` = nothing (exit 1) — the auth-Provider
+  seam is still backlog-only. **Verdict unchanged: no native accounts/roles; dsh-login remains the
+  account layer.**
+- RBAC (whole-UI by role): all three levers at the same lines as every watch since 11-14 —
+  `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`,
+  `__DSH_BOOT__` graph row at `packages/client/modules/src/index.ts:635`,
+  `webserver/index-inject` at `packages/api/remote-access/src/index.ts:139`; `injections.ts` refactor
+  still backlog-only. Verdict (feasible) / path / **≈1–2 days** estimate unchanged; §4 condition (a)
+  still not fired. Logged in [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md) §5.
+- Verification: `npm test` **not re-executed** — vitest startup fails with `Error: spawn EPERM`
+  (esbuild service spawn, the standing pipe-stdio sandbox boundary; one attempt, no retries per the
+  no-retry rule). The tree is byte-identical to the 11-19 green baseline (`22 files / 302 tests`,
+  rc.5 live boot verified); this watch's change set is **docs-only**.
+- **Conclusion: no new DSH version (0.2.2-rc.5 remains newest, already adapted + released as 0.3.18
+  yesterday) → no adaptation, no version bump, no npm publish (`.env` token untouched).** README /
+  README.zh need no edit (already state 0.3.18 / rc.5 / 302 tests).
+
 ## 2026-11-19 (scheduled watch) — DSH 0.2.2-rc.5 released; dsh-login 0.3.18 pure re-pin (wire 226 → 226)
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-19T04:00Z). Detection:
