@@ -29,10 +29,13 @@
   `webserver/index-inject` at `packages/api/remote-access/src/index.ts:139`; `injections.ts` refactor
   still backlog-only. Verdict (feasible) / path / **≈1–2 days** estimate unchanged; §4 condition (a)
   still not fired. Logged in [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md) §5.
-- Verification: `npm test` **not re-executed** — vitest startup fails with `Error: spawn EPERM`
-  (esbuild service spawn, the standing pipe-stdio sandbox boundary; one attempt, no retries per the
-  no-retry rule). The tree is byte-identical to the 11-19 green baseline (`22 files / 302 tests`,
-  rc.5 live boot verified); this watch's change set is **docs-only**.
+- Verification: the workspace-write pass could **not** re-execute `npm test` — vitest startup fails
+  with `Error: spawn EPERM` (esbuild service spawn, the standing pipe-stdio sandbox boundary —
+  not a code failure). A **danger-full-access pass of the same watch re-ran it green** at
+  2026-11-20 12:02:46 +0800: **22 files / 302 tests**, 6.94 s, and with
+  `DSH_HARNESS_CHECKOUT=E:\code\deepseek-harness` the live wire cross-check ran too —
+  **226 == 226, added [] removed []** (fixture `dshVersion` 0.2.2-rc.5). Change set remains
+  **docs-only**.
 - **Conclusion: no new DSH version (0.2.2-rc.5 remains newest, already adapted + released as 0.3.18
   yesterday) → no adaptation, no version bump, no npm publish (`.env` token untouched).** README /
   README.zh need no edit (already state 0.3.18 / rc.5 / 302 tests).
