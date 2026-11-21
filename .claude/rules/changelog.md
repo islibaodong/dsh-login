@@ -1,3 +1,49 @@
+## 2026-11-21 (scheduled watch) — no new DSH release; 0.2.2-rc.5 stays newest, 0.3.18 stays current; no adaptation, no publish
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-21T04:00:02Z / 12:00 +0800).
+- Detection (git + npm + GitHub releases):
+  - Git: `git ls-remote origin` / `git fetch --tags` — newest tag still **`dsh-v0.2.2-rc.5`** →
+    `9c2670d3bce5275e0d1610272958121af87787bb`; `origin/master` tip still
+    `2e39e70496aa02986ca6a820c5d497e816b69d7e` (**unmoved since 11-18**); backlog
+    `rc.5..origin/master` = **1640** commits (same); no `dsh-v0.2.2` stable tag, no 0.2.3/0.3 line.
+  - npm (node https, no-cache packument `@deepseek-ai/dsh`): `latest` = `next` = **0.2.2-rc.5**
+    (`alpha` 0.2.2-alpha.3); rc.5 published `2026-11-18T13:17:23.604Z`, packument `modified`
+    `2026-11-19T05:43:06.433Z` (the 11-19 latest-tag promotion — no new version, no new code).
+    `@islibaodong/dsh-login` `latest` = **0.3.18** (`2026-11-19T04:39:22.739Z`).
+  - GitHub releases API: newest release **`dsh-v0.2.2-rc.5`** (published `2026-11-18T12:51:39Z`,
+    prerelease) — nothing newer.
+- Local runtime: packaged `D:\soft\dsh` still absent (`dsh` not on PATH); the runtime target remains
+  the checkout `E:\code\deepseek-harness`, HEAD `9c2670d3bc` = tag rc.5 (root package 0.2.2-rc.5).
+  Running GUI 127.0.0.1:3080 is the dev-tree `apps/cli/src/bin.ts web` process; profile
+  `C:\Users\Administrator\.dsh\profiles\web` mounts `@islibaodong/dsh-login` as
+  `link:E:/code/dsh-login`: `/` **302**, `/login` **200**, anonymous `/api/auth/capabilities` **401**,
+  `/api/auth/me` **401**.
+- Drift radar: zero upstream movement (same tip, same tag) → the fixture stands at **226** methods /
+  buckets **140 / 85 / 1**; live `enumerateWireSurface('E:/code/deepseek-harness')` = **226 == 226**,
+  `added []` `removed []` (fixture `dshVersion` 0.2.2-rc.5); no re-dump needed.
+- Multi-user: `git grep -nEi 'multi.?user|multiuser|role.?based|\brbac\b' dsh-v0.2.2-rc.5 -- packages apps`
+  = **exactly 1 hit**, the standing baseline `packages/api/remote-access/README.md:2`;
+  `git grep connection.authentication 9c2670d3bc -- packages` = **nothing** (exit 1) — the Peer-based
+  auth-Provider registry is still unreleased backlog (present at `origin/master`,
+  `packages/client/connection/src/authentication.ts:14`). **Verdict unchanged: no native
+  accounts/roles; dsh-login remains the account layer.**
+- RBAC (whole-UI by role): all three levers at the same rc.5 lines —
+  `renderIndex(html: string, peer: PeerScope)` at `packages/host/webserver/src/index.ts:738`,
+  `rows.push({ kind: 'global', name: '__DSH_BOOT__', value: graph })` at
+  `packages/client/modules/src/index.ts:635`, `webCtx.on('webserver/index-inject', (table, peer) => …)`
+  at `packages/api/remote-access/src/index.ts:139`. On the unchanged master tip the unreleased
+  refactor still sits at `packages/host/webserver/src/index.ts:867` + `injections.ts`
+  (`renderIndexInjections`) — signature/transform shape unchanged. Verdict (feasible) / path /
+  **≈1–2 days** estimate unchanged; §4 condition (a) still not fired. Logged in
+  [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md) §5.
+- Verification: `npm test` at 2026-11-21 12:01:35 +0800 = **22 files / 302 tests green** (6.64 s),
+  including the live wire cross-check (226 == 226); `tests/wire-surface.spec.ts` alone = 9 tests green.
+  Change set is **docs-only**.
+- **Conclusion: no new DSH version (0.2.2-rc.5 remains newest, already adapted + released as 0.3.18
+  on 11-19) → no adaptation, no version bump, no npm publish (`.env` token untouched).** README /
+  README.zh need no edit (already state 0.3.18 / rc.5 / 302 tests); no version-release section,
+  because nothing was released.
+
 ## 2026-11-20 (scheduled watch) — no new DSH release; 0.2.2-rc.5 stays newest, 0.3.18 stays current; no adaptation, no publish
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-20T04:00:01Z / 12:00 +0800).
