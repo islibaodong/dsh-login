@@ -18,17 +18,18 @@
  * page all landed on a `forbidden` envelope for ordinary users).
  *
  * The lists below are transcribed from the typert wire registry of DSH
- * 0.2.2-rc.5 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per endpoint,
- * 226 in total — byte-identical across rc.3 → rc.4 → rc.5: those ranges touch
- * no remote-decorated source that adds or removes an endpoint — 0.2.1-rc.4's
- * registry stays at 0.2.1's 146 endpoints, a strict
- * subset of this classification, so one list serves both supported lines; the
- * 0.2.2-line additions are the forge panel review/commits/reviewers surface,
- * the `officeToPdf`→`officeKit` rename, the DeepSeek Platform account
- * notification trio, the agent-team mode toggle, host MCP-server management,
- * the web search/fetch provider list, `terminal.watch`,
- * `workspaceFiles.search`, the `subagents.interruptByUser` rename and the
- * deepseek-chat-import limits probe). They
+ * 0.2.3-alpha.1 (`TypertRemoteMap`, one `'<namespace>/<method>'` key per
+ * endpoint, 264 in total). The 0.2.2 line was 226 methods (byte-identical
+ * across rc.3 → rc.4 → rc.5); alpha.1 adds 38 and removes one
+ * (`forgePanel.branches`). The additions are four new namespaces —
+ * `connectorAccounts` (host connector credentials), `remoteConnection`
+ * (pairing/QR login and host network exposure), `pluginEvents` (the live
+ * plugin-graph stream) and `sessionStatus` (the per-session read/unread mark
+ * stream) — plus the global `forgePanel.review*` family (a code-host review
+ * controller addressed by URL, not by Session, whose host credentials can
+ * merge any pull request), `permissionPresets.set` (the per-session approval
+ * policy write behind the picker) and four session-scoped forge panel reads
+ * (`changesLens`, `extensions`, `revisit`, `worktreeBases`). They
  * are a **total, disjoint classification** of that surface:
  *
  *   - {@link USER_ALLOWED}        – per-user, session/agent-scoped features.
@@ -49,7 +50,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.2-rc.5'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.3-alpha.1'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may
@@ -108,8 +109,8 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // caller's own conversation (same trust shape as `terminal.*`).
   'actionCards.act',
   // ── forgePanel: the per-session git worktree / change-request panel ────────
-  // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
-  // resource the Gateway resolves and the remote guard ownership-checks): it
+  // Every method below is Session-scoped (first wire arg `sessionId: SessionId`,
+  // a resource the Gateway resolves and the remote guard ownership-checks): it
   // inspects the Session's own checkout, follows, reviews or merges the
   // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
   // `changeRequestChecks` and the review publisher `submitReview`; 0.2.2-rc.2
@@ -123,21 +124,31 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   // user inside the Session's world). Host-wide secrets are not touched; the
   // sign-in probe reports only the state of the code host of the Session's
   // own checkout.
-  'forgePanel.branches', 'forgePanel.cancelWorktree',
+  //
+  // 0.2.3-alpha.1 moves the *global* review controller (every `review*` method,
+  // addressed by repository URL with no Session resource) into the same
+  // namespace. Those are NOT Session-scoped: they act through the host's forge
+  // credentials on whatever pull request the URL names, `reviewMerge` included,
+  // so they are classified admin-only below. The four alpha.1 additions kept
+  // here (`changesLens`, `extensions`, `revisit`, `worktreeBases`) are
+  // Session-scoped reads like their neighbours. `forgePanel.branches` was
+  // retired upstream in this release.
+  'forgePanel.cancelWorktree',
   'forgePanel.changeRequestChecks', 'forgePanel.changeRequestCommits',
   'forgePanel.changeRequestDiff', 'forgePanel.changeRequestReview',
   'forgePanel.changeRequestReviewWrite', 'forgePanel.changeRequestStates',
   'forgePanel.changeRequestText', 'forgePanel.changeRequestViewed',
+  'forgePanel.changesLens',
   'forgePanel.continueInProject', 'forgePanel.diffBases',
-  'forgePanel.dismiss', 'forgePanel.follow', 'forgePanel.localCommits',
-  'forgePanel.localDiff', 'forgePanel.localText',
+  'forgePanel.dismiss', 'forgePanel.extensions', 'forgePanel.follow',
+  'forgePanel.localCommits', 'forgePanel.localDiff', 'forgePanel.localText',
   'forgePanel.markReady', 'forgePanel.merge', 'forgePanel.refresh',
   'forgePanel.requestReviews', 'forgePanel.requestWorktree',
   'forgePanel.restoreWorktree', 'forgePanel.retryWorktree',
   'forgePanel.rerunChecks', 'forgePanel.reviewerCandidates',
-  'forgePanel.setFileViewed', 'forgePanel.stopCreation',
+  'forgePanel.revisit', 'forgePanel.setFileViewed', 'forgePanel.stopCreation',
   'forgePanel.submitReview', 'forgePanel.track',
-  'forgePanel.updateBranch', 'forgePanel.worktreeCleanup',
+  'forgePanel.updateBranch', 'forgePanel.worktreeBases', 'forgePanel.worktreeCleanup',
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
   // the real names — discovery is what settings→models failed on in issue #4.)
@@ -201,7 +212,13 @@ export const USER_ALLOWED: ReadonlySet<string> = new Set([
   'messageFeedback.delete', 'messageFeedback.list', 'messageFeedback.put',
   'sessionFeedback.record',
   'sessionReferenceResolver.candidates',
-  'permissionPresets.catalog',
+  // `permissionPresets.set` (0.2.3-alpha.1) switches the approval policy of the
+  // caller's own Session through `switchPreset`; `sessionStatus.mark` /
+  // `sessionStatus.follow` read and write the per-Session read/unread state
+  // (the Gateway resolves `sessionId` and `ctx.remoteAccess.allows` filters the
+  // stream), so both stay inside the same per-user scope as `session.*`.
+  'permissionPresets.catalog', 'permissionPresets.set',
+  'sessionStatus.follow', 'sessionStatus.mark',
   'productAnalytics.enabled', 'productAnalytics.report', 'productAnalytics.watchPolicy',
   // ── chain-of-thought translation (a per-user reading aid) ─────────────────
   'cotTranslation.limits', 'cotTranslation.translate',
@@ -314,6 +331,42 @@ export const ADMIN_ONLY_METHODS: ReadonlySet<string> = new Set([
   // (no Session scope on the wire), so it is an operator action even though
   // the rest of `schedule.*` is the caller's own surface.
   'schedule.deleteInactive',
+  // ── 0.2.3-alpha.1: the global code-host review controller ────────────────
+  // The `review*` family is the same forge panel service, but addressed by
+  // repository URL with no Session resource: it lists, reads, stages and
+  // SUBMITS/MERGES pull requests through the host's own code-host credentials
+  // (`reviewMerge`, `reviewRerunChecks`), i.e. it can touch repositories no
+  // Session owns. Operator territory, like `liveshareShares.*`.
+  'forgePanel.reviewChangeRequest', 'forgePanel.reviewChecks',
+  'forgePanel.reviewCommits', 'forgePanel.reviewCount',
+  'forgePanel.reviewDescription', 'forgePanel.reviewDiff',
+  'forgePanel.reviewLists', 'forgePanel.reviewMarkReady',
+  'forgePanel.reviewMerge', 'forgePanel.reviewPoll',
+  'forgePanel.reviewRefresh', 'forgePanel.reviewRequestReviews',
+  'forgePanel.reviewRerunChecks', 'forgePanel.reviewReviewerCandidates',
+  'forgePanel.reviewSetViewed', 'forgePanel.reviewStage',
+  'forgePanel.reviewSubmit', 'forgePanel.reviewText',
+  'forgePanel.reviewThreadWrite', 'forgePanel.reviewThreads',
+  'forgePanel.reviewUpdateBranch', 'forgePanel.reviewViewed',
+  // ── connectorAccounts: host connector credentials (0.2.3-alpha.1) ────────
+  // Start/cancel/watch the sign-in flows of the host's configured connectors
+  // (code host, cloud storage, …); the tokens belong to the instance, not to a
+  // browser user.
+  'connectorAccounts.cancel', 'connectorAccounts.start',
+  'connectorAccounts.watch',
+  // ── remoteConnection: host network pairing (0.2.3-alpha.1) ───────────────
+  // Pairing requests, QR/login URLs and connection status of the Host's
+  // remote-access service: exposing the host to other devices is operator
+  // territory (the same boundary `liveshareShares.*` sits behind).
+  'remoteConnection.cancel', 'remoteConnection.create',
+  'remoteConnection.decidePairing', 'remoteConnection.loginUrl',
+  'remoteConnection.pairingRequests', 'remoteConnection.status',
+  // ── pluginEvents: the host plugin-graph stream (0.2.3-alpha.1) ───────────
+  // `follow` streams every plugin-graph/rebuild event of the instance (the
+  // client-hmr surface). In a multi-user deployment the boot manifest is what
+  // dsh-login's whole-UI role gate filters, so handing non-admins the live
+  // graph would let them re-activate bundles the gate omits; admin-only.
+  'pluginEvents.follow',
   'settings.describe', 'settings.mutate', 'settings.openSettingsDocument',
   'settings.replace', 'settings.update',
 ])

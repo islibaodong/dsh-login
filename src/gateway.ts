@@ -8,6 +8,7 @@ import type { SessionStore } from './session.ts'
 import { extractSessionToken } from './auth.ts'
 import { applyUiGate } from './ui-gate.ts'
 import type { Config } from './config.ts'
+import type { WebIdentity } from './web-auth.ts'
 
 /**
  * Render index.html through the webserver's injection pipeline.
@@ -21,18 +22,22 @@ import type { Config } from './config.ts'
  * missing". Prefer renderIndex and fall back to applyIndexTaps on harness
  * 0.1.0-rc.x, where it is the full pipeline.
  */
-function indexRenderer(ctx: Context, distIndex: string): () => Promise<string> {
-  return async (): Promise<string> => {
+function indexRenderer(ctx: Context, distIndex: string): (peer?: unknown) => Promise<string> {
+  return async (peer?: unknown): Promise<string> => {
     const body = await readFile(distIndex, 'utf8')
     const webServer = ctx.webServer as {
-      renderIndex?: (html: string, peer: { principal: { kind: 'owner' } }) => string
-      applyIndexTaps: (html: string) => string
+      renderIndex?: (html: string, peer: unknown) => string
+      applyIndexTaps?: (html: string) => string
     }
-    const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer)
-    // DSH 0.2.2 index-inject listeners require the page's peer principal.
-    // Native browser connections use owner principals for all dsh-login
-    // users; the plugin's own login, API and UI gates enforce their roles.
-    return render.call(webServer, body, { principal: { kind: 'owner' } })
+    const render = webServer.renderIndex ?? webServer.applyIndexTaps?.bind(webServer)
+    if (typeof render !== 'function') return body
+    // DSH 0.2.3-alpha.1 threads the admitted PeerScope through every
+    // index-inject listener (and clones it into each injected row's context).
+    // The gateway hands it the Peer dsh-login claimed for this browser
+    // session; the legacy principal stub keeps rc.5 lines (which only read
+    // `principal.kind`) working, and covers the index when no Peer exists.
+    const pagePeer = peer ?? { principal: { kind: 'owner' } }
+    return render.call(webServer, body, pagePeer)
   }
 }
 
@@ -164,8 +169,20 @@ function mintCoreCookie(
  */
 function createAuthorizeIndex(ctx: Context): (req: IncomingMessage, res: ServerResponse) => boolean {
   return (req, res) => {
-    const connection = ctx.get('connection') as ConnectionAuth | undefined
+    const connection = ctx.get('connection') as (ConnectionAuth & { createPeer?: unknown }) | undefined
     if (connection === undefined) return true
+    // DSH 0.2.3-alpha.1 removed `connection.authorizeIndex` and the
+    // browser-session cookie handshake with it: the /api carriers now admit
+    // through `connection.authentication`, where dsh-login registers its own
+    // provider (src/web-auth.ts). The browser therefore already holds a Peer
+    // by the time this gateway runs, and there is no core cookie to mint.
+    // Detected by the registry, not by `createPeer`: 0.2.2-rc.5 already exposed
+    // `createPeer` on the Host connection service, but still needs the legacy
+    // browser-auth cookie handshake below for its `/api` carrier. The read is
+    // guarded because cordis throws on a service property that was not
+    // declared in this fiber's inject list.
+    if (hasAuthenticationRegistry(connection)) return true
+    if (typeof connection.authorizeIndex !== 'function') return true
     const auth = connection.browserAuth ?? connection
     const secure = (ctx.webServer as { protocol?: string } | undefined)?.protocol === 'https:'
     const hasTokenParam = req.url !== undefined && /[?&]token=/.test(req.url)
@@ -206,12 +223,13 @@ export function createGatewayHandler(
   ctx: Context,
   config: Config,
   store: SessionStore,
+  identity?: WebIdentity,
 ): WebRoute['handler'] {
   const distRoot = dirname(config.distIndex)
   const renderIndex = indexRenderer(ctx, config.distIndex)
   const authorizeIndex = createAuthorizeIndex(ctx)
 
-  return async (req: IncomingMessage, res: ServerResponse) => {
+  return async (req: IncomingMessage, res: ServerResponse, admitted?: unknown) => {
     // Non-GET/HEAD without a matching named route is 405 (fallback-only
     // semantics: named routes own their method handling).
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -228,6 +246,16 @@ export function createGatewayHandler(
     }
     store.cleanup()
     const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+    // Under DSH 0.2.3-alpha.1 the webserver admits the request before the
+    // fallback runs and passes its admitted PeerScope as the third argument.
+    // When the fallback seat is declared `auth: 'anonymous'` (no live
+    // session) there is no Peer; for a logged-in browser the plugin's own
+    // provider already claimed one, and the index must render with it.
+    const pagePeer = admitted ?? (
+      token === undefined
+        ? undefined
+        : identity?.peerForSession(token, { username: session.user, isAdmin: session.isAdmin })
+    )
     // Whole-UI role gating (config.uiRoleGate): an ordinary user's index
     // ships with the admin-only client bundles removed from the boot graph,
     // so their shell never activates those plugins. renderIndex is invoked
@@ -235,8 +263,8 @@ export function createGatewayHandler(
     // verified above, so the per-request closure sees the live identity.
     // Admins (and deployments with the gate off) get the unmodified render.
     const render = config.uiRoleGate && !session.isAdmin
-      ? async (): Promise<string> => applyUiGate(await renderIndex())
-      : renderIndex
+      ? async (): Promise<string> => applyUiGate(await renderIndex(pagePeer))
+      : async (): Promise<string> => renderIndex(pagePeer)
     await serveStatic(
       decodeURIComponent(rawPath),
       res,
@@ -245,5 +273,20 @@ export function createGatewayHandler(
       () => authorizeIndex(req, res),
       render,
     )
+  }
+}
+
+/**
+ * Whether the connection service carries the 0.2.3-alpha.1 authentication
+ * registry. Reading a service property that this fiber did not declare in its
+ * `inject` list raises in cordis, so the probe is guarded: a throw means "not
+ * available here", which is the rc.5 answer for the plugins that never
+ * declared `connection.authentication`.
+ */
+function hasAuthenticationRegistry(connection: object): boolean {
+  try {
+    return (connection as { authentication?: unknown }).authentication !== undefined
+  } catch {
+    return false
   }
 }

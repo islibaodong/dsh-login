@@ -79,11 +79,11 @@ async function boot(seed?: { rootPassword?: string; compat?: { onApply?: (enable
 
 function ctx_routes(ctx: Context, users: UserStore, store: SessionStore, hosts?: TrustedHosts, setting?: DefaultWorkspaceSetting, compatSetting?: BooleanSetting, sidebarSetting?: BooleanSetting, onRemoteWebUiApply?: (enabled: boolean) => Promise<string>): void {
   ctx.effect(() => ctx.webServer.register({
-    kind: 'exact', path: '/api/auth/login',
+    kind: 'exact', path: '/api/auth/login', auth: 'anonymous',
     handler: createLoginHandler({ users, store, sessionTtl: 3600 }),
   }), 'login')
   for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting: setting, remoteWebUiSetting: compatSetting, sidebarSetting, onRemoteWebUiApply })) {
-    ctx.effect(() => ctx.webServer.register(route), `admin: ${route.path}`)
+    ctx.effect(() => ctx.webServer.register({ ...route, auth: 'anonymous' }), `admin: ${route.path}`)
   }
 }
 

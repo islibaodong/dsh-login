@@ -15,6 +15,7 @@ import { DefaultWorkspaceSetting } from './workspace-setting.ts'
 import { BooleanSetting } from './boolean-setting.ts'
 import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
+import { createWebIdentity, sessionFromHeaders, type ConnectionLike, type HeaderSource, type WebIdentity } from './web-auth.ts'
 import { createApiBridgeAuth } from './api-bridge-auth.ts'
 import { installAdmitShadow, installDispatchShadows, type DispatchGuardDeps } from './dispatch-guard.ts'
 import { WIRE_SURFACE_DSH_VERSION } from './api-filter.ts'
@@ -63,6 +64,50 @@ export {
   getDshLoginOwnership,
 } from './glue.ts'
 export type { DshLoginIsolationDeps, WrappedRemoteGateway } from './glue.ts'
+
+/** Minimal webserver shape the fallback-seat probe needs. */
+interface FallbackHost {
+  registerFallback(fallback: unknown): () => void
+  /** Retained seat (private on the real service; probed by capability). */
+  fallback?: unknown
+}
+
+/**
+ * Claim the webserver fallback seat for the gateway handler.
+ *
+ * DSH 0.2.3-alpha.1 stores the seat as an object and honours its `auth` rule,
+ * which is what lets a logged-in browser's index render see the admitted
+ * `PeerScope`. rc.5 stores the handler itself and has no admission concept.
+ * The two are told apart by what the service retained after the first
+ * registration: a normalized seat still exposes `handler === <the function>`.
+ * When the server normalized, the seat is replaced by the auth-aware form
+ * (claimed while a dsh_session is live, anonymous otherwise, so /login still
+ * loads and the gateway can answer its own 302).
+ *
+ * @param webServer - the webserver service.
+ * @param handler - gateway fallback handler.
+ * @param store - dsh-login session store.
+ * @returns the disposer releasing the seat.
+ */
+function registerGatewayFallback(webServer: FallbackHost, handler: WebRoute['handler'], store: SessionStore, identity: WebIdentity): () => void {
+  const seat = webServer.registerFallback(handler)
+  const retained = webServer.fallback
+  const normalized = typeof retained === 'object' && retained !== null && (retained as { handler?: unknown }).handler === handler
+  if (!normalized) return seat
+  seat()
+  return webServer.registerFallback({
+    handler,
+    // Require a Peer only where this deployment can actually mint one: the
+    // connection seam's provider is registered when `connection` loads. A
+    // boot without it (tests, minimal hosts) keeps serving the shell, exactly
+    // as the rc.5 path did, because the gateway still runs its own cookie wall.
+    auth: (request: { headers: HeaderSource }) => {
+      const session = sessionFromHeaders(request.headers, store)
+      if (session === undefined) return 'anonymous'
+      return identity.peerForSession(session.token, session.user) === undefined ? 'anonymous' : 'required'
+    },
+  })
+}
 
 /**
  * Register the multi-user authentication gateway on the web server:
@@ -141,6 +186,11 @@ export function apply(ctx: Context, config: Config): void {
   const loginPageRoute: WebRoute = {
     kind: 'exact',
     path: '/login',
+    // DSH 0.2.3-alpha.1 admission: every route defaults to `required`, so the
+    // login wall's own pages must declare themselves reachable without a Peer
+    // (otherwise the webserver answers 503 before the cookie check runs).
+    // rc.5 lines ignore the field.
+    auth: 'anonymous',
     handler: async (_req, res) => {
       // No users yet → first-time setup form; otherwise the login form.
       const html = (await users.isEmpty()) ? renderSetupPage() : renderLoginPage()
@@ -149,22 +199,29 @@ export function apply(ctx: Context, config: Config): void {
     },
   }
 
-  const gatewayHandler = createGatewayHandler(ctx, gatewayConfig, store)
+  // Browser identity for the DSH 0.2.3-alpha.1 connection seam: one tagged
+  // owner Peer per live dsh_session, registered as a credential provider on
+  // `connection.authentication` below.
+  const identity = createWebIdentity(ctx, store)
+  const gatewayHandler = createGatewayHandler(ctx, gatewayConfig, store, identity)
 
   ctx.effect(() => ctx.webServer.register(loginPageRoute), 'dsh-login: /login')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/auth/setup',
+    auth: 'anonymous',
     handler: createSetupHandler(loginDeps),
   }), 'dsh-login: /api/auth/setup')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/auth/login',
+    auth: 'anonymous',
     handler: createLoginHandler(loginDeps),
   }), 'dsh-login: /api/auth/login')
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/api/auth/logout',
+    auth: 'anonymous',
     handler: createLogoutHandler(store),
   }), 'dsh-login: /api/auth/logout')
   // Link-friendly logout: same revocation, but answers with a redirect so
@@ -172,10 +229,11 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/logout',
+    auth: 'anonymous',
     handler: createLogoutRedirectHandler(store),
   }), 'dsh-login: /logout')
   for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, sidebarSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
-    ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`)
+    ctx.effect(() => ctx.webServer.register({ ...route, auth: 'anonymous' }), `dsh-login: ${route.path}`)
   }
   // Boot-time application of the remote-web-ui compatibility toggle. Deferred
   // so it never blocks startup; applyWithRetry keeps retrying a few hundred ms
@@ -185,7 +243,28 @@ export function apply(ctx: Context, config: Config): void {
   // The gateway claims the fallback seat (not prefix /) because the
   // WebServer's prefix match only catches the exact path '/' for a '/'
   // prefix. The fallback catches everything no named route claims.
-  ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), 'dsh-login: gateway fallback')
+  //
+  // DSH 0.2.3-alpha.1 added per-seat admission: an object seat can declare an
+  // `auth` rule, and only an admitted Peer is handed to the handler (the
+  // index render needs it). rc.5 stores the bare handler with no auth concept,
+  // so the seat is chosen by probing what the server retained.
+  ctx.effect(
+    () => registerGatewayFallback(ctx.webServer as unknown as FallbackHost, gatewayHandler, store, identity),
+    'dsh-login: gateway fallback',
+  )
+
+  // The alpha.1 connection seam: /api carriers admit through
+  // `connection.authentication`, so dsh-login registers a provider that maps
+  // a live dsh_session cookie to its own tagged owner Peer. Registered lazily
+  // (the connection service may load after this plugin). On rc.5 connections
+  // there is no `authentication` registry and this is a no-op; the admit
+  // shadow below keeps covering that line.
+  ctx.inject(['connection', 'connection.authentication'], (fork) => {
+    fork.effect(
+      () => identity.register(fork.connection as unknown as ConnectionLike),
+      'dsh-login: connection authentication provider',
+    )
+  })
 
   // DSH ≥ 0.1.6-alpha.2: the native connection row fires `connection/request`
   // on its shared /api route before bridging. dsh-login registers a wall
@@ -274,5 +353,10 @@ export function apply(ctx: Context, config: Config): void {
   // Teardown: flush any pending ownership-index / trusted-hosts writes to
   // disk. Returning the Promise lets Cordis await it on stop so a freshly
   // learned host (debounce still pending) is not dropped (review #3).
-  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()]), 'dsh-login: sessions + ownership + hosts + settings flush')
+  // Claimed browser Peers are released first: their abort signals belong to
+  // this plugin's lifetime.
+  ctx.effect(() => () => {
+    identity.disposeAll()
+    return Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()])
+  }, 'dsh-login: sessions + ownership + hosts + settings flush')
 }

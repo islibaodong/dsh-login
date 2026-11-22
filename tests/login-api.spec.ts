@@ -90,19 +90,19 @@ async function postJsonWithHost(port: number, host: string, path: string, body: 
 /** Register login/logout/setup/admin-free routes exactly like src/index.ts does. */
 async function registerAuthRoutes(ctx: Context, users: UserStore, store: SessionStore, opts?: { hosts?: TrustedHosts; autoTrust?: boolean }): Promise<void> {
   ctx.effect(() => ctx.webServer.register({
-    kind: 'exact', path: '/api/auth/login',
+    kind: 'exact', path: '/api/auth/login', auth: 'anonymous',
     handler: createLoginHandler({ users, store, sessionTtl: 3600, hosts: opts?.hosts, autoTrust: opts?.autoTrust }),
   }), 'login')
   ctx.effect(() => ctx.webServer.register({
-    kind: 'exact', path: '/api/auth/logout',
+    kind: 'exact', path: '/api/auth/logout', auth: 'anonymous',
     handler: createLogoutHandler(store),
   }), 'logout')
   ctx.effect(() => ctx.webServer.register({
-    kind: 'exact', path: '/logout',
+    kind: 'exact', path: '/logout', auth: 'anonymous',
     handler: createLogoutRedirectHandler(store),
   }), 'logout redirect')
   ctx.effect(() => ctx.webServer.register({
-    kind: 'exact', path: '/api/auth/setup',
+    kind: 'exact', path: '/api/auth/setup', auth: 'anonymous',
     handler: createSetupHandler({ users, store, sessionTtl: 3600 }),
   }), 'setup')
 }

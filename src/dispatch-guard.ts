@@ -204,6 +204,29 @@ export function installAdmitShadow(
   }
 }
 
+/**
+ * Tag a Peer this plugin owns with the dsh-login identity behind it.
+ *
+ * Under DSH 0.2.3-alpha.1 the browser Peer is minted by dsh-login's own
+ * `ConnectionAuthentication` provider (src/web-auth.ts) instead of being
+ * handed out by the connection service's admit path, so the tag is applied at
+ * creation time. Peers owned by upstream stay untouched: a peer that already
+ * carries foreign, non-configurable properties is skipped rather than
+ * mutated.
+ *
+ * @param peer - peer created by this plugin (an object it is free to annotate).
+ * @param user - identity the peer speaks for.
+ */
+export function tagPeer(peer: PeerLike, user: PeerUser): void {
+  const tagged = peer as { [PEER_USER]?: PeerUser }
+  if (tagged[PEER_USER] !== undefined) return
+  try {
+    Object.defineProperty(peer, PEER_USER, { value: user, enumerable: false, writable: false, configurable: true })
+  } catch {
+    // A frozen/foreign peer keeps upstream semantics (untagged = pass-through).
+  }
+}
+
 function wrapTagged(peer: PeerLike, user: PeerUser, token: string, cache: Map<string, PeerLike>): PeerLike {
   const key = `${peer.id}|${token}`
   const existing = cache.get(key)

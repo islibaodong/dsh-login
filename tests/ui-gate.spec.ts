@@ -269,7 +269,7 @@ async function bootGateway(indexHtml: string, config: Config): Promise<{ port: n
   await writeFile(distIndex, indexHtml)
   const store = new SessionStore(3600)
   const handler = createGatewayHandler(context, { ...config, distIndex }, store)
-  context.effect(() => context!.webServer.registerFallback(handler), 'gateway')
+  context.effect(() => context!.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
   return { port: context.webServer.port, store }
 }
 

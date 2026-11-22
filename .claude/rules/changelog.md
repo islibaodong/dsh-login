@@ -1,3 +1,59 @@
+## 2026-11-22 (scheduled watch) — DSH **0.2.3-alpha.1** released; dsh-login adapted and released as **0.3.19**
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-22T04:00:01Z / 12:00 +0800).
+- Detection: git tag `dsh-v0.2.3-alpha.1` → `d98f5d6851` (release commit `aae91d692e`; previous
+  newest `dsh-v0.2.2-rc.5` → `9c2670d3bc`, 2343 commits in range); npm `alpha` dist-tag
+  `0.2.3-alpha.1` published `2026-11-22T03:21:42.976Z` (`next`/`latest` stay 0.2.2-rc.5). A plain
+  `npm view` served a **stale** packument claiming the alpha was missing; the raw no-cache packument
+  showed every inspected package at 0.2.3-alpha.1. Semver: alpha.1 does not satisfy the rc.5 peer
+  tuple, so each DSH peer union gained `|| >=0.2.3-alpha.1 <0.3.0-0`.
+- **Admission rewrite (the real change):** `packages/host/webserver/src/index.ts` gives every route
+  an `auth?: WebAuthenticationRule` (`anonymous|required|deny`, default **required**), adds the
+  `webserver/authorize(request, policy)` bail returning `WebAdmission` (`allow(peer?)` / `deny(401|403|503)`),
+  hands handlers the admitted `PeerScope` (index render too), and makes `registerFallback` accept
+  `WebFallback {handler, resource, auth}` (function normalized to `{handler}`). `connection.browserAuth`
+  / `authorizeIndex` / `launchToken` are deleted — browser cookies moved to
+  `@deepseek-ai/dsh-host-authentication-token`; identity now arrives through
+  `connection.authentication.register(provider)` (`AuthenticationProvider.authenticate(request): PeerScope|undefined`,
+  first live Peer wins, 401 none / 503 throw). `/api` and `/api/remote.mux` are `auth:'required'`
+  and forward the admitted peer; `connection.admit` is not called on that path any more.
+- Adaptation: new `src/web-auth.ts` (cookie → tagged per-session owner Peer, cache 256, dispose on
+  teardown); `tagPeer` exported from `src/dispatch-guard.ts`; dsh-login seats declare
+  `auth:'anonymous'`; the index fallback probes `webServer.fallback` and re-registers the object form
+  with an `auth` rule (`required` only when a Peer can be minted); gateway renders the index with the
+  admitted peer (legacy fake peer only on rc.5) and the legacy `mintCoreCookie` path is gated by a
+  **guarded read of `connection.authentication`** (`hasAuthenticationRegistry`), not by
+  `connection.createPeer` — rc.5 already had `createPeer`, so probing it silently skipped rc.5's
+  `dsh-auth` cookie mint and 401'd every authenticated `/api` call (found in the live drill below).
+- Cordis trap: inside `ctx.inject(['connection'], …)`, touching `connection.authentication` throws
+  `cannot get property "connection.authentication" without inject`; the effect died silently and no
+  provider landed (blanket 401 on `/api`). Fix: declare both services —
+  `ctx.inject(['connection', 'connection.authentication'], …)`.
+- Wire surface: `tests/fixtures/wire-surface.json` re-dumped from the tag worktree
+  `E:\code\deepseek-harness-wt-023a1` (pnpm build + `generate-typert`, 44 artifacts) →
+  **264 methods** (+38 / −1: `forgePanel.branches` removed). Buckets **146 USER / 117 ADMIN /
+  1 HOST-INTERNAL**. `forgePanel.review*` (URL-addressed, host forge creds) → admin;
+  `connectorAccounts.*`, `remoteConnection.*`, `pluginEvents.follow` → admin;
+  `permissionPresets.set`, `sessionStatus.mark/follow`, session-scoped forge reads → user.
+- Multi-user: unchanged verdict — `PrincipalMap` still only `owner`; every shipped provider mints
+  owner Peers; only non-owner production kind is LiveShare `share-viewer`;
+  `remoteAccess.registerPolicy(kind, policy)` only gates `principal.kind !== 'owner'`; UI boot graph
+  differs per Peer only in config values. dsh-login remains the account layer; see
+  `docs/adapt-dsh-0.2.3-alpha.1.md` §6 and `docs/role-based-ui-gating.md`.
+- Verification: `vitest run` **23 files / 311 tests** green (new `tests/web-auth.spec.ts` boots a real
+  HttpServer + real client-connection: anonymous `/api` 401, logged-in `/api/does-not-exist` not-401,
+  `/` 200 live session / 302 stale cookie); build + `verify:imports` exit 0; installed from
+  `registry.npmjs.org` (the npmmirror default lacks the alpha).
+- Live drill on **0.2.2-rc.5** (`.tmp-a2`, plugin tarball in `profiles/web` with `--legacy-peer-deps`):
+  anonymous `/` 302→`/login`, `/login` 200, anonymous `/api/*` 401, setup 200 + `dsh_session`, login
+  `/api/auth/me` 200 owner, `/` with the session 200 **and** `set-cookie: dsh-auth-…`, then
+  `/api/does-not-exist` with both cookies 404 (bridge, not the fence). **0.2.3-alpha.1 cannot boot from
+  npm**: published `dsh-app-boot` imports `EntryValidationError`/`formatIssues`/`relocate`/`validateOptions`
+  the published `@deepseek-ai/cordis-plugin-loader@1.1.0` lacks (`vendor/loader` is source-only), so the
+  alpha is only runnable via `pnpm start:web` in the checkout.
+- Release: **0.3.19** published to npm; README updated (current status, compatibility table,
+  multi-user section, wire counts).
+
 ## 2026-11-21 (scheduled watch) — no new DSH release; 0.2.2-rc.5 stays newest, 0.3.18 stays current; no adaptation, no publish
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-21T04:00:02Z / 12:00 +0800).

@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16, 2026-11-19, 2026-11-20 and 2026-11-21)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16, 2026-11-19, 2026-11-20, 2026-11-21 and 2026-11-22)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -280,3 +280,25 @@ Verdict (feasible) and effort estimate (≈1–2 days) unchanged; §4 condition 
 fired, and the `webserver/index-inject` instance-scoping compatibility item has not shipped.
 Live evidence that the current three-lever design still enforces under rc.5: `/` 302, `/login` 200,
 anonymous capabilities 401 on the running GUI (source-link install of 0.3.18).
+
+### 2026-11-22 — re-checked at DSH **0.2.3-alpha.1**
+
+New release: `dsh-v0.2.3-alpha.1` (`d98f5d6851`); dsh-login 0.3.19. The admission architecture
+changed (see [`docs/adapt-dsh-0.2.3-alpha.1.md`](adapt-dsh-0.2.3-alpha.1.md) §2–§3), but the
+whole-UI gating seams are the same shape:
+
+| Claim in §2 | Re-verified evidence at the alpha.1 tag |
+|---|---|
+| Page gate is a per-request transform | `renderIndex(html, peer: PeerScope)` still per request (`packages/host/webserver/src/index.ts`); `webserver/index-inject` now emits `(table, peer)` and the table row is still the mutable `__DSH_BOOT__` splice point (`packages/client/modules/src/index.ts:604-639`); `graphFor(peer.principal)` at `client/modules/src/index.ts:720-722` |
+| Filtering must be consistent | `packages/client/modules/src/manifest.ts:101-113` still requires every `WebBootEntry` to belong to exactly one `WebBootBatch`; trimming `entries` without matching `batches` still breaks activation |
+| HMR re-send survives only one seam | `packages/client/hmr/src/plugin-events.ts:77,97` re-sends `graphFor(follower.principal)`, so an `index-inject`-only splice would be undone on the next rebuild — wrapping `clientModules.graphFor` remains required |
+| `webserver/authorize` cannot gate roles | the bail event sees `WebAuthRequest` (headers/method/url/transport) and a policy string, **not** a resolved principal; it can allow/deny traffic, not choose a role's UI |
+| No upstream role model to reuse | `PrincipalMap` still declares only `owner` (`packages/typert/protocol/src/types.ts:455`); the new `connection.authentication` registry landed, so a plugin *can* mint Peers with its own principal kind — but every business package must then register a policy for that kind through `remoteAccess.registerPolicy(kind, policy)`, and `/api` exact routes stay owner-only |
+| Wire classifier is bucketed | 146 / 117 / 1 of **264** (`src/api-filter.ts`, pinned by `tests/wire-surface.spec.ts`); fixture dumped from the tag worktree, `dshVersion 0.2.3-alpha.1` |
+
+Verdict (feasible, ≈1–2 days) and §4 condition (a) unchanged: implementation still means one shared
+role policy feeding the boot-graph filter, the `graphFor` wrapper and the wire allow-list. The
+provider registry makes a *custom* non-owner principal kind technically possible for the first time,
+but it does not give the browser a role: dsh-login users remain owner Peers, and package-level
+filtering stays enforcement-by-omission (bundles are served anonymously).
+

@@ -10,6 +10,40 @@
 - `isUserAllowed`/`USER_ALLOWED` keys must match RpcMethodMap spellings
   EXACTLY (e.g. `session.list` singular); a typo silently 403s a legit method.
   Keep in sync with the `createUserProxy` decorator.
+- **DSH ≥ 0.2.3-alpha.1 admission rules:** every `webServer.register(...)` seat
+  now defaults to `auth: 'required'` and answers **503 before the plugin's own
+  logic runs**; dsh-login's public seats (`/login`, `/api/auth/*`, `/logout`,
+  admin routes) and its fallback must declare `auth: 'anonymous'` (or an `auth`
+  rule). The index fallback only receives a `PeerScope` in the object form
+  `{handler, auth}` — a bare function handler gets none on that line.
+- **Cordis inject guards service property access:** inside
+  `ctx.inject(['connection'], …)`, reading `connection.authentication` throws
+  `cannot get property "connection.authentication" without inject`; the throw is
+  swallowed by the effect and the provider never registers (symptom: blanket 401
+  on `/api` while `/api/auth/*` works). Declare both services:
+  `ctx.inject(['connection', 'connection.authentication'], …)`. Also, a
+  `console.log` argument that touches an undeclared service throws **before** the
+  log line prints — misleading "callback never fired" diagnostics.
+- **0.2.3-alpha.1 is not on the npmmirror default registry:** `npm install` fails
+  with `ETARGET` for `@deepseek-ai/dsh-client-modules`; use
+  `--registry=https://registry.npmjs.org`. The Typert artifacts needed for the
+  wire dump are generated (`scripts/generate-typert.ts`) and are **not** in npm
+  tarballs — always dump from a built checkout/worktree.
+- **The 0.2.3-alpha.1 npm channel cannot boot (upstream):** `@deepseek-ai/dsh`
+  installs `@deepseek-ai/cordis-plugin-loader@1.1.0`, whose `lib/index.js` does
+  not export `EntryValidationError`, `formatIssues`, `relocate` or
+  `validateOptions`, yet `dsh-app-boot@0.2.3-alpha.1` imports all four →
+  `SyntaxError: The requested module '@deepseek-ai/cordis-plugin-loader' does not
+  provide an export named 'EntryValidationError'` at startup, before any profile
+  row loads. The newer loader exists only as `vendor/loader` source in the
+  monorepo. So alpha.1 can only be exercised via `pnpm start:web` in the
+  checkout; do not claim a live alpha.1 boot from an npm install.
+- **Never capability-probe `connection.createPeer` for the rc.5/alpha.1 split:**
+  rc.5 already exposed `createPeer`, so gating "skip the legacy cookie mint" on
+  it drops the rc.5 `dsh-auth` cookie → every authenticated `/api` call 401s.
+  Probe the **registry** instead (`connection.authentication`), with a guarded
+  read (cordis throws on undeclared service properties; catch that as "absent").
+
 - Disabled rows drop their browser halves from the boot graph: with the
   shipped `connection` row disabled, the GUI's wire client must come from this
   package's own `dsh.client` declaration + built `dist/client.js`.

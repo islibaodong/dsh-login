@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.2-rc.5";
+var WIRE_SURFACE_DSH_VERSION = "0.2.3-alpha.1";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -699,8 +699,8 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // caller's own conversation (same trust shape as `terminal.*`).
   "actionCards.act",
   // ── forgePanel: the per-session git worktree / change-request panel ────────
-  // Every method is Session-scoped (first wire arg `sessionId: SessionId`, a
-  // resource the Gateway resolves and the remote guard ownership-checks): it
+  // Every method below is Session-scoped (first wire arg `sessionId: SessionId`,
+  // a resource the Gateway resolves and the remote guard ownership-checks): it
   // inspects the Session's own checkout, follows, reviews or merges the
   // Session's bound change requests (0.2.2-alpha.3 adds the CI-checks read
   // `changeRequestChecks` and the review publisher `submitReview`; 0.2.2-rc.2
@@ -714,7 +714,15 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   // user inside the Session's world). Host-wide secrets are not touched; the
   // sign-in probe reports only the state of the code host of the Session's
   // own checkout.
-  "forgePanel.branches",
+  //
+  // 0.2.3-alpha.1 moves the *global* review controller (every `review*` method,
+  // addressed by repository URL with no Session resource) into the same
+  // namespace. Those are NOT Session-scoped: they act through the host's forge
+  // credentials on whatever pull request the URL names, `reviewMerge` included,
+  // so they are classified admin-only below. The four alpha.1 additions kept
+  // here (`changesLens`, `extensions`, `revisit`, `worktreeBases`) are
+  // Session-scoped reads like their neighbours. `forgePanel.branches` was
+  // retired upstream in this release.
   "forgePanel.cancelWorktree",
   "forgePanel.changeRequestChecks",
   "forgePanel.changeRequestCommits",
@@ -724,9 +732,11 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "forgePanel.changeRequestStates",
   "forgePanel.changeRequestText",
   "forgePanel.changeRequestViewed",
+  "forgePanel.changesLens",
   "forgePanel.continueInProject",
   "forgePanel.diffBases",
   "forgePanel.dismiss",
+  "forgePanel.extensions",
   "forgePanel.follow",
   "forgePanel.localCommits",
   "forgePanel.localDiff",
@@ -740,11 +750,13 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "forgePanel.retryWorktree",
   "forgePanel.rerunChecks",
   "forgePanel.reviewerCandidates",
+  "forgePanel.revisit",
   "forgePanel.setFileViewed",
   "forgePanel.stopCreation",
   "forgePanel.submitReview",
   "forgePanel.track",
   "forgePanel.updateBranch",
+  "forgePanel.worktreeBases",
   "forgePanel.worktreeCleanup",
   // ── llm: the provider/model catalogs the picker renders ───────────────────
   // (`llm.providers`/`llm.models` never existed on this wire line; these are
@@ -839,7 +851,15 @@ var USER_ALLOWED = /* @__PURE__ */ new Set([
   "messageFeedback.put",
   "sessionFeedback.record",
   "sessionReferenceResolver.candidates",
+  // `permissionPresets.set` (0.2.3-alpha.1) switches the approval policy of the
+  // caller's own Session through `switchPreset`; `sessionStatus.mark` /
+  // `sessionStatus.follow` read and write the per-Session read/unread state
+  // (the Gateway resolves `sessionId` and `ctx.remoteAccess.allows` filters the
+  // stream), so both stay inside the same per-user scope as `session.*`.
   "permissionPresets.catalog",
+  "permissionPresets.set",
+  "sessionStatus.follow",
+  "sessionStatus.mark",
   "productAnalytics.enabled",
   "productAnalytics.report",
   "productAnalytics.watchPolicy",
@@ -972,6 +992,57 @@ var ADMIN_ONLY_METHODS = /* @__PURE__ */ new Set([
   // (no Session scope on the wire), so it is an operator action even though
   // the rest of `schedule.*` is the caller's own surface.
   "schedule.deleteInactive",
+  // ── 0.2.3-alpha.1: the global code-host review controller ────────────────
+  // The `review*` family is the same forge panel service, but addressed by
+  // repository URL with no Session resource: it lists, reads, stages and
+  // SUBMITS/MERGES pull requests through the host's own code-host credentials
+  // (`reviewMerge`, `reviewRerunChecks`), i.e. it can touch repositories no
+  // Session owns. Operator territory, like `liveshareShares.*`.
+  "forgePanel.reviewChangeRequest",
+  "forgePanel.reviewChecks",
+  "forgePanel.reviewCommits",
+  "forgePanel.reviewCount",
+  "forgePanel.reviewDescription",
+  "forgePanel.reviewDiff",
+  "forgePanel.reviewLists",
+  "forgePanel.reviewMarkReady",
+  "forgePanel.reviewMerge",
+  "forgePanel.reviewPoll",
+  "forgePanel.reviewRefresh",
+  "forgePanel.reviewRequestReviews",
+  "forgePanel.reviewRerunChecks",
+  "forgePanel.reviewReviewerCandidates",
+  "forgePanel.reviewSetViewed",
+  "forgePanel.reviewStage",
+  "forgePanel.reviewSubmit",
+  "forgePanel.reviewText",
+  "forgePanel.reviewThreadWrite",
+  "forgePanel.reviewThreads",
+  "forgePanel.reviewUpdateBranch",
+  "forgePanel.reviewViewed",
+  // ── connectorAccounts: host connector credentials (0.2.3-alpha.1) ────────
+  // Start/cancel/watch the sign-in flows of the host's configured connectors
+  // (code host, cloud storage, …); the tokens belong to the instance, not to a
+  // browser user.
+  "connectorAccounts.cancel",
+  "connectorAccounts.start",
+  "connectorAccounts.watch",
+  // ── remoteConnection: host network pairing (0.2.3-alpha.1) ───────────────
+  // Pairing requests, QR/login URLs and connection status of the Host's
+  // remote-access service: exposing the host to other devices is operator
+  // territory (the same boundary `liveshareShares.*` sits behind).
+  "remoteConnection.cancel",
+  "remoteConnection.create",
+  "remoteConnection.decidePairing",
+  "remoteConnection.loginUrl",
+  "remoteConnection.pairingRequests",
+  "remoteConnection.status",
+  // ── pluginEvents: the host plugin-graph stream (0.2.3-alpha.1) ───────────
+  // `follow` streams every plugin-graph/rebuild event of the instance (the
+  // client-hmr surface). In a multi-user deployment the boot manifest is what
+  // dsh-login's whole-UI role gate filters, so handing non-admins the live
+  // graph would let them re-activate bundles the gate omits; admin-only.
+  "pluginEvents.follow",
   "settings.describe",
   "settings.mutate",
   "settings.openSettingsDocument",
@@ -1118,11 +1189,13 @@ function applyUiGate(html) {
 
 // src/gateway.ts
 function indexRenderer(ctx, distIndex) {
-  return async () => {
+  return async (peer) => {
     const body = await readFile2(distIndex, "utf8");
     const webServer = ctx.webServer;
-    const render = webServer.renderIndex ?? webServer.applyIndexTaps.bind(webServer);
-    return render.call(webServer, body, { principal: { kind: "owner" } });
+    const render = webServer.renderIndex ?? webServer.applyIndexTaps?.bind(webServer);
+    if (typeof render !== "function") return body;
+    const pagePeer = peer ?? { principal: { kind: "owner" } };
+    return render.call(webServer, body, pagePeer);
   };
 }
 function createCaptureResponse() {
@@ -1170,6 +1243,8 @@ function createAuthorizeIndex(ctx) {
   return (req, res) => {
     const connection = ctx.get("connection");
     if (connection === void 0) return true;
+    if (hasAuthenticationRegistry(connection)) return true;
+    if (typeof connection.authorizeIndex !== "function") return true;
     const auth = connection.browserAuth ?? connection;
     const secure = ctx.webServer?.protocol === "https:";
     const hasTokenParam = req.url !== void 0 && /[?&]token=/.test(req.url);
@@ -1183,11 +1258,11 @@ function createAuthorizeIndex(ctx) {
     return connection.authorizeIndex(req, res);
   };
 }
-function createGatewayHandler(ctx, config, store) {
+function createGatewayHandler(ctx, config, store, identity) {
   const distRoot = dirname5(config.distIndex);
   const renderIndex = indexRenderer(ctx, config.distIndex);
   const authorizeIndex = createAuthorizeIndex(ctx);
-  return async (req, res) => {
+  return async (req, res, admitted) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405);
       res.end();
@@ -1202,7 +1277,8 @@ function createGatewayHandler(ctx, config, store) {
     }
     store.cleanup();
     const rawPath = new URL(req.url ?? "/", "http://x").pathname;
-    const render = config.uiRoleGate && !session.isAdmin ? async () => applyUiGate(await renderIndex()) : renderIndex;
+    const pagePeer = admitted ?? (token === void 0 ? void 0 : identity?.peerForSession(token, { username: session.user, isAdmin: session.isAdmin }));
+    const render = config.uiRoleGate && !session.isAdmin ? async () => applyUiGate(await renderIndex(pagePeer)) : async () => renderIndex(pagePeer);
     await serveStatic(
       decodeURIComponent(rawPath),
       res,
@@ -1213,365 +1289,12 @@ function createGatewayHandler(ctx, config, store) {
     );
   };
 }
-
-// src/bridge-list-filter.ts
-function extractSessionItems(value) {
-  const items = envelopeValue(value);
-  if (items === void 0) return void 0;
-  const record = items;
-  if (!Array.isArray(record.items)) return void 0;
-  const headers = [];
-  for (const item of record.items) {
-    if (typeof item !== "object" || item === null) return void 0;
-    const sessionId = item.sessionId;
-    if (typeof sessionId !== "string" || sessionId === "") return void 0;
-    const parentSessionId = item.parentSessionId;
-    headers.push(
-      typeof parentSessionId === "string" && parentSessionId !== "" ? { sessionId, parentSessionId } : { sessionId }
-    );
-  }
-  return headers;
-}
-function envelopeValue(value) {
-  if (typeof value !== "object" || value === null) return void 0;
-  const result = value.result;
-  if (typeof result !== "object" || result === null) return value;
-  const record = result;
-  return record.ok === true ? record.value : void 0;
-}
-function ownedSessionClosure(username, items, ownership) {
-  const owned = /* @__PURE__ */ new Set();
-  for (const [sid, owner] of ownership.entries()) {
-    if (owner === username) owned.add(sid);
-  }
-  const byParent = /* @__PURE__ */ new Map();
-  for (const item of items) {
-    if (item.parentSessionId === void 0) continue;
-    const list = byParent.get(item.parentSessionId);
-    if (list === void 0) byParent.set(item.parentSessionId, [item.sessionId]);
-    else list.push(item.sessionId);
-  }
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const sid of [...owned]) {
-      for (const child of byParent.get(sid) ?? []) {
-        if (!owned.has(child)) {
-          owned.add(child);
-          ownership.record(child, username);
-          grew = true;
-        }
-      }
-    }
-  }
-  return owned;
-}
-async function probeOwnedSessionIds(username, ownership, gateway) {
-  let items = [];
-  if (gateway !== void 0) {
-    try {
-      const value = await gateway.invoke({ namespace: "session", method: "list", args: {} });
-      const extracted = extractSessionItems(value);
-      if (extracted !== void 0) items = extracted;
-    } catch {
-    }
-  }
-  return ownedSessionClosure(username, items, ownership);
-}
-function filterSessionItemsValue(value, owned) {
-  if (typeof value !== "object" || value === null) return void 0;
-  const payload = envelopeValue(value);
-  if (payload === void 0) return void 0;
-  const record = payload;
-  if (!Array.isArray(record.items)) return void 0;
-  const items = [];
-  for (const item of record.items) {
-    if (typeof item !== "object" || item === null) return void 0;
-    const sessionId = item.sessionId;
-    if (typeof sessionId !== "string" || sessionId === "") return void 0;
-    if (owned.has(sessionId)) items.push(item);
-  }
-  const filtered = { ...payload, items };
-  if (value.result !== void 0) {
-    return { ...value, result: { ok: true, value: filtered } };
-  }
-  return filtered;
-}
-function filterWorkspaceListValue(value, owned) {
-  if (typeof value !== "object" || value === null) return void 0;
-  const payload = envelopeValue(value);
-  if (payload === void 0) return void 0;
-  const record = payload;
-  if (!Array.isArray(record.items) || !Array.isArray(record.archivedSessionIds)) return void 0;
-  const items = [];
-  for (const workspace of record.items) {
-    if (typeof workspace !== "object" || workspace === null) return void 0;
-    const sessionIds = workspace.sessionIds;
-    if (!Array.isArray(sessionIds)) return void 0;
-    const kept = sessionIds.filter((id) => typeof id === "string" && owned.has(id));
-    if (kept.length > 0) items.push({ ...workspace, sessionIds: kept });
-  }
-  const archivedSessionIds = record.archivedSessionIds.filter(
-    (id) => typeof id === "string" && owned.has(id)
-  );
-  const filtered = { ...payload, items, archivedSessionIds };
-  if (value.result !== void 0) {
-    return { ...value, result: { ok: true, value: filtered } };
-  }
-  return filtered;
-}
-var RECORD_METHODS = /* @__PURE__ */ new Set(["session.create", "session.fork", "workspace.create"]);
-var FILTER_METHODS = /* @__PURE__ */ new Set(["session.list", "session.search", "workspace.list"]);
-function recordOwnershipFromResponse(envelope, username, ownership) {
-  const payload = envelopeValue(envelope);
-  if (typeof payload !== "object" || payload === null) return;
-  const sessionId = payload.sessionId;
-  const id = payload.id;
-  if (typeof sessionId === "string" && sessionId !== "") {
-    ownership.record(sessionId, username);
-    return;
-  }
-  if (typeof id === "string" && id !== "") ownership.record(id, username);
-  const workspace = payload.workspace;
-  if (typeof workspace === "object" && workspace !== null) {
-    const workspaceId = workspace.workspaceId;
-    if (typeof workspaceId === "string" && workspaceId !== "") ownership.record(workspaceId, username);
-  }
-}
-
-// src/api-bridge-auth.ts
-var DENY_BODY_LIMIT_BYTES = 1 << 20;
-function endpointFromUrl(url) {
-  if (url === void 0) return void 0;
-  const path = url.split("?")[0].split("#")[0];
-  if (!path.startsWith("/api/")) return void 0;
-  return path.slice("/api/".length).split("/").join(".");
-}
-function createApiBridgeAuth(deps) {
-  const deny403 = (response) => {
-    response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
-    response.end("forbidden");
-  };
-  const denyQuiet = async (request, response) => {
-    const rpcId = await readRequestRpcId(request);
-    if (rpcId === void 0) {
-      deny403(response);
-      return;
-    }
-    const body = JSON.stringify({
-      type: "server-response",
-      rpcId,
-      result: { ok: false, error: { code: "forbidden", message: "not permitted for this user", details: {} } }
-    });
-    response.writeHead(200, {
-      "content-type": "application/json",
-      "content-length": String(Buffer.byteLength(body))
-    });
-    response.end(body);
-  };
-  return async (request, response, next) => {
-    const token = extractSessionToken(request.headers.cookie);
-    const session = token === void 0 ? void 0 : store_verify(deps, token);
-    if (session === void 0) {
-      response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
-      response.end("unauthorized");
-      return;
-    }
-    deps.store.cleanup();
-    const user = { username: session.user, isAdmin: session.isAdmin };
-    if (request.method !== "POST") return next();
-    if (user.isAdmin) {
-      const adminEndpoint = endpointFromUrl(request.url);
-      if (adminEndpoint !== void 0 && RECORD_METHODS.has(adminEndpoint)) {
-        attachResponseTee(response, {
-          endpoint: adminEndpoint,
-          username: user.username,
-          ownership: deps.ownership,
-          owned: void 0
-        });
-      }
-      return next();
-    }
-    if (deps.provisioner !== void 0) {
-      void deps.provisioner.ensure(user).catch(() => {
-      });
-    }
-    const endpoint = endpointFromUrl(request.url);
-    if (endpoint === void 0) return next();
-    if (!USER_ALLOWED.has(endpoint)) {
-      if (!isKnownWireMethod(endpoint)) {
-        try {
-          deps.onUnknownMethod?.(endpoint, user.username);
-        } catch {
-        }
-      }
-      if (deps.quietDenials) {
-        await denyQuiet(request, response);
-        return;
-      }
-      deny403(response);
-      return;
-    }
-    if (FILTER_METHODS.has(endpoint) || RECORD_METHODS.has(endpoint)) {
-      const owned = FILTER_METHODS.has(endpoint) ? await resolveOwned(deps, user.username) : void 0;
-      attachResponseTee(response, {
-        endpoint,
-        username: user.username,
-        ownership: deps.ownership,
-        owned
-      });
-    }
-    return next();
-  };
-}
-function store_verify(deps, token) {
-  return deps.store.verify(token);
-}
-async function resolveOwned(deps, username) {
-  if (deps.ownedProvider === void 0) return void 0;
+function hasAuthenticationRegistry(connection) {
   try {
-    return await deps.ownedProvider(username);
+    return connection.authentication !== void 0;
   } catch {
-    return void 0;
+    return false;
   }
-}
-async function readRequestRpcId(request) {
-  try {
-    const chunks = [];
-    let size = 0;
-    request.setEncoding?.("utf8");
-    for await (const chunk of request) {
-      const piece = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
-      size += piece.length;
-      if (size > DENY_BODY_LIMIT_BYTES) return void 0;
-      chunks.push(piece);
-    }
-    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (parsed.type !== "client-request" || typeof parsed.rpcId !== "string" || parsed.rpcId === "") {
-      return void 0;
-    }
-    return parsed.rpcId;
-  } catch {
-    return void 0;
-  }
-}
-function attachResponseTee(response, context) {
-  const raw = response;
-  const rawWriteHead = raw.writeHead.bind(response);
-  const rawSetHeader = raw.setHeader.bind(response);
-  const rawWrite = raw.write.bind(response);
-  const rawEnd = raw.end.bind(response);
-  const headers = {};
-  let status;
-  let statusMessage;
-  const chunks = [];
-  let finalCallback;
-  let flushed = false;
-  const captureHeader = (name2, value) => {
-    headers[String(name2).toLowerCase()] = value;
-  };
-  response.setHeader = function(name2, value) {
-    captureHeader(name2, value);
-    return this;
-  };
-  response.writeHead = function(...args) {
-    const first = args[0];
-    if (typeof first === "number") status = first;
-    for (const arg of args.slice(1)) {
-      if (typeof arg === "string" && statusMessage === void 0 && status !== void 0 && args.length === 2) {
-        statusMessage = arg;
-        continue;
-      }
-      if (typeof arg === "object" && arg !== null) {
-        for (const [key, value] of Object.entries(arg)) {
-          captureHeader(key, value);
-        }
-      }
-    }
-    return this;
-  };
-  response.write = function(...args) {
-    captureChunk(args);
-    return true;
-  };
-  response.end = function(...args) {
-    captureChunk(args);
-    flush();
-    return this;
-  };
-  function captureChunk(args) {
-    let cb;
-    for (let index = args.length - 1; index >= 0; index -= 1) {
-      const arg = args[index];
-      if (typeof arg === "function") {
-        cb = arg;
-        continue;
-      }
-      if (arg !== void 0 && arg !== null && arg !== 0) break;
-    }
-    const first = args[0];
-    if (typeof first === "string" || first instanceof Buffer || first instanceof Uint8Array) {
-      const encoding = typeof args[1] === "string" ? args[1] : "utf8";
-      const data = first instanceof Buffer ? first : Buffer.from(first, encoding);
-      chunks.push({ data, cb });
-    } else if (cb !== void 0 && chunks.length > 0) {
-      chunks[chunks.length - 1].cb = cb;
-    } else if (cb !== void 0) {
-      finalCallback = cb;
-    }
-  }
-  function flush() {
-    if (flushed) return;
-    flushed = true;
-    const original = Buffer.concat(chunks.map((chunk) => chunk.data));
-    let body = original;
-    let replayHeaders = true;
-    try {
-      if (status === 200 && isJsonBody(headers)) {
-        const parsed = JSON.parse(original.toString("utf8"));
-        if (FILTER_METHODS.has(context.endpoint)) {
-          if (context.owned !== void 0) {
-            const filtered = context.endpoint === "workspace.list" ? filterWorkspaceListValue(parsed, context.owned) : filterSessionItemsValue(parsed, context.owned);
-            if (filtered !== void 0) body = Buffer.from(JSON.stringify(filtered), "utf8");
-          }
-        } else {
-          recordOwnershipFromResponse(parsed, context.username, context.ownership);
-        }
-      }
-    } catch {
-    }
-    void replayHeaders;
-    if (!response.headersSent) {
-      const outgoing = {};
-      for (const [key, value] of Object.entries(headers)) {
-        if (value !== void 0) outgoing[key] = value;
-      }
-      if (status !== void 0 || chunks.length > 0) {
-        outgoing["content-length"] = String(body.length);
-        delete outgoing["transfer-encoding"];
-      }
-      rawWriteHead(status ?? 200, statusMessage ?? "", outgoing);
-    }
-    if (body !== original) {
-      const last = chunks[chunks.length - 1];
-      if (last?.cb !== void 0) rawWrite(body, last.cb);
-      else rawWrite(body);
-    } else {
-      for (const chunk of chunks) {
-        if (chunk.cb !== void 0) {
-          rawWrite(chunk.data, chunk.cb);
-        } else {
-          rawWrite(chunk.data);
-        }
-      }
-    }
-    if (finalCallback !== void 0) rawEnd(finalCallback);
-    else rawEnd();
-  }
-}
-function isJsonBody(headers) {
-  const type = headers["content-type"];
-  return typeof type === "string" && type.includes("application/json");
 }
 
 // src/remote-guard.ts
@@ -1699,6 +1422,131 @@ function createRemoteIsolation(options) {
   return { resolveUser, owns };
 }
 
+// src/bridge-list-filter.ts
+function extractSessionItems(value) {
+  const items = envelopeValue(value);
+  if (items === void 0) return void 0;
+  const record = items;
+  if (!Array.isArray(record.items)) return void 0;
+  const headers = [];
+  for (const item of record.items) {
+    if (typeof item !== "object" || item === null) return void 0;
+    const sessionId = item.sessionId;
+    if (typeof sessionId !== "string" || sessionId === "") return void 0;
+    const parentSessionId = item.parentSessionId;
+    headers.push(
+      typeof parentSessionId === "string" && parentSessionId !== "" ? { sessionId, parentSessionId } : { sessionId }
+    );
+  }
+  return headers;
+}
+function envelopeValue(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const result = value.result;
+  if (typeof result !== "object" || result === null) return value;
+  const record = result;
+  return record.ok === true ? record.value : void 0;
+}
+function ownedSessionClosure(username, items, ownership) {
+  const owned = /* @__PURE__ */ new Set();
+  for (const [sid, owner] of ownership.entries()) {
+    if (owner === username) owned.add(sid);
+  }
+  const byParent = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    if (item.parentSessionId === void 0) continue;
+    const list = byParent.get(item.parentSessionId);
+    if (list === void 0) byParent.set(item.parentSessionId, [item.sessionId]);
+    else list.push(item.sessionId);
+  }
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const sid of [...owned]) {
+      for (const child of byParent.get(sid) ?? []) {
+        if (!owned.has(child)) {
+          owned.add(child);
+          ownership.record(child, username);
+          grew = true;
+        }
+      }
+    }
+  }
+  return owned;
+}
+async function probeOwnedSessionIds(username, ownership, gateway) {
+  let items = [];
+  if (gateway !== void 0) {
+    try {
+      const value = await gateway.invoke({ namespace: "session", method: "list", args: {} });
+      const extracted = extractSessionItems(value);
+      if (extracted !== void 0) items = extracted;
+    } catch {
+    }
+  }
+  return ownedSessionClosure(username, items, ownership);
+}
+function filterSessionItemsValue(value, owned) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const payload = envelopeValue(value);
+  if (payload === void 0) return void 0;
+  const record = payload;
+  if (!Array.isArray(record.items)) return void 0;
+  const items = [];
+  for (const item of record.items) {
+    if (typeof item !== "object" || item === null) return void 0;
+    const sessionId = item.sessionId;
+    if (typeof sessionId !== "string" || sessionId === "") return void 0;
+    if (owned.has(sessionId)) items.push(item);
+  }
+  const filtered = { ...payload, items };
+  if (value.result !== void 0) {
+    return { ...value, result: { ok: true, value: filtered } };
+  }
+  return filtered;
+}
+function filterWorkspaceListValue(value, owned) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const payload = envelopeValue(value);
+  if (payload === void 0) return void 0;
+  const record = payload;
+  if (!Array.isArray(record.items) || !Array.isArray(record.archivedSessionIds)) return void 0;
+  const items = [];
+  for (const workspace of record.items) {
+    if (typeof workspace !== "object" || workspace === null) return void 0;
+    const sessionIds = workspace.sessionIds;
+    if (!Array.isArray(sessionIds)) return void 0;
+    const kept = sessionIds.filter((id) => typeof id === "string" && owned.has(id));
+    if (kept.length > 0) items.push({ ...workspace, sessionIds: kept });
+  }
+  const archivedSessionIds = record.archivedSessionIds.filter(
+    (id) => typeof id === "string" && owned.has(id)
+  );
+  const filtered = { ...payload, items, archivedSessionIds };
+  if (value.result !== void 0) {
+    return { ...value, result: { ok: true, value: filtered } };
+  }
+  return filtered;
+}
+var RECORD_METHODS = /* @__PURE__ */ new Set(["session.create", "session.fork", "workspace.create"]);
+var FILTER_METHODS = /* @__PURE__ */ new Set(["session.list", "session.search", "workspace.list"]);
+function recordOwnershipFromResponse(envelope, username, ownership) {
+  const payload = envelopeValue(envelope);
+  if (typeof payload !== "object" || payload === null) return;
+  const sessionId = payload.sessionId;
+  const id = payload.id;
+  if (typeof sessionId === "string" && sessionId !== "") {
+    ownership.record(sessionId, username);
+    return;
+  }
+  if (typeof id === "string" && id !== "") ownership.record(id, username);
+  const workspace = payload.workspace;
+  if (typeof workspace === "object" && workspace !== null) {
+    const workspaceId = workspace.workspaceId;
+    if (typeof workspaceId === "string" && workspaceId !== "") ownership.record(workspaceId, username);
+  }
+}
+
 // src/dispatch-guard.ts
 var REMOTE_EVENT_STREAM_ENDPOINT = "$events";
 var REMOTE_EVENT_RESULT_ENDPOINT = "$events/result";
@@ -1751,6 +1599,14 @@ function installAdmitShadow(connection, deps, warn) {
     if (hadOwnAdmit) target.admit = original;
     else delete target.admit;
   };
+}
+function tagPeer(peer, user) {
+  const tagged = peer;
+  if (tagged[PEER_USER] !== void 0) return;
+  try {
+    Object.defineProperty(peer, PEER_USER, { value: user, enumerable: false, writable: false, configurable: true });
+  } catch {
+  }
 }
 function wrapTagged(peer, user, token, cache) {
   const key = `${peer.id}|${token}`;
@@ -2002,6 +1858,306 @@ async function* filterWorkspaceFollowFrames(source, deps, user) {
         continue;
     }
   }
+}
+
+// src/web-auth.ts
+var PEER_CACHE_LIMIT = 256;
+function readHeader(headers, name2) {
+  if (headers === void 0) return void 0;
+  const get = headers.get;
+  if (typeof get === "function") return get.call(headers, name2) ?? void 0;
+  const record = headers;
+  const value = record[name2];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.join("; ");
+  return void 0;
+}
+function sessionFromHeaders(headers, store) {
+  const token = extractSessionToken(readHeader(headers, "cookie"));
+  if (token === void 0) return void 0;
+  const session = store.verify(token);
+  if (session === void 0) return void 0;
+  return { token, user: { username: session.user, isAdmin: session.isAdmin } };
+}
+function createWebIdentity(ctx, store) {
+  const peers = /* @__PURE__ */ new Map();
+  const connection = () => ctx.get("connection");
+  function peerForSession(token, user) {
+    const existing = peers.get(token);
+    if (existing !== void 0) return existing;
+    const service = connection();
+    if (typeof service?.createPeer !== "function") return void 0;
+    if (peers.size >= PEER_CACHE_LIMIT) {
+      const oldest = peers.keys().next();
+      if (!oldest.done) {
+        const evicted = peers.get(oldest.value);
+        peers.delete(oldest.value);
+        if (evicted !== void 0) void evicted.dispose().catch(() => {
+        });
+      }
+    }
+    const peer = service.createPeer({ principal: { kind: "owner" } });
+    tagPeer(peer, user);
+    peers.set(token, peer);
+    return peer;
+  }
+  function authenticate(headers) {
+    const session = sessionFromHeaders(headers, store);
+    if (session === void 0) return void 0;
+    return peerForSession(session.token, session.user);
+  }
+  function register(service) {
+    const authentication = service.authentication;
+    if (authentication === void 0) return () => {
+    };
+    const off = authentication.register({ authenticate: (request) => authenticate(request.headers) });
+    return () => {
+      void off().catch(() => {
+      });
+    };
+  }
+  function disposeAll() {
+    const cached = [...peers.values()];
+    peers.clear();
+    for (const peer of cached) void peer.dispose().catch(() => {
+    });
+  }
+  return { peerForSession, authenticate, register, disposeAll };
+}
+
+// src/api-bridge-auth.ts
+var DENY_BODY_LIMIT_BYTES = 1 << 20;
+function endpointFromUrl(url) {
+  if (url === void 0) return void 0;
+  const path = url.split("?")[0].split("#")[0];
+  if (!path.startsWith("/api/")) return void 0;
+  return path.slice("/api/".length).split("/").join(".");
+}
+function createApiBridgeAuth(deps) {
+  const deny403 = (response) => {
+    response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+    response.end("forbidden");
+  };
+  const denyQuiet = async (request, response) => {
+    const rpcId = await readRequestRpcId(request);
+    if (rpcId === void 0) {
+      deny403(response);
+      return;
+    }
+    const body = JSON.stringify({
+      type: "server-response",
+      rpcId,
+      result: { ok: false, error: { code: "forbidden", message: "not permitted for this user", details: {} } }
+    });
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "content-length": String(Buffer.byteLength(body))
+    });
+    response.end(body);
+  };
+  return async (request, response, next) => {
+    const token = extractSessionToken(request.headers.cookie);
+    const session = token === void 0 ? void 0 : store_verify(deps, token);
+    if (session === void 0) {
+      response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+      response.end("unauthorized");
+      return;
+    }
+    deps.store.cleanup();
+    const user = { username: session.user, isAdmin: session.isAdmin };
+    if (request.method !== "POST") return next();
+    if (user.isAdmin) {
+      const adminEndpoint = endpointFromUrl(request.url);
+      if (adminEndpoint !== void 0 && RECORD_METHODS.has(adminEndpoint)) {
+        attachResponseTee(response, {
+          endpoint: adminEndpoint,
+          username: user.username,
+          ownership: deps.ownership,
+          owned: void 0
+        });
+      }
+      return next();
+    }
+    if (deps.provisioner !== void 0) {
+      void deps.provisioner.ensure(user).catch(() => {
+      });
+    }
+    const endpoint = endpointFromUrl(request.url);
+    if (endpoint === void 0) return next();
+    if (!USER_ALLOWED.has(endpoint)) {
+      if (!isKnownWireMethod(endpoint)) {
+        try {
+          deps.onUnknownMethod?.(endpoint, user.username);
+        } catch {
+        }
+      }
+      if (deps.quietDenials) {
+        await denyQuiet(request, response);
+        return;
+      }
+      deny403(response);
+      return;
+    }
+    if (FILTER_METHODS.has(endpoint) || RECORD_METHODS.has(endpoint)) {
+      const owned = FILTER_METHODS.has(endpoint) ? await resolveOwned(deps, user.username) : void 0;
+      attachResponseTee(response, {
+        endpoint,
+        username: user.username,
+        ownership: deps.ownership,
+        owned
+      });
+    }
+    return next();
+  };
+}
+function store_verify(deps, token) {
+  return deps.store.verify(token);
+}
+async function resolveOwned(deps, username) {
+  if (deps.ownedProvider === void 0) return void 0;
+  try {
+    return await deps.ownedProvider(username);
+  } catch {
+    return void 0;
+  }
+}
+async function readRequestRpcId(request) {
+  try {
+    const chunks = [];
+    let size = 0;
+    request.setEncoding?.("utf8");
+    for await (const chunk of request) {
+      const piece = typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk;
+      size += piece.length;
+      if (size > DENY_BODY_LIMIT_BYTES) return void 0;
+      chunks.push(piece);
+    }
+    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (parsed.type !== "client-request" || typeof parsed.rpcId !== "string" || parsed.rpcId === "") {
+      return void 0;
+    }
+    return parsed.rpcId;
+  } catch {
+    return void 0;
+  }
+}
+function attachResponseTee(response, context) {
+  const raw = response;
+  const rawWriteHead = raw.writeHead.bind(response);
+  const rawSetHeader = raw.setHeader.bind(response);
+  const rawWrite = raw.write.bind(response);
+  const rawEnd = raw.end.bind(response);
+  const headers = {};
+  let status;
+  let statusMessage;
+  const chunks = [];
+  let finalCallback;
+  let flushed = false;
+  const captureHeader = (name2, value) => {
+    headers[String(name2).toLowerCase()] = value;
+  };
+  response.setHeader = function(name2, value) {
+    captureHeader(name2, value);
+    return this;
+  };
+  response.writeHead = function(...args) {
+    const first = args[0];
+    if (typeof first === "number") status = first;
+    for (const arg of args.slice(1)) {
+      if (typeof arg === "string" && statusMessage === void 0 && status !== void 0 && args.length === 2) {
+        statusMessage = arg;
+        continue;
+      }
+      if (typeof arg === "object" && arg !== null) {
+        for (const [key, value] of Object.entries(arg)) {
+          captureHeader(key, value);
+        }
+      }
+    }
+    return this;
+  };
+  response.write = function(...args) {
+    captureChunk(args);
+    return true;
+  };
+  response.end = function(...args) {
+    captureChunk(args);
+    flush();
+    return this;
+  };
+  function captureChunk(args) {
+    let cb;
+    for (let index = args.length - 1; index >= 0; index -= 1) {
+      const arg = args[index];
+      if (typeof arg === "function") {
+        cb = arg;
+        continue;
+      }
+      if (arg !== void 0 && arg !== null && arg !== 0) break;
+    }
+    const first = args[0];
+    if (typeof first === "string" || first instanceof Buffer || first instanceof Uint8Array) {
+      const encoding = typeof args[1] === "string" ? args[1] : "utf8";
+      const data = first instanceof Buffer ? first : Buffer.from(first, encoding);
+      chunks.push({ data, cb });
+    } else if (cb !== void 0 && chunks.length > 0) {
+      chunks[chunks.length - 1].cb = cb;
+    } else if (cb !== void 0) {
+      finalCallback = cb;
+    }
+  }
+  function flush() {
+    if (flushed) return;
+    flushed = true;
+    const original = Buffer.concat(chunks.map((chunk) => chunk.data));
+    let body = original;
+    let replayHeaders = true;
+    try {
+      if (status === 200 && isJsonBody(headers)) {
+        const parsed = JSON.parse(original.toString("utf8"));
+        if (FILTER_METHODS.has(context.endpoint)) {
+          if (context.owned !== void 0) {
+            const filtered = context.endpoint === "workspace.list" ? filterWorkspaceListValue(parsed, context.owned) : filterSessionItemsValue(parsed, context.owned);
+            if (filtered !== void 0) body = Buffer.from(JSON.stringify(filtered), "utf8");
+          }
+        } else {
+          recordOwnershipFromResponse(parsed, context.username, context.ownership);
+        }
+      }
+    } catch {
+    }
+    void replayHeaders;
+    if (!response.headersSent) {
+      const outgoing = {};
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== void 0) outgoing[key] = value;
+      }
+      if (status !== void 0 || chunks.length > 0) {
+        outgoing["content-length"] = String(body.length);
+        delete outgoing["transfer-encoding"];
+      }
+      rawWriteHead(status ?? 200, statusMessage ?? "", outgoing);
+    }
+    if (body !== original) {
+      const last = chunks[chunks.length - 1];
+      if (last?.cb !== void 0) rawWrite(body, last.cb);
+      else rawWrite(body);
+    } else {
+      for (const chunk of chunks) {
+        if (chunk.cb !== void 0) {
+          rawWrite(chunk.data, chunk.cb);
+        } else {
+          rawWrite(chunk.data);
+        }
+      }
+    }
+    if (finalCallback !== void 0) rawEnd(finalCallback);
+    else rawEnd();
+  }
+}
+function isJsonBody(headers) {
+  const type = headers["content-type"];
+  return typeof type === "string" && type.includes("application/json");
 }
 
 // src/provision.ts
@@ -3150,6 +3306,25 @@ function composeDshLoginGuard(ctx, gateway) {
 // src/index.ts
 var name = "dsh-login";
 var inject = ["webServer", "credentials"];
+function registerGatewayFallback(webServer, handler, store, identity) {
+  const seat = webServer.registerFallback(handler);
+  const retained = webServer.fallback;
+  const normalized = typeof retained === "object" && retained !== null && retained.handler === handler;
+  if (!normalized) return seat;
+  seat();
+  return webServer.registerFallback({
+    handler,
+    // Require a Peer only where this deployment can actually mint one: the
+    // connection seam's provider is registered when `connection` loads. A
+    // boot without it (tests, minimal hosts) keeps serving the shell, exactly
+    // as the rc.5 path did, because the gateway still runs its own cookie wall.
+    auth: (request) => {
+      const session = sessionFromHeaders(request.headers, store);
+      if (session === void 0) return "anonymous";
+      return identity.peerForSession(session.token, session.user) === void 0 ? "anonymous" : "required";
+    }
+  });
+}
 function apply(ctx, config) {
   if (!config.enabled) return;
   const dataDir = config.dataDir === "" ? join4(resolveDshHome(), ".dsh-login") : config.dataDir;
@@ -3179,40 +3354,59 @@ function apply(ctx, config) {
   const loginPageRoute = {
     kind: "exact",
     path: "/login",
+    // DSH 0.2.3-alpha.1 admission: every route defaults to `required`, so the
+    // login wall's own pages must declare themselves reachable without a Peer
+    // (otherwise the webserver answers 503 before the cookie check runs).
+    // rc.5 lines ignore the field.
+    auth: "anonymous",
     handler: async (_req, res) => {
       const html = await users.isEmpty() ? renderSetupPage() : renderLoginPage();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
     }
   };
-  const gatewayHandler = createGatewayHandler(ctx, gatewayConfig, store);
+  const identity = createWebIdentity(ctx, store);
+  const gatewayHandler = createGatewayHandler(ctx, gatewayConfig, store, identity);
   ctx.effect(() => ctx.webServer.register(loginPageRoute), "dsh-login: /login");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/api/auth/setup",
+    auth: "anonymous",
     handler: createSetupHandler(loginDeps)
   }), "dsh-login: /api/auth/setup");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/api/auth/login",
+    auth: "anonymous",
     handler: createLoginHandler(loginDeps)
   }), "dsh-login: /api/auth/login");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/api/auth/logout",
+    auth: "anonymous",
     handler: createLogoutHandler(store)
   }), "dsh-login: /api/auth/logout");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/logout",
+    auth: "anonymous",
     handler: createLogoutRedirectHandler(store)
   }), "dsh-login: /logout");
   for (const route of createAdminRoutes({ users, store, hosts, defaultWorkspaceSetting, remoteWebUiSetting, sidebarSetting, remoteWebUiCompat, onRemoteWebUiApply: (enabled) => applyWithRetry(remoteWebUiCompat, enabled, config.remoteWebUiPublicBaseUrl, 3, 50) })) {
-    ctx.effect(() => ctx.webServer.register(route), `dsh-login: ${route.path}`);
+    ctx.effect(() => ctx.webServer.register({ ...route, auth: "anonymous" }), `dsh-login: ${route.path}`);
   }
   const bootCompat = applyWithRetry(remoteWebUiCompat, remoteWebUiSetting.get(), config.remoteWebUiPublicBaseUrl);
   void bootCompat;
-  ctx.effect(() => ctx.webServer.registerFallback(gatewayHandler), "dsh-login: gateway fallback");
+  ctx.effect(
+    () => registerGatewayFallback(ctx.webServer, gatewayHandler, store, identity),
+    "dsh-login: gateway fallback"
+  );
+  ctx.inject(["connection", "connection.authentication"], (fork) => {
+    fork.effect(
+      () => identity.register(fork.connection),
+      "dsh-login: connection authentication provider"
+    );
+  });
   if (config.apiBridgeAuth) {
     const reported = /* @__PURE__ */ new Set();
     const reportUnknownMethod = (method, username) => {
@@ -3263,7 +3457,10 @@ function apply(ctx, config) {
   ctx.effect(() => ctx.on("webserver/index-inject", (table) => {
     table.push({ kind: "script", placement: "head", text: sessionBaselineScript });
   }), "dsh-login: capability baseline injection");
-  ctx.effect(() => () => Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()]), "dsh-login: sessions + ownership + hosts + settings flush");
+  ctx.effect(() => () => {
+    identity.disposeAll();
+    return Promise.all([store.flush(), ownership.flush(), hosts.flush(), defaultWorkspaceSetting.flush(), remoteWebUiSetting.flush(), sidebarSetting.flush()]);
+  }, "dsh-login: sessions + ownership + hosts + settings flush");
 }
 export {
   Config,

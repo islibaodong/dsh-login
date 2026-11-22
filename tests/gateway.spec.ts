@@ -68,7 +68,7 @@ describe('gateway handler', () => {
     const { ctx, port } = await bootServer()
     const store = new SessionStore(3600)
     const handler = createGatewayHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const res = await request(port, '/')
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/login')
@@ -84,7 +84,7 @@ describe('gateway handler', () => {
     const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const res = await request(port, '/', {
       headers: { Cookie: `dsh_session=${session.token}` },
     })
@@ -96,7 +96,7 @@ describe('gateway handler', () => {
     const { ctx, port } = await bootServer()
     const store = new SessionStore(3600)
     const handler = createGatewayHandler(ctx, config, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const res = await request(port, '/', {
       headers: { Cookie: 'dsh_session=invalidtoken' },
     })
@@ -118,7 +118,7 @@ describe('gateway handler', () => {
     const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const res = await request(port, '/some/spa/route', {
       headers: { Cookie: `dsh_session=${session.token}` },
     })
@@ -142,7 +142,7 @@ describe('gateway handler', () => {
     const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     ctx.on('webserver/index-inject', (table) => {
       table.push({ kind: 'script', placement: 'head', text: 'window.__ModuleLoader__ = { marker: true }' })
       table.push({ kind: 'global', name: '__DSH_BOOT__', value: { marker: true } })
@@ -165,7 +165,7 @@ describe('gateway handler', () => {
     const session = store.create('alice', true)
     const cfg = { ...config, distIndex }
     const handler = createGatewayHandler(ctx, cfg, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const res = await request(port, '/', {
       headers: { Cookie: `dsh_session=${session.token}` },
     })
@@ -186,7 +186,7 @@ describe('gateway handler', () => {
     const store = new SessionStore(3600)
     const session = store.create('alice', isAdmin)
     const handler = createGatewayHandler(ctx, { ...config, distIndex, uiRoleGate: true }, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     const principals: unknown[] = []
     ctx.on('webserver/index-inject', (table, peer) => {
       // DSH 0.2.2's remote-access listener reads peer.principal here.
@@ -270,7 +270,7 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     const store = new SessionStore(3600)
     const session = store.create('alice', true)
     const handler = createGatewayHandler(ctx, { ...config, distIndex }, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     provideFakeConnection(ctx, fake)
     return { ctx, port, token: session.token }
   }
@@ -324,7 +324,7 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     const store = new SessionStore(3600)
     const session = store.create('alice', true)
     const handler = createGatewayHandler(ctx, { ...config, distIndex }, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     ctx.provide('connection', { authorizeIndex: () => true })
     const res = await request(port, '/', { headers: { Cookie: `dsh_session=${session.token}` } })
     expect(res.status).toBe(200)
@@ -352,7 +352,7 @@ describe('gateway authorizeIndex: core browser-auth handshake (issue #3)', () =>
     const store = new SessionStore(3600)
     const session = store.create('alice', true)
     const handler = createGatewayHandler(ctx, { ...config, distIndex }, store)
-    ctx.effect(() => ctx.webServer.registerFallback(handler), 'gateway')
+    ctx.effect(() => ctx.webServer.registerFallback({ handler, auth: 'anonymous' }), 'gateway')
     ctx.provide('connection', {
       browserAuth: {
         launchToken: 'test-launch-token',
