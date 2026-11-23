@@ -1,43 +1,80 @@
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
 node_modules/
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
 lib/
 *.tsbuildinfo
-coverage/
-.npm-cache/
-.npm-cache-watch/
-*.tmp
+
+# dist/ is INTENTIONALLY COMMITTED: CI rebuilds the bundles and runs
+# `git diff --exit-code -- dist/` as a freshness gate, and `npm pack`
+# ships dist/. Do not add a dist/ ignore rule here.
 _syspath_backup*
 esbuild-*
 test-esbuild*
 test-execfile*
 test-ts.ts
-/.idea/
 
-# Tooling / editor / agent config (not part of the package source)
+# ---------------------------------------------------------------------------
+# npm tooling caches / tarballs
+# ---------------------------------------------------------------------------
+.npm-cache/
+.npm-cache-watch/
+*.tgz
+npm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Test / coverage output
+# ---------------------------------------------------------------------------
+coverage/
+
+# ---------------------------------------------------------------------------
+# Scratch / ad-hoc files (local only)
+# ---------------------------------------------------------------------------
+/tmp/
+/.tmp-*/
+.tmp-*/
+/-w
+/preview-*.html
+*.tmp
+*.log
+*.har
+
+# ---------------------------------------------------------------------------
+# Secrets and local env files
+# ---------------------------------------------------------------------------
+/.env
+/.env.*
+!/.env.example
+/.npmrc
+/.yarnrc
+/tokens.txt
+/npm_recovery_codes.txt
+
+# ---------------------------------------------------------------------------
+# Editor / agent tooling config (local, not part of the package source)
+# .claude/rules/ is deliberately tracked as shared project memory.
+# ---------------------------------------------------------------------------
+/.idea/
+/.vscode/
 /.clinerules
 /.cursorrules
 /.roomodes
 /.windsurfrules
-/.github/copilot-instructions.md
 /CLAUDE.md
 /CONVENTIONS.md
-/.claude/hooks/
+/.superpowers/
 /.claude/settings.json
+/.claude/settings.local.json
+/.claude/hooks/
+/.github/copilot-instructions.md
 
-# Scratch / ad-hoc files
-/tmp/
-/-w
-/tokens.txt
-/preview-*.html
-
-# env files (npm toolchain side-effect)
-/.env
-
-# npm artifacts
-/npm_recovery_codes.txt
-/.claude/
-/.github/
-
-# scratch dirs used by watch/verification runs (npm caches, temp DSH_HOMEs)
-/.tmp-*/
-.tmp-*/
-
+# ---------------------------------------------------------------------------
+# OS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
