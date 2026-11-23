@@ -26,7 +26,11 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 ---
 ## 当前状态
 
-**当前版本：`@islibaodong/dsh-login@0.3.18`** —— 跟随 DSH **0.2.2-rc.5**；全量测试 **22 文件 / 302 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+**当前版本：`@islibaodong/dsh-login@0.3.20`** —— 跟随 DSH **0.2.3-alpha.2**；全量测试 **24 文件 / 315 用例**全绿，CI 绿。各版本详细说明见 [GitHub Releases](https://github.com/islibaodong/dsh-login/releases)。
+
+0.3.20 适配 **0.2.3-alpha.2** 并修好了它暴露的那一个回归：**根路由**。alpha.2 本身是「仅 vendor + Node 下限」的版本（cordis 4.2.0-alpha.1、schemastery 3.20.0-alpha.1、loader 1.2.0-alpha.1，`packages/` 下只有三处改写注释），因此线面**逐字节不变**，仍为 **264 个方法**（146 user / 117 admin / 1 host-internal）。但 alpha.1 已经给核心加了一条精确 `/` 路由（`packages/client/remote-connection/src/index.ts:150`，`kind:'exact', path:'/', auth:'anonymous'`，提交 `5313ad4bfa`）：匿名访问得到核心自己的「Connect to this Host」卡片，**已登录**浏览器则被交给 `readResource('index.html')`——而当 fallback 席位持有的是 *handler*（dsh-login 正是如此）时它回 **404**。alpha.2 实测：匿名 `/` → 401 核心卡片而非 `302 /login`，owner `/` → 404。重复注册 `(kind, path)` 会被拒绝，核心路由无法替换；0.3.20 改为在 **`webserver/request` 瀑布**（先于命名路由分发）上接管 GET/HEAD `/`（不带 `token` 参数），交给插件自己的网关（`src/root-route.ts`）——登录墙恢复（`302 /login`，或带 minted peer 渲染的首页），而 `/?token=…` 仍落到原生 token 监听器。alpha.2 也是这条线上**第一个能从 npm 启动**的 alpha（此前缺失的 `cordis-plugin-loader` 导出已发布），因此本版本在 Node **24.22.3** 上完成真实 npm 运行时验证（上游新下限是 `^24.22.3 || >=26.13.1`）。上游仍无多用户模型（见「上游多用户观察」）。细节见 [`docs/adapt-dsh-0.2.3-alpha.2.md`](docs/adapt-dsh-0.2.3-alpha.2.md)。
+
+0.3.19 是自 0.2.1-alpha.x 以来第一个不得不适配**准入架构变化**（而不只是线面变化）的版本。DSH 0.2.3-alpha.1 给每条 webserver 路由加了 `auth` 规则（默认 `'required'`），用 `webserver/authorize` bail 事件决定准入，把真实的 `PeerScope` 交给处理器（含首页渲染），并**删除了 `connection.browserAuth` / `connection.authorizeIndex`**，改用 `connection.authentication` provider 注册表（浏览器 cookie 移到独立的 `dsh-host-authentication-token` 插件）。dsh-login 因此在自有席位（`/login`、`/api/auth/*`、`/logout`、管理路由）上声明 `auth:'anonymous'`，在服务器支持时以 peer-aware 对象形式注册首页 fallback，并安装一个认证 provider，把有效的 `dsh_session` cookie 映射为**打标过的按会话 owner Peer**——于是匿名 `/api` 仍是 401、登出仍能吊销、dispatch-seam 守卫仍能看到每个浏览器调用的用户。线面 **226 → 264**（+38 / −1），重新分类为 **146 user / 117 admin / 1 host-internal**。alpha.1 当时**无法从 npm 启动**（`dsh-app-boot` 引用的 loader 导出未发布），覆盖依赖新的组合测试；真实 npm 运行时验证是在 0.3.20 的 alpha.2 上完成的。细节见 [`docs/adapt-dsh-0.2.3-alpha.1.md`](docs/adapt-dsh-0.2.3-alpha.1.md)。
 
 0.3.18 是重钉到 DSH 0.2.2-rc.5 的**纯重钉版本**。rc.4 → rc.5 只有一处真实行为变化——按模型路由选择联网搜索供应商（`deepseek-official` / `deepseek-account` 路由继续用旧 Messages 搜索，其余路由用 `deepseek-search-api`，base bundle 不再固定 `searchProvider`）——但**没有改动任何 remote 标注源码**，因此线面**逐字节不变**，仍是 **226 个方法**（桶稳定在 140 user / 85 admin / 1 host-internal），所有挂载 seam 不变。已在真实 rc.5 npm 运行时下实测（登录墙接管入口、owner 225 / user 140 能力面、alice 访问管理路由 403）。细节见 [`docs/adapt-dsh-0.2.2-rc.5.md`](docs/adapt-dsh-0.2.2-rc.5.md)。
 
@@ -44,6 +48,8 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 | dsh-login | DSH | 说明 |
 |-----------|-----|------|
+| 0.3.20 | 0.2.3-alpha.2 | **根路由修复**：自 alpha.1 起核心占用了 `/`（`remote-connection` 精确路由：匿名访客拿到 401 连接卡片，已登录浏览器经 handler fallback 得到 404），dsh-login 改在 `webserver/request` 瀑布上接管 GET/HEAD `/` 并交给自己的登录墙；alpha.2 本身仅 vendor 变动（cordis 4.2 / schemastery 3.20 / loader 1.2 的 alpha，Node 下限 `^24.22.3 \|\| >=26.13.1`），线面仍为 264（146 / 117 / 1）；npm 上第一个可启动的 alpha；测试 315 |
+| 0.3.19 | 0.2.3-alpha.1 | **准入架构重写**：逐路由 `auth` 规则（默认 `required`）、`webserver/authorize` bail、peer-aware 首页渲染、`connection.browserAuth`/`authorizeIndex` 改为 provider 注册表——dsh-login 给自己的席位声明 `anonymous`，并为 `/api` + `/api/remote.mux` mint 打标的按会话 Peer；线面 226 → 264（+38 / −1），桶 146 / 117 / 1；测试 311 |
 | 0.3.18 | 0.2.2-rc.5 | 纯重钉：devDeps 重定向到 rc.5 元组线；该区间唯一的行为变化（按模型路由选择联网搜索供应商）不涉及 remote 标注源码，线面仍为 226（140 / 85 / 1），所有挂载 seam 字节稳定；测试 302 |
 | 0.3.17 | 0.2.2-rc.4 | 纯重钉：devDeps 重定向到 rc.4 元组线；该区间不涉及 remote 标注源码，线面仍为 226（140 / 85 / 1），所有挂载 seam 字节稳定；测试 302 |
 | 0.3.16 | 0.2.2-rc.3 | 「用户管理」面板按**主界面**重做版式（居中 1040px 整页列、统计块、四个带标题的块、开关改为细分隔行、头像列）；设置分区仍是卡片栈；纯客户端改动，服务端面不变；测试 302 |
@@ -62,20 +68,20 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 ### 上游多用户观察
 
-上游 DSH 仍**没有原生用户账号**——没有用户存储、没有登录、没有身份 UI。0.2.1-alpha.3 引入的是面向非 owner Peer 的只授权 RBAC 引擎（`packages/api/remote-access`）与多主体连接机制；它不拦 owner 主体，而 dsh-login 用户全部以 owner 主体抵达。dsh-login 仍是账号/认证层。
+上游 DSH 仍**没有原生用户账号**——没有用户存储、没有登录、没有身份 UI。0.2.1 → 0.2.3 之间上游加的是面向非 owner Peer 的只授权 RBAC 引擎（`packages/api/remote-access`）与多主体连接机制；它不拦 owner 主体，而 dsh-login 用户全部以 owner 主体抵达。**0.2.3-alpha.2 只是确认了这个形状**（对该 tag 全量 grep `multi.?user|multiuser|role.?based|rbac` 仅两处命中：`remote-access` 的说明段与 `apps/desktop` 里的 NSIS `initMultiUser` 安装器宏）：`PrincipalMap` 只声明 `owner` 一种主体，所有自带 provider 都 mint owner Peer，生产环境唯一的非 owner 类型仍是 LiveShare 的 `share-viewer`，策略引擎只在 `principal.kind !== 'owner'` 时被查询。dsh-login 仍是账号/认证层。
 - **普通用户只能使用会话功能。** 在 option A 下 `/api` 由原生 `connection`/`api-gateway` 持有并按 agent 键控；按用户隔离由三道 seam 组成——前两道随插件内置、默认生效：
   1. **桥墙方法门 + 响应收窄（`apiBridgeAuth`）**——普通用户的 POST 分发只放行 `USER_ALLOWED` 白名单方法，白名单外直接拒绝（`quietDenials` 默认开时回 wire 正确的 forbidden envelope，否则 403）；`session.list`/`session.search`/`workspace.list` 响应收窄为仅含自己拥有的会话/工作区；
   2. **dispatch-seam 守卫（0.3.12 起内置，自动生效——修复 [issue #11](https://github.com/islibaodong/dsh-login/issues/11)）**——连接准入要求浏览器路径携带有效 dsh-login 会话（含 `/api/remote.mux` WebSocket upgrade），并把 dsh-login 身份打标到每个浏览器 peer；分发 seam（`dispatchRpc`/`openWireStream`）随后对每次浏览器调用逐用户把关：非 user 方法拒绝、全部 id 参数（`sessionId`/`workspaceId`/`agentId`/…）过归属校验、`workspace.follow` 流逐帧过滤（镜像上游 per-principal 语义：baseline 收窄、delivered 集合记账、可见性丢失 replace 重同步、未知帧 fail-closed）。未打标 peer（launch-token CLI/SDK、宿主内部调用）保持上游原语义。
   3. **REMOTE 层守卫（`wrapRemoteGateway`，导出、可选）**——面向部署方的组合原语，包装网关公开 API（见 [`docs/compose-guard.md`](docs/compose-guard.md)）；0.3.12 起内置守卫已覆盖浏览器流量，组合它属于额外的纵深防御。
   其余一律禁止：
-  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.2-rc.5 实际暴露的 226 个方法中的 140 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeKit.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及 0.2.2 新增面（按会话的 `forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
-  - 管理员专属域（`ADMIN_ONLY_METHODS`，85 个）：`credentials.*`、`settings.*`、`agentPresets.*`、原生插件管理器（`pluginManager.*`、`pluginMarket.*`、`pluginRegistryProbe.*`、`pluginInventory.*`）、`dynamicCordisRunner.*`、`claudeCodeMods.*`、整个 `account.*` 命名空间（唯一的进程级上游 DeepSeek Platform 授权）、CUA 同意（`cuaAccess.*`）、`schedule.deleteInactive` 与 `liveshareShares.*` 分享管理面
+  - 物理层允许清单：面向用户的线方法面（`USER_ALLOWED`，DSH 0.2.3-alpha.2 实际暴露的 264 个方法中的 146 个）——`session.*`（prompt/page/modelCatalog/selectModel/fork/attachment、events/observe/state 族等）、`workspace.*`、`goals.*`、`subagents.*`、`terminal.*`、`job.*`、只读 `workspaceFiles.*`/`officeKit.*` 文档预览、`llm.*` 模型选择读取、`skills.list`、`commands.*`、`directoryPicker.*`、`schedule.*`、`speech.*`、`userQuestions.*`、`messageFeedback.*`、`sessionFeedback.record`、`fileUploads.upload`、`fileReferences.list`、`permissionPresets.catalog`/`set`、`sessionStatus.mark`/`follow`、`productAnalytics.*`、`cotTranslation.*`、`sessionReferenceResolver.candidates`、`remoteAccess.follow` 授权流，以及按会话的 forge 面（`forgePanel.*`、`toolResults.watch`、`actionCards.act`、`pluginRecommendations.describe`）；其他任何线上方法都会被拒绝。清单对 wire 面是穷尽的：上游改名或新增方法而没分类时，`tests/wire-surface.spec.ts` 会失败（见 [`docs/adapt-dsh-0.2.1-rc.2-issue-4.md`](docs/adapt-dsh-0.2.1-rc.2-issue-4.md)）
+  - 管理员专属域（`ADMIN_ONLY_METHODS`，117 个）：`credentials.*`、`settings.*`、`agentPresets.*`、原生插件管理器（`pluginManager.*`、`pluginMarket.*`、`pluginRegistryProbe.*`、`pluginInventory.*`）、`dynamicCordisRunner.*`、`claudeCodeMods.*`、整个 `account.*` 命名空间（唯一的进程级上游 DeepSeek Platform 授权）、CUA 同意（`cuaAccess.*`）、`schedule.deleteInactive`、`liveshareShares.*` 分享管理面，以及 0.2.3 新增的「动到宿主级凭据或实时插件图」的方法——22 个按 URL 寻址的 `forgePanel.review*`（宿主 forge 凭据可合并任意 PR）、`connectorAccounts.*`、`remoteConnection.*`、`pluginEvents.follow`
   - 宿主内部：`workspace.initializeDefault`（首次使用的内部管线，对用户拒绝且从不对外通告）
   - 未知方法（不在本版本 wire 面上）会在宿主日志里按方法名报一次并带上目标版本，于是上游改名留下的是诊断信息而不是用户侧的静默拒绝——用 `node scripts/dump-wire-surface.mjs` 从 checkout 重新生成 `src/api-filter.ts`
   - 工作区级变更按 `workspaceId` 所有权守卫：普通用户只能对「含自己会话」的工作区执行 `rename`/`delete`/`insertBefore`，`create` 只能落在自己的沙箱目录（`workspaceRoot/<username>`）内——既动不了他人的工作区，也不能把工作区指向任意宿主目录
   - 物理层 `session.export` 通道（目标在查询字符串中、不走信封）在通道层按所有权校验
   - 流式：`workspace.follow` 帧在 dispatch seam 逐用户过滤（见上）——用户看到的工作区树永不包含他人的工作区或 sessionId
-- **整 UI 角色门（`uiRoleGate`，默认开）：** 普通会话的页面在返回前会过滤客户端引导图（`window.__DSH_BOOT__`）——命中 `ADMIN_ONLY_UI_PLUGINS` 拒绝清单的条目不再挂载。仅是展示层：安全边界仍是 `/api` 放行面；管理员拿到完整图；意外形状 fail-open。粒度只到包——隐藏放行包内部的某个 slot 不在范围内；自行注册精确路由（如 `/api/pet/pets`）的插件也不在桥墙可拦截范围内。当前只有 admin / 普通用户两档；扩展为任意角色的可行性评估见 [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md)——无需上游改动即可实现，但必须由同一份角色策略同时驱动三条拦截缝。
+- **整 UI 角色门（`uiRoleGate`，默认开）：** 普通会话的页面在返回前会过滤客户端引导图（`window.__DSH_BOOT__`）——命中 `ADMIN_ONLY_UI_PLUGINS` 拒绝清单的条目不再挂载。仅是展示层：安全边界仍是 `/api` 放行面；管理员拿到完整图；意外形状 fail-open。粒度只到包——隐藏放行包内部的某个 slot 不在范围内；自行注册精确路由（如 `/api/pet/pets`）的插件也不在桥墙可拦截范围内。当前只有 admin / 普通用户两档；扩展为任意角色的可行性评估见 [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md)——无需上游改动即可实现，但必须由同一份角色策略同时驱动三条拦截缝。0.2.3-alpha.2 下两条缝形状未变：`webserver/index-inject` 拿到准入 peer 与可变的新表（仅首帧渲染），`clientModules.graphFor(principal)` 仍是唯一能扛住 HMR 重发的过滤点——entries 与 batches 必须一起裁剪；新的 `webserver/authorize` bail 只看请求、没有已解析主体，无法做角色门。（0.3.20 教训：自 alpha.1 起核心先占用了精确 `/` 路由，入口本身要在 `webserver/request` 瀑布上抢回，见「架构说明」。）
 - **默认用户工作空间（`defaultWorkspace`，默认开启）：** 非管理员首次经 `/api` 访问时，自动为其供给一个按用户名隔离的默认工作区——`mkdir` 其沙箱目录（`workspaceRoot/<username>`，默认 `<DSH_HOME>/workspaces/<username>`）→ 注册进 durable workspace registry → 附加一个会话（`sessions.create({ workspaceId })`，群组归属）并记入所有权索引，使工作区立即在 `session.list`/`workspace.follow` 对用户可见、可直接开聊。这让非管理员在公网/FRP 部署下不会一开始就没有工作区可用；自 0.3.6 起原生目录选择器（`directoryPicker.*`）对他也放行，而 `workspace.create` 仍被限制在其沙箱内。管理员可在「设置 → 用户管理」通过「默认用户工作空间」开关实时开/关（持久化于 `<dataDir>/settings.json`，即时生效，无需重启）；关闭不影响已存在的工作区。供给幂等（每用户每进程一次）、best-effort（失败不阻断请求）。
 - **远程访问兼容（`remoteWebUiCompat`，默认开启）：** 不改动社区常用插件 `@linxin666/dsh-remote-web-ui`。该插件的 `/remote` 设备配对门槛会在非回环（公网 frp）访问时，对桌面端（模型对话框、历史、写作区）返回 401——这与 dsh-login 本身正常的 `/api` 鉴权无关。开启本项时，dsh-login 会把 remote-web-ui 的 `enabled` 写为 `true`（这正是让它挂载宿主路由 `/remote`、`/api/pair/*` 的关键；否则服务端什么都不响应，客户端会回落到死掉的 `/remote` 405 墙）并把 `requirePairingForLan` 写为 `false`（**实时、settings 驱动**、每次请求重读），使非回环访问走 dsh-login 用 `dsh_session` cookie 鉴权的 `/api` 通道；同时若配置了 `remoteWebUiPublicBaseUrl`，会一并写入 `publicBaseUrl`——公网 frp/隧道场景必须设置，否则 remote-web-ui 基于 Host 头的 `/api/pair/*` 围栏会拒绝公网来源（浏览器在 `/api/pair/status` 得到 403，客户端仍回落 `/remote`）。未安装 remote-web-ui 时本项无效果；管理员可在「设置 → 用户管理」的「远程访问兼容」开关实时开/关（持久化、即时生效）。注意：`remoteWebUiCompat` 默认开启意味着所有「dsh-login + remote-web-ui」部署的配对门槛都默认关闭——这是预期的，因为 dsh-login 自己的 `/api` 鉴权仍在其前面。
 - **`/api` 桥鉴权墙（`apiBridgeAuth`，默认开启；DSH ≥ 0.1.6-alpha.2）：** 在上游的 `connection/request` 钩子上，dsh-login 对**未携带有效 `dsh_session` 的桥接 `/api` 请求直接回 401**——注销/过期/吊销会话后，即使浏览器仍持有 connection 行的进程级浏览器 cookie，也无法继续调用 `/api`。对已认证的普通用户，桥墙继续做方法级强制（见上文两层模型）并在请求/响应两侧保温所有权索引：记录经 `session.create`/`session.fork`/`workspace.create` 产生的新资源（含管理员创建——record-only，不限制管理员请求），过滤普通用户的 list 响应，并在需要时触发默认工作区供给。插件自有精确路由（`/api/auth/*`、remote-web-ui 的 `/api/pair/*` 配对）不经过桥，登录前照常可用；Remote 流 mux 的 WebSocket 升级仍由上游的 Host/Origin + 浏览器鉴权围栏把关（上游没有提供逐请求钩子）。仅当有无法携带 `dsh_session` cookie 的客户端需要直连桥时才关闭本项——例如 remote-web-ui 的 `/remote` 配对设备通道会在服务端重新发起请求且不带该 cookie（配对凭证在设计上就是绕开 dsh-login 用户模型的完全控制凭据）。DSH < 0.1.6-alpha.2 时该钩子不存在，本项是无害的空操作。
@@ -98,7 +104,7 @@ DSH 的 Web GUI 本身**没有登录**——它按“单用户、localhost”设
 
 ## `/api` 集成（option A，DSH ≥ 0.1.5-alpha.1）
 
-DSH ≥ 0.1.5-alpha.1 下 dsh-login **不再接管 `/api` 通道**：`cordis.patch.yml` 让自带的 `connection` 行保持启用，`dsh-client-connection` + `api-remotes`/`api-gateway` 持有 `/api` 传输与实时 Remote 流。dsh-login 在这些原生栈之上组成自己的按用户层（详见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md) 与验收清单 [`docs/verify-option-A.md`](docs/verify-option-A.md)）：登录墙占据 fallback 席位并通过原生 `serveStatic` 提供静态服务，同时在对 index 响应时调用 `connection.authorizeIndex`，让浏览器拿到上游 `/api` cookie。旧的 `src/connection.ts` 通道接管及其基于 `dsh-host-apiproxy` 的按用户 `ApiProxy` 已被移除。0.3.12 起按用户会话/工作区隔离由插件内置的 **dispatch-seam 守卫**自动执行（准入打标 + 逐用户分发把关 + `workspace.follow` 逐帧过滤），无需部署侧组合。REMOTE 层守卫（`wrapRemoteGateway` + `createRemoteIsolation`，及发布 `dshLoginOwnership` 服务的 `composeDshLoginGuard` 胶水）仍从宿主 bundle 导出，作为可选的部署侧组合；见 [`docs/compose-guard.md`](docs/compose-guard.md)。
+DSH ≥ 0.1.5-alpha.1 下 dsh-login **不再接管 `/api` 通道**：`cordis.patch.yml` 让自带的 `connection` 行保持启用，`dsh-client-connection` + `api-remotes`/`api-gateway` 持有 `/api` 传输与实时 Remote 流。dsh-login 在这些原生栈之上组成自己的按用户层（详见 [`docs/adapt-dsh-0.1.5.md`](docs/adapt-dsh-0.1.5.md) 与验收清单 [`docs/verify-option-A.md`](docs/verify-option-A.md)）：登录墙占据 fallback 席位并通过原生 `serveStatic` 提供静态服务，同时安装认证 provider，把有效的 `dsh_session` cookie 映射为各自打标的 owner `Peer`，让浏览器拿到其上游 `/api` 身份（0.2.2-rc.5 上该 provider 是增量式的、首页仍由 `connection.authorizeIndex` 铸造；DSH ≥ 0.2.3-alpha.1 上 `connection.authentication` 注册表是唯一入口——`browserAuth` / `authorizeIndex` 接口已删除，首页由准入 peer 渲染）。旧的 `src/connection.ts` 通道接管及其基于 `dsh-host-apiproxy` 的按用户 `ApiProxy` 已被移除。0.3.12 起按用户会话/工作区隔离由插件内置的 **dispatch-seam 守卫**自动执行（准入打标 + 逐用户分发把关 + `workspace.follow` 逐帧过滤），无需部署侧组合。REMOTE 层守卫（`wrapRemoteGateway` + `createRemoteIsolation`，及发布 `dshLoginOwnership` 服务的 `composeDshLoginGuard` 胶水）仍从宿主 bundle 导出，作为可选的部署侧组合；见 [`docs/compose-guard.md`](docs/compose-guard.md)。
 
 **主机信任按请求实时求值。** 围栏不再用静态列表，而是一组去重后的「有效集」——web runtime 的 LAN 字面量 + `trustedHosts` + 持久化白名单（`src/hosts.ts`）。每次成功登录/setup 都会自动学习请求 Host（受 `autoTrustHosts` 控制，默认开启），因此经 frp/隧道访问的公网主机**登录一次即被信任**；已学习的主机立即生效、删除后无需重启即失效。
 
@@ -144,10 +150,12 @@ npm run build:client   # node scripts/build-client.mjs
 
 WebServer 只有一个 fallback 席位。dsh-web-app 的 `web-runtime` 行会无条件挂载 frontend-static 占据它，因此使用 `dsh-login` 时必须禁用 `web-runtime` 行；dsh-login 会重新提供它负责的 `webRuntime` 服务（LAN 信任、`DSH_WEB_URL`），组合其余部分不受影响。
 
+**自 0.2.3-alpha.1 起 fallback 不再拥有 `/`。** `dsh-remote-connection` 注册了一条精确 `/` 路由（`auth:'anonymous'`，resource `readRoot`）：匿名访客看到核心自己的连接页，已登录浏览器则被交给 `readResource('index.html')`——而 fallback 席位持有 handler（本插件正是如此）时它回 404。命名路由优先于 fallback，重复注册又会抛错，因此 `src/root-route.ts` 改为在 `webserver/request` 瀑布上接管 GET/HEAD `/`（不带 `token` 参数）：该钩子先于路由分发执行，请求被交给 dsh-login 的网关（`302 /login`，或带 peer 渲染的首页），而 `/?token=…` 仍落到原生 `authentication-token` 监听器。
+
 ## 运行测试
 
 ```bash
-# DSH 0.2.2-rc.1 组合使用 Node >=24.9.0。
+# 与 DSH 0.2.3-alpha.2 组合使用需 Node >=24.22.3（该版本上调了 engines 下限）。
 # 按 lockfile 安装已发布的 DSH 依赖，无需另行检出 DSH 源码。
 npm ci
 npm test
@@ -155,7 +163,7 @@ npm run verify:imports
 npm run build
 ```
 
-`.spec.ts` 文件是标准的 vitest 测试定义，含纯逻辑/多用户相关套件（`users`、`ownership`、`hosts`、`session`、`gateway`、`admin-api`、`capabilities`、`remote-guard`、`remote-web-ui-compat`、`client-bundle`、`settings-panel`、`plugin-entry`、`bridge-list-filter` 等）。`connection`/`api-filter`/`multiuser-e2e` 三个 spec 已在 option A 适配时移除（它们测试的是已删除的 `dsh-host-apiproxy` `/api` 接管）；`dispatch-guard.spec.ts` 覆盖 dispatch-seam 守卫（准入打标、逐用户分发把关、`workspace.follow` 逐帧过滤），`remote-guard.spec.ts` 覆盖 REMOTE 层隔离守卫（含所有权收窄与管理员放行），桥墙（401 + 方法门 + 静默拒绝 + record/filter tee + 供给触发）由 `tests/api-bridge-auth.spec.ts` 覆盖。CI 在 Node 24.9.0 与最新 Node 24.x 上运行全量测试、旧单测冒烟、源码导入检查、构建及已提交产物一致性检查。`node --import tsx/esm tests/runner.mjs` 保留为轻量单测冒烟入口；`node tests/integration-runner.mjs` 直接执行标准网关、多用户登录/初始化/退出和完整插件 HTTP 集成用例。
+`.spec.ts` 文件是标准的 vitest 测试定义，含纯逻辑/多用户相关套件（`users`、`ownership`、`hosts`、`session`、`gateway`、`admin-api`、`capabilities`、`remote-guard`、`remote-web-ui-compat`、`client-bundle`、`settings-panel`、`plugin-entry`、`bridge-list-filter` 等）。`connection`/`api-filter`/`multiuser-e2e` 三个 spec 已在 option A 适配时移除（它们测试的是已删除的 `dsh-host-apiproxy` `/api` 接管）；`dispatch-guard.spec.ts` 覆盖 dispatch-seam 守卫（准入打标、逐用户分发把关、`workspace.follow` 逐帧过滤），`remote-guard.spec.ts` 覆盖 REMOTE 层隔离守卫（含所有权收窄与管理员放行），桥墙（401 + 方法门 + 静默拒绝 + record/filter tee + 供给触发）由 `tests/api-bridge-auth.spec.ts` 覆盖。CI 在 Node 24.22.3 与最新 Node 24.x 上运行全量测试、旧单测冒烟、源码导入检查、构建及已提交产物一致性检查。`node --import tsx/esm tests/runner.mjs` 保留为轻量单测冒烟入口；`node tests/integration-runner.mjs` 直接执行标准网关、多用户登录/初始化/退出和完整插件 HTTP 集成用例。
 
 ## 项目结构
 
@@ -182,14 +190,15 @@ src/
 ├── capabilities.ts  # 能力发现（deriveCapabilities）+ 读探针分类（isReadProbe）
 ├── admin-api.ts      # /api/auth/me + /api/auth/admin/* JSON 路由（设置面板后端）
 ├── auth.ts           # Cookie 管理 + 常量时间比较工具
-├── gateway.ts        # 认证网关 fallback（登录墙 + serveStatic + 上游 connection.authorizeIndex）
+├── gateway.ts        # 认证网关 fallback（登录墙 + serveStatic + peer-aware 首页渲染 + 旧版 connection.authorizeIndex）
 ├── login-api.ts      # POST /api/auth/login + logout + setup
 ├── login-page.ts     # 登录页与设置页 HTML
 ├── http-json.ts      # readBody/sendJson 工具 + resolveDshHome
+├── root-route.ts     # 在 webserver/request 瀑布上接管 GET/HEAD /（自 0.2.3-alpha.1 起核心自带精确 / 路由）
 └── web-runtime.ts    # webRuntime 接管：LAN 信任 + DSH_WEB_URL
 dist/client.js        # 构建产物浏览器 bundle（npm run build:client）
 scripts/build-client.mjs  # 生成 dist/client.js：设置面板 dsh.client 注册
-tests/（22 文件 / 302 用例全绿）
+tests/（24 文件 / 315 用例全绿）
 └── *.spec.ts         # vitest 测试定义
 
 ## 许可证

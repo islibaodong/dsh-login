@@ -15,6 +15,7 @@ import { DefaultWorkspaceSetting } from './workspace-setting.ts'
 import { BooleanSetting } from './boolean-setting.ts'
 import { applyWithRetry, RemoteWebUiCompat, type RemoteWebUiCompatDeps } from './remote-web-ui-compat.ts'
 import { createGatewayHandler } from './gateway.ts'
+import { createRootRouteListener } from './root-route.ts'
 import { createWebIdentity, sessionFromHeaders, type ConnectionLike, type HeaderSource, type WebIdentity } from './web-auth.ts'
 import { createApiBridgeAuth } from './api-bridge-auth.ts'
 import { installAdmitShadow, installDispatchShadows, type DispatchGuardDeps } from './dispatch-guard.ts'
@@ -251,6 +252,17 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(
     () => registerGatewayFallback(ctx.webServer as unknown as FallbackHost, gatewayHandler, store, identity),
     'dsh-login: gateway fallback',
+  )
+
+  // DSH 0.2.3-alpha.2 keeps the core exact `/` route added in alpha.1
+  // (remote-connection's browser pairing page) in front of the fallback seat,
+  // so a named route — not the wall — owns the bare root. `webserver/request`
+  // is a waterfall emitted before named-route dispatch, which lets the same
+  // gateway handler answer `/` (login wall or rendered index) while every
+  // other path keeps its existing route/fallback handling.
+  ctx.effect(
+    () => ctx.on('webserver/request', createRootRouteListener(gatewayHandler)),
+    'dsh-login: root route hook',
   )
 
   // The alpha.1 connection seam: /api carriers admit through

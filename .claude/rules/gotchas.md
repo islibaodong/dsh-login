@@ -24,20 +24,34 @@
   `ctx.inject(['connection', 'connection.authentication'], …)`. Also, a
   `console.log` argument that touches an undeclared service throws **before** the
   log line prints — misleading "callback never fired" diagnostics.
-- **0.2.3-alpha.1 is not on the npmmirror default registry:** `npm install` fails
-  with `ETARGET` for `@deepseek-ai/dsh-client-modules`; use
+- **The 0.2.3-alpha.x line is not on the npmmirror default registry:** `npm install`
+  fails with `ETARGET` for `@deepseek-ai/dsh-client-modules`; use
   `--registry=https://registry.npmjs.org`. The Typert artifacts needed for the
   wire dump are generated (`scripts/generate-typert.ts`) and are **not** in npm
   tarballs — always dump from a built checkout/worktree.
-- **The 0.2.3-alpha.1 npm channel cannot boot (upstream):** `@deepseek-ai/dsh`
-  installs `@deepseek-ai/cordis-plugin-loader@1.1.0`, whose `lib/index.js` does
-  not export `EntryValidationError`, `formatIssues`, `relocate` or
-  `validateOptions`, yet `dsh-app-boot@0.2.3-alpha.1` imports all four →
+- **The 0.2.3-alpha.1 npm channel cannot boot (upstream) — alpha.2 can:** at
+  alpha.1 `@deepseek-ai/dsh` installs `@deepseek-ai/cordis-plugin-loader@1.1.0`,
+  whose `lib/index.js` does not export `EntryValidationError`, `formatIssues`,
+  `relocate` or `validateOptions`, yet `dsh-app-boot` imports all four →
   `SyntaxError: The requested module '@deepseek-ai/cordis-plugin-loader' does not
   provide an export named 'EntryValidationError'` at startup, before any profile
-  row loads. The newer loader exists only as `vendor/loader` source in the
-  monorepo. So alpha.1 can only be exercised via `pnpm start:web` in the
-  checkout; do not claim a live alpha.1 boot from an npm install.
+  row loads. **0.2.3-alpha.2 publishes `cordis-plugin-loader@1.2.0-alpha.1` with
+  those exports**, so the alpha channel now boots from npm (verified 2026-11-23):
+  Node ≥24.22.3 (engines `^24.22.3 || >=26.13.1` — the previous floor `>=24.9.0`
+  is now too low; this machine uses `D:\NVM\nvm\v24.22.3\node.exe` by absolute
+  path), scratch `DSH_HOME`, plugin tarball installed into `profiles/web` with
+  `--legacy-peer-deps`. Do not claim a live alpha.1 boot from npm.
+- **Core owns `/` since 0.2.3-alpha.1 — the fallback never sees it:**
+  `packages/client/remote-connection/src/index.ts:150` registers an exact `/`
+  route (`auth: 'anonymous'`, resource `readRoot`) that serves core's connect
+  card to anonymous visitors and, for a logged-in browser, delegates to
+  `readResource('index.html')`, which answers **404** because dsh-login's fallback
+  seat holds a *handler*, not a resource. A duplicate `(kind, path)` registration
+  throws (`webserver: duplicate exact route "/"`), so the fix is
+  `src/root-route.ts`: claim GET/HEAD `/` (no `token` param) on the
+  `webserver/request` waterfall, which runs **before** named-route dispatch, and
+  hand it to the gateway handler. Do not claim `/?token=…` — the native
+  `authentication-token` listener must still answer it (401 for a bad token).
 - **Never capability-probe `connection.createPeer` for the rc.5/alpha.1 split:**
   rc.5 already exposed `createPeer`, so gating "skip the legacy cookie mint" on
   it drops the rc.5 `dsh-auth` cookie → every authenticated `/api` call 401s.

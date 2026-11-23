@@ -50,7 +50,7 @@
 export interface AuthUser { username: string; isAdmin: boolean }
 
 /** DSH release the snapshots in this file were transcribed from. */
-export const WIRE_SURFACE_DSH_VERSION = '0.2.3-alpha.1'
+export const WIRE_SURFACE_DSH_VERSION = '0.2.3-alpha.2'
 
 /**
  * The user-facing wire surface: every method an ordinary (non-admin) user may

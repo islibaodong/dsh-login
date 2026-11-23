@@ -629,7 +629,7 @@ function buildClearCookieHeader() {
 }
 
 // src/api-filter.ts
-var WIRE_SURFACE_DSH_VERSION = "0.2.3-alpha.1";
+var WIRE_SURFACE_DSH_VERSION = "0.2.3-alpha.2";
 var USER_ALLOWED = /* @__PURE__ */ new Set([
   // ── session: the conversation surface ─────────────────────────────────────
   // `page` replaced the old `session.history`; `modelCatalog` replaced
@@ -1295,6 +1295,23 @@ function hasAuthenticationRegistry(connection) {
   } catch {
     return false;
   }
+}
+
+// src/root-route.ts
+function isRootRequest(request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  const url = new URL(request.url ?? "/", "http://dsh.invalid");
+  if (url.pathname !== "/") return false;
+  return url.searchParams.get("token") === null;
+}
+function createRootRouteListener(gateway) {
+  return async (request, response, next) => {
+    if (!isRootRequest(request)) {
+      await next();
+      return;
+    }
+    await gateway(request, response);
+  };
 }
 
 // src/remote-guard.ts
@@ -3400,6 +3417,10 @@ function apply(ctx, config) {
   ctx.effect(
     () => registerGatewayFallback(ctx.webServer, gatewayHandler, store, identity),
     "dsh-login: gateway fallback"
+  );
+  ctx.effect(
+    () => ctx.on("webserver/request", createRootRouteListener(gatewayHandler)),
+    "dsh-login: root route hook"
   );
   ctx.inject(["connection", "connection.authentication"], (fork) => {
     fork.effect(

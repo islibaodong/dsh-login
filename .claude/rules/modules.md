@@ -134,9 +134,18 @@ browser calls; the dispatch seam is the effective hook.
 ## src/gateway.ts
 - `createGatewayHandler`: fallback handler. Non-GET/HEAD → 405; no/invalid
   session → 302 `/login`; else `serveStatic` + `webServer.renderIndex(html,
-  { principal: { kind: 'owner' } })` (PR #12: DSH 0.2.2 index-inject listeners
-  read `peer.principal`; owner snapshot is just `{type:'baseline',owner:true}`
-  — roles stay plugin-gated). Falls back to `applyIndexTaps` on old DSH.
+  peer)` with the admitted peer (PR #12: DSH 0.2.2 index-inject listeners read
+  `peer.principal`; the owner snapshot is just `{type:'baseline',owner:true}` —
+  roles stay plugin-gated). Falls back to `applyIndexTaps` on old DSH.
+
+## src/root-route.ts (0.3.20)
+- `isRootRequest(request)` + `createRootRouteListener(gateway)`. Since DSH
+  0.2.3-alpha.1 core (`remote-connection`) registers an exact `/` route, the
+  fallback never sees `/` any more; the listener claims **GET/HEAD `/` with no
+  `token` param** on the `webserver/request` waterfall (which runs before
+  named-route dispatch) and hands the request to the same gateway handler —
+  `302 /login` or the peer-rendered index. `/?token=…` stays with the native
+  `authentication-token` listener. Spec: `tests/root-route.spec.ts`.
 
 ## src/login-api.ts
 - POST `/api/auth/login`: JSON `{username,password}` vs UserStore → session

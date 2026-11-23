@@ -1,3 +1,88 @@
+## 2026-11-23 (scheduled watch) — DSH **0.2.3-alpha.2** released; **core root `/` route breaks the login wall**; fixed and released as **0.3.20**
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-23T04:00:00.001Z / 12:00 +0800).
+- Detection: git tag `dsh-v0.2.3-alpha.2` → `4b399c39a6` (release merge PR #8961, release commit
+  `267805d20d`, 2026-11-22 15:27 +08; 5 commits past alpha.1, 488 files but almost all version
+  stamps + `pnpm-lock.yaml`); npm `alpha` dist-tag `0.2.3-alpha.2` published
+  `2026-11-22T09:57:12.419Z` (17:57 +08 — after the 2026-11-22 12:00 watch that had caught alpha.1
+  at `03:45:26.697Z`); `next`/`latest` stay 0.2.2-rc.5.
+- **alpha.2 is vendor-only + a Node-floor raise**: `vendor/*` only bumps versions (cordis
+  4.1.0 → **4.2.0-alpha.1**, schemastery 3.19.0 → **3.20.0-alpha.1**, loader 1.1.0 →
+  **1.2.0-alpha.1**, include/hmr/group/logger-console/timer/cosmokit → `*-alpha.1`); the only
+  non-`package.json` edits in `packages/` are three reworded `v8-ignore` comments
+  (`boot/app-boot/src/profile-resolution/resolver.ts`, `boot/hmr/src/package-manifest.ts`,
+  `ptc-runtime/ptc-runtime-node/src/imports/vm-modules.ts`). No remote-decorated change →
+  **wire surface byte-identical at 264** (146 / 117 / 1); fixture diff is the `dshVersion` line.
+  Node engines **`^24.22.3 || >=26.13.1`** (was `>=24.9.0`), per the November-2026 undici fixes
+  (`docs/upgrade-guide/v0.2.3-alpha.1/node-24-22-3/guide.md`).
+- The alpha channel is now **bootable from npm**: `@deepseek-ai/cordis-plugin-loader@1.2.0-alpha.1`
+  is published with the exports `dsh-app-boot` imports (`EntryValidationError`, `formatIssues`,
+  `relocate`, `validateOptions`) — the exact reason alpha.1 was unbootable.
+- **Regression found live (inherited from alpha.1, exposed by the first bootable alpha.2):**
+  `GET /` never reached dsh-login's fallback. Core owns `/` since alpha.1 commit `5313ad4bfa`
+  (`packages/client/remote-connection/src/index.ts:150`: `kind:'exact', path:'/', auth:'anonymous'`,
+  resource `readRoot` = core's "Connect to this Host" page, else
+  `readResource(new Request(new URL('index.html', …), …), admitted.peer)`). `readResource` answers
+  **404** when the path reaches a fallback seat that holds a *handler* — which is how dsh-login
+  claims it (`registerGatewayFallback`). Live: owner `/` → 404 / 0 bytes; anonymous `/` → 401 core
+  card instead of `302 /login`. `webServer.register` throws on duplicate `(kind, path)`
+  (`webserver: duplicate ${kind} route "${path}"`), `webserver/entry-url` is `{label, url, open}`
+  only, and remote-connection's `tokenLoginUrl` requires the same pathname `/` + one non-empty
+  `token` param ⇒ no clean upstream seam. Diagnosis came from a `[dbg3] gateway hit …` patch applied
+  to the *profile copy* only (`.tmp-a2-home/profiles/web/node_modules/@islibaodong/dsh-login/dist/index.js`);
+  the repo `dist/` was never instrumented.
+- Fix (0.3.20): new `src/root-route.ts` — `isRootRequest(request)` (GET/HEAD on pathname `/` with no
+  `token` param) + `createRootRouteListener(gateway)`; `src/index.ts` mounts it on the
+  **`webserver/request` waterfall**, which runs before named-route dispatch, so the core `/` route is
+  preempted without a duplicate registration; the request is handed to the existing gateway handler
+  (same wall semantics: `302 /login`, or the index rendered with the peer minted inside the handler).
+  `/?token=…` stays unclaimed so the native `authentication-token` listener still answers it.
+  New `tests/root-route.spec.ts` (4 cases).
+- Also noted: POST probes must send a JSON **file** (`--data-binary @file`, ASCII) — PowerShell's
+  `-d '{…}'` strips the quotes and produces a 34-byte `{username:root,…}` body that the plugin
+  correctly rejects with 400; that earlier "400 bad request" was a shell artifact, not a defect.
+- Wire/deps: `src/api-filter.ts:53` `WIRE_SURFACE_DSH_VERSION` → `'0.2.3-alpha.2'`; devDeps all
+  `^0.2.3-alpha.2`, cordis `~4.2.0-alpha.1`, schemastery `~3.20.0-alpha.1`, include/loader
+  `~1.2.0-alpha.1`; runtime `dependencies` `@deepseek-ai/dsh` → `^0.2.3-alpha.2`; peer unions gained
+  `|| ~4.2.0-alpha.1` (cordis) and `|| ~3.20.0-alpha.1` (schemastery); the DSH peer union already
+  covered alpha.2 (`>=0.2.3-alpha.1 <0.3.0-0`). Version → **0.3.20**.
+- Multi-user / RBAC at the tag: `git grep -nEi 'multi.?user|multiuser|role.?based|\brbac\b'` over
+  `packages/`+`apps/` = **2 hits only** (`packages/api/remote-access/README.md:2`, and the NSIS
+  `!insertmacro initMultiUser` installer macro at `apps/desktop/scripts/windows-directory-installer.mjs:109`).
+  `PrincipalMap` (`packages/typert/protocol/src/types.ts:455`) still only `owner`; only production
+  non-owner kind is LiveShare `share-viewer`
+  (`packages/experimental/liveshare/src/host/viewer-principal.ts:17`);
+  `remoteAccess.registerPolicy<K extends Exclude<keyof PrincipalMap,'owner'>>`
+  (`remote-access/src/index.ts:153`) is consulted at `packages/api/gateway/src/index.ts:610`/`:791`
+  only for `principal.kind !== 'owner'`. Whole-UI role gating unchanged in shape: seams are
+  `webserver/index-inject(table, peer)` (`host/webserver/src/index.ts:867` `renderIndex(html, peer)`,
+  listener at `remote-access/src/index.ts:139`) and `clientModules.graphFor(principal)`
+  (`packages/client/modules/src/index.ts:721`, `:739-740` — config values only, no role concept);
+  `graph.entries` and `graph.batches` must be trimmed together; the `webserver/authorize` bail never
+  sees a resolved principal. dsh-login remains the account layer.
+- Verification: clean install (`node_modules`+lockfile deleted) against `registry.npmjs.org`; Node
+  **24.22.3** (`D:\NVM\nvm\v24.22.3\node.exe`, invoked by absolute path, global nvm switch untouched);
+  `vitest run` **24 files / 315 tests** green; wire dump from worktree
+  `E:\code\deepseek-harness-wt-023a1` at the tag (`pnpm install --frozen-lockfile --ignore-scripts` +
+  `pnpm exec tsx scripts/generate-typert.ts` → 44 artifacts) = **264 == 264**; build exit 0
+  (`dist/client.js` 50396 chars, `dist/index.js` carries `root route hook`); `verify:imports` exit 0
+  (15 modules). Live boot of npm `@deepseek-ai/dsh@0.2.3-alpha.2` in `.tmp-a2` with
+  `DSH_HOME=E:\code\dsh-login\.tmp-a2-home` and the packed `islibaodong-dsh-login-0.3.20.tgz`
+  (262176 bytes) installed into `profiles/web` (`--legacy-peer-deps`, bundles extended): anonymous
+  `/` → **302 `/login`**, bogus cookie → 302, `/?token=bogus` → 401 (native listener), `/login` → 200,
+  anonymous `/api/auth/me`+`capabilities` → 401 `{"error":"authentication required"}`; owner setup →
+  200 + `dsh_session`, owner `/` → **200, 48685 bytes**, `text/html`, body has `__DSH_BOOT__` +
+  `__DSH_SESSION__`, `/index.html` → 200, capabilities 263 methods / 48 domains / 17 uiPlugins
+  (one duplicate `@islibaodong/dsh-login`, by design: `src/capabilities.ts:143` concats
+  `CORE_UI_PLUGINS` and `allUiPlugins()` starts from it at `:178`); alice (admin-created, 201) →
+  login 200, `/` 200 same size, capabilities **146 methods / 31 domains / 1 uiPlugin**, admin route
+  **403**. Known limitation unchanged: SPA paths like `/settings` 404 (fallback serves files only).
+- Docs: new `docs/adapt-dsh-0.2.3-alpha.2.md` (detection, what changed, the root-route regression +
+  fix, wire delta, multi-user/RBAC verdict, verification table, follow-ups);
+  `tmp/release-notes/v0.3.20.md`; README.md + README.zh.md status/paragraphs/compat rows/Node
+  references/`root-route.ts` in the src tree/test counts (zh was a release behind — 0.3.19/0.3.20
+  both added there).
+
 ## 2026-11-22 (scheduled watch) — DSH **0.2.3-alpha.1** released; dsh-login adapted and released as **0.3.19**
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-22T04:00:01Z / 12:00 +0800).
