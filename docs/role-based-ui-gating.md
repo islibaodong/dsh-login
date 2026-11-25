@@ -1,4 +1,4 @@
-# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16, 2026-11-19, 2026-11-20, 2026-11-21 and 2026-11-22)
+# Role-based whole-UI gating — evaluation (2026-11-10, re-verified 2026-11-11, 2026-11-14, 2026-11-15, 2026-11-16, 2026-11-19, 2026-11-20, 2026-11-21, 2026-11-22 and 2026-11-25)
 
 **Status: evaluated, not implemented.** Upstream DSH still exposes no per-role UI
 control (no native accounts, no identity UI, no role model), and dsh-login's
@@ -302,3 +302,18 @@ provider registry makes a *custom* non-owner principal kind technically possible
 but it does not give the browser a role: dsh-login users remain owner Peers, and package-level
 filtering stays enforcement-by-omission (bundles are served anonymously).
 
+
+### 2026-11-25 — re-checked at DSH 0.2.3-alpha.2 (no movement since 11-22)
+
+No release after alpha.2: tag `dsh-v0.2.3-alpha.2` → `4b399c39a6` is still the `origin/master`
+tip (0 commits past the tag), npm `alpha` = 0.2.3-alpha.2 and `latest`/`next` = 0.2.2-rc.5;
+dsh-login 0.3.20 stays current. The 11-22 table therefore carries over unchanged:
+
+| Claim in §2 | Re-verified evidence at the alpha.2 tag |
+|---|---|
+| Page gate is a per-request transform | `webserver/index-inject` still emits `(table, peer)` and the `__DSH_BOOT__` row stays the mutable splice point; since alpha.1 core owns an exact `/` route, so 0.3.20 additionally claims GET/HEAD `/` on `webserver/request` (see `docs/adapt-dsh-0.2.3-alpha.2.md`) — the gate itself is unchanged |
+| No upstream role model to reuse | `PrincipalMap` still declares **owner only** (`packages/typert/protocol/src/types.ts:455-458`); narrow grep for `multi.?user|multiuser|role.?based|\bRBAC\b` over `packages apps` = **2 informational hits** (`packages/api/remote-access/README.md:2` and the NSIS `initMultiUser` macro). No account store, login, role field or identity UI |
+| Wire classifier is bucketed | 146 / 117 / 1 of **264** (`src/api-filter.ts`, fixture `dshVersion 0.2.3-alpha.2`, pinned by `tests/wire-surface.spec.ts`) |
+
+Verdict (feasible in-plugin, ≈1–2 days) and §4 condition (a) unchanged: every dsh-login user
+still arrives as an owner Peer, and upstream RBAC still authorizes non-owner Peers only.

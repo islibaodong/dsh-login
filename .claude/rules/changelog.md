@@ -1,3 +1,88 @@
+## 2026-11-25 (scheduled watch) — still no DSH release after alpha.2; 0.3.20 stays current; 11-24 record committed; no adaptation, no publish
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-25T04:00:01.148Z / 12:00 +0800).
+- Detection (three channels, all identical to the 11-23/11-24 state):
+  - Git: `git fetch --tags --prune` succeeded; newest tag **`dsh-v0.2.3-alpha.2`** → commit
+    `4b399c39a6` (annotated tag object `5d8fdab85a`), and `origin/master` tip is **exactly that
+    commit** (0 commits past the tag). No tag or branch has moved since 2026-11-22 16:50 +0800.
+    Local harness checkout HEAD is still detached at `dsh-v0.2.2-rc.5` (`9c2670d3bc`, **2348
+    commits behind** origin/master; dirty: CLAUDE.md + untracked bz.md — known noise). Release-state
+    truth remains the tag worktree `E:\code\deepseek-harness-wt-023a1` (`4b399c39a6`, package
+    `0.2.3-alpha.2`).
+  - npm (no-cache packument): `@deepseek-ai/dsh` dist-tags `alpha` = **0.2.3-alpha.2** (published
+    `2026-11-22T09:57:12.419Z`), `latest` = `next` = **0.2.2-rc.5** (`2026-11-18T13:17:23.604Z`) —
+    no publish in the 11-24/11-25 window. `@islibaodong/dsh-login` `latest` = **0.3.20**
+    (published `2026-11-23T04:32:23.218Z`).
+  - GitHub releases API (`deepseek-ai/deepseek-harness`): newest release is still
+    **`dsh-v0.2.3-alpha.2`** (prerelease, published `2026-11-22T11:00:39Z`).
+  - dsh-login repo: local `master` == `origin/master` == **`d2a7b51`** (the 0.3.20 release
+    commit). The only working-tree change was the **2026-11-24 watch entry, left uncommitted by
+    that run** — this commit carries it together with today's record. No source changes pending.
+- Drift radar: zero upstream movement since the alpha.2 tag was cut (origin/master == the tag),
+  so the fixture dumped from that tag stands — **264 == 264** (146 user / 117 admin /
+  1 host-internal, `tests/fixtures/wire-surface.json` `dshVersion 0.2.3-alpha.2`). The live
+  cross-check in `tests/wire-surface.spec.ts` deliberately skips the `../deepseek-harness`
+  dev tree because it is the older rc.5 wire generation (226 ≠ 264).
+- Verification: running GUI **127.0.0.1:3080** (PID 5304, `dsh web` off the rc.5 dev tree, plugin
+  link-mounted from this repo) is healthy — `/` → **302 `/login`**, `/login` → **200** (15,946
+  bytes), anonymous `/api/auth/capabilities` → **401** `{"error":"authentication required"}`.
+  Suite **24 files / 315 tests green** (started 2026-11-25 12:01:07 +0800, 7.59 s) against the
+  installed **`@deepseek-ai/dsh` 0.2.3-alpha.2** / `@deepseek-ai/cordis` 4.2.0-alpha.1 runtime,
+  so the composition tests boot the release generation, not just the fixture.
+- Multi-user / RBAC: unchanged at the tag. Narrow grep of `dsh-v0.2.3-alpha.2 -- packages apps`
+  for `multi.?user|multiuser|role.?based|\bRBAC\b` yields **exactly two informational hits** —
+  `packages/api/remote-access/README.md:2` (method-level policy for **non-owner** Peers) and
+  `apps/desktop/scripts/windows-directory-installer.mjs:109` (NSIS `initMultiUser` macro).
+  `PrincipalMap` still declares **owner only**
+  (`packages/typert/protocol/src/types.ts:455-458`); no account store, login, role field or
+  identity UI. Whole-UI role gating stays **feasible in-plugin without upstream changes**
+  (≈1–2 days, one shared role policy feeding `uiRoleGate`, the `graphFor` wrapper and the wire
+  allow-list) — evaluation refreshed in
+  [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md) §5.
+- README / README.zh.md verified current (0.3.20 / alpha.2 / 24 files 315 tests / wire 264 /
+  root-route paragraph + compat row on both languages) — no edit needed, since nothing was
+  released today.
+- **Conclusion: no new DSH version after 0.2.3-alpha.2 (already adapted + released as 0.3.20) →
+  no adaptation, no version bump, no npm publish (`.env` token untouched). Docs-only commit
+  (this entry + the carried-over 2026-11-24 record).**
+
+## 2026-11-24 (scheduled watch) — no new DSH release since yesterday's alpha.2 adaptation; 0.3.20 stays current; no adaptation, no publish
+
+- Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-24T04:00:00.013Z / 12:00 +0800).
+- Detection (three channels, all unchanged from the 11-23 watch):
+  - Git: `git fetch --tags` succeeded this session (danger-full-access policy — the old
+    FETCH_HEAD write denial was a sandbox artifact, as recorded 11-17) + authoritative
+    `git ls-remote` — newest tag still **`dsh-v0.2.3-alpha.2`** → `4b399c39a6`, which is ALSO
+    `refs/heads/master`: origin/master tip == the alpha.2 release merge, i.e. the long-standing
+    unreleased backlog was fully consumed by the 0.2.3-alpha line and there is nothing past it.
+    Local harness checkout HEAD still detached at `dsh-v0.2.2-rc.5` (`9c2670d3bc`, dirty:
+    CLAUDE.md + untracked bz.md, known noise); release-state truth remains the tag /
+    `E:\code\deepseek-harness-wt-023a1` worktree.
+  - npm (no-cache packuments via node fetch): `@deepseek-ai/dsh` dist-tags `alpha` =
+    **0.2.3-alpha.2**, `latest` = `next` = **0.2.2-rc.5** — identical to the 11-23 detection.
+    `@islibaodong/dsh-login` `latest` = **0.3.20** (published `2026-11-23T04:32:23.218Z`).
+  - GitHub releases API: newest release **`dsh-v0.2.3-alpha.2`** (prerelease, published
+    `2026-11-22T11:00:39Z`) — nothing newer.
+  - dsh-login repo: local `master` == `origin/master` == **`d2a7b51`** (the 0.3.20 release
+    commit), working tree clean → yesterday's release is fully pushed; no open local work.
+- Drift radar: zero upstream movement — `master` tip is byte-identical to the tag the 264-method
+  fixture was dumped from on 11-23 → fixture stands at **264 == 264** (146 user / 117 admin /
+  1 host-internal), no re-dump needed.
+- Multi-user / RBAC: master tip == the alpha.2 tag exactly, so the 11-23 full re-grep verdict
+  stands unchanged — no native multi-user/accounts/roles upstream (2 informational hits only);
+  `PrincipalMap` still `owner`-only; dsh-login remains the account layer; whole-UI role gating
+  feasible in-plugin (binary admin/ordinary shipped as `uiRoleGate`; arbitrary-roles evaluation
+  in [`docs/role-based-ui-gating.md`](docs/role-based-ui-gating.md)).
+- Verification: running GUI 127.0.0.1:3080 healthy — `/` → **302 `/login`**, `/login` → **200**,
+  anonymous `/api/auth/capabilities` → **401** `{"error":"authentication required"}` (the
+  link-mounted plugin still walls the rc.5 dev tree). Suite re-run **24 files / 315 tests green**
+  (2026-11-24 12:04:22 +0800, 6.29 s) — reproduces the 0.3.20 release baseline.
+- README / README.zh.md verified current (0.3.20 / alpha.2 / 24 files 315 tests / wire 264 /
+  root-route paragraph + compat row on both languages) — no edit needed.
+- **Conclusion: no new DSH version since the 11-23 watch (0.2.3-alpha.2 remains newest, already
+  adapted + released as 0.3.20 yesterday) → no adaptation, no version bump, no npm publish
+  (`.env` token untouched).** Docs-only change (this entry).
+
 ## 2026-11-23 (scheduled watch) — DSH **0.2.3-alpha.2** released; **core root `/` route breaks the login wall**; fixed and released as **0.3.20**
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-23T04:00:00.001Z / 12:00 +0800).
