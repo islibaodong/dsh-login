@@ -1,3 +1,30 @@
+## 2026-11-26 (release bookkeeping) — `v0.1.0` tag backfilled; GitHub Releases caught up through 0.3.20 (Latest)
+
+- **`v0.1.0` was the only published npm version without a git tag.** npm's `gitHead` for
+  `@islibaodong/dsh-login@0.1.0` (published `2026-08-27T02:01:10.450Z`) is
+  `3949b67ebc5297f489bc247c414f57cca2498f86` — `chore: add repository + files fields for npm
+  publishing`, the commit right before the first publication. Created an annotated tag at that
+  exact commit (tag object `05376588acc134bd9552ec5bbbb0e8ccf9266441`, peeled commit `3949b67`),
+  so the tag names the source that was actually published.
+- **GitHub Releases had stopped at `v0.3.18`.** The 2026-11-17 backfill left "all 25 tags carry a
+  release", but the 11-22 and 11-23 releases (`v0.3.19` / `v0.3.20`) never got one, so the repo's
+  Latest badge still said 0.3.18 while npm and the README said 0.3.20. Created releases for
+  `v0.3.19`, `v0.3.20` (English bodies derived from the 11-22/11-23 changelog entries and
+  `docs/adapt-dsh-0.2.3-alpha.{1,2}.md`, same Highlights/verified/Full-Changelog style as
+  `v0.3.18`) plus `v0.1.0` (historical note), so every tag carries a release again.
+- Coverage after: **30 npm versions / 30 tags / 30 releases** (`0.1.0` … `0.3.20`); `v0.3.20` is
+  `Latest` again (it had stayed `v0.3.18` since 2026-11-19). Coverage checked against the npm
+  packument (`npm view … versions`), `gh release list --json`, and
+  `git ls-remote --tags https://github.com/islibaodong/dsh-login.git`.
+- Mechanics: the tag was created through the GitHub API (`git/tags` then `git/refs`) and fetched
+  locally (`git fetch https://… refs/tags/v0.1.0:refs/tags/v0.1.0`), because the sandbox blocks
+  msys `ssh.exe` / `sh.exe` (`NtCreateDirectoryObject(\BaseNamedObjects\msys-2.0S5-…): 0xC0000022`)
+  and credential helpers cannot run with terminal prompts disabled. Notes drafts in
+  `tmp/release-notes/` (gitignored, not shipped).
+- Historical tag drift deliberately left alone: `v0.2.0` points at `87920be` while npm's
+  `gitHead` is `31feecd`, `v0.2.2` at `93c36e7` vs `741c61b`, and `v0.2.7` has no npm `gitHead`;
+  both tags still name the released tree, so nothing was rewritten.
+
 ## 2026-11-26 (scheduled watch) — no new DSH release after alpha.2 (third consecutive watch); 0.3.20 stays current; no adaptation, no publish
 
 - Trigger: scheduled `0 12 * * *` Asia/Shanghai watch (ran 2026-11-26T04:00:00.004Z / 12:00 +0800).
