@@ -335,3 +335,21 @@ carries over unchanged:
 Verdict (feasible in-plugin, ≈1–2 days) and §4 condition (a) unchanged: no upstream movement,
 so the three-lever design (boot-graph filter + `clientModules.graphFor` wrapper + wire allow-list)
 remains the implementation path, with the `/api` allow-list as the real boundary.
+
+### 2026-11-27 — re-checked at DSH 0.2.3-alpha.2 (fourth consecutive watch without a release)
+
+Still no release after alpha.2: tag `dsh-v0.2.3-alpha.2` → `4b399c39a6` is the `origin/master` tip
+(0 commits past it, `git ls-remote` authoritative), npm `alpha` = 0.2.3-alpha.2 and
+`latest`/`next` = 0.2.2-rc.5, GitHub's newest release = alpha.2; dsh-login 0.3.20 stays current.
+The 11-22 table carries over unchanged:
+
+| Claim in §2 | Re-verified evidence at the alpha.2 tag |
+|---|---|
+| Page gate is a per-request transform | `webserver/index-inject` still emits `(table, peer)` and the `__DSH_BOOT__` row stays the mutable splice point; the core exact `/` route still means 0.3.20 claims GET/HEAD `/` on `webserver/request` — and with the harness checkout now ON the alpha.2 tag this hook is verified **live**, not only by tests: `/` → 302 `/login`, `/login` 200, anonymous `/api/auth/capabilities` 401 on 127.0.0.1:3080 |
+| No upstream role model to reuse | `PrincipalMap` still declares **owner only** (`packages/typert/protocol/src/types.ts:455`); narrow grep for `multi.?user\|multiuser\|role.?based\|\bRBAC\b` over `packages apps` = **2 informational hits** (`packages/api/remote-access/README.md:2` and the NSIS `initMultiUser` macro). No account store, login, role field or identity UI |
+| Wire classifier is bucketed | 146 / 117 / 1 of **264** (`src/api-filter.ts`, fixture `dshVersion 0.2.3-alpha.2`, pinned by `tests/wire-surface.spec.ts`); the live `enumerateWireSurface('E:/code/deepseek-harness')` cross-check now runs against the alpha.2 checkout and stays **264 == 264**, `added []` `removed []` |
+
+Verdict (feasible in-plugin, ≈1–2 days) and §4 condition (a) unchanged: every dsh-login user still
+arrives as an owner Peer (upstream RBAC authorizes non-owner Peers only), so the implementation
+path remains one shared role policy feeding the boot-graph filter, the `clientModules.graphFor`
+wrapper and the wire allow-list.
